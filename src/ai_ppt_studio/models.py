@@ -107,3 +107,41 @@ class ProjectState:
             current_gate=str(payload["current_gate"]),
             updated_at=str(payload["updated_at"]),
         )
+
+
+class ArtifactKind(str, Enum):
+    MISSION = "mission"
+    CONTENT_BLUEPRINT = "content-blueprint"
+    VISUAL_BRIEF = "visual-brief"
+    CONCEPT_SET = "concept-set"
+    VISUAL_CONTRACT = "visual-contract"
+    SLIDE_SCENE_GRAPH = "slide-scene-graph"
+    FEEDBACK = "feedback"
+    PRESENTATION_HANDOFF = "presentation-handoff"
+    DELIVERY = "delivery"
+
+
+@dataclass(frozen=True)
+class ArtifactVersion:
+    """One immutable, hash-addressed project artifact version."""
+
+    kind: str
+    version: int
+    path: str
+    sha256: str
+    created_at: str
+    payload: dict[str, Any]
+
+    def as_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "ArtifactVersion":
+        return cls(
+            kind=str(payload["kind"]),
+            version=int(payload["version"]),
+            path=str(payload["path"]),
+            sha256=str(payload["sha256"]),
+            created_at=str(payload["created_at"]),
+            payload=dict(payload["payload"]),
+        )

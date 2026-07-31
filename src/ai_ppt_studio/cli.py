@@ -10,9 +10,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .artifact_store import ArtifactStore
 from .config import RuntimeConfig
 from .errors import (
     AiPptError,
+    ArtifactValidationError,
     ConfigurationError,
     InvalidTransitionError,
     MaterialImportError,
@@ -20,7 +22,7 @@ from .errors import (
     ProtectedPathError,
 )
 from .materials import ImportMode, MaterialIntake
-from .models import Gate
+from .models import ArtifactKind, Gate
 from .paths import PathPolicy
 from .project_store import ProjectStore
 from .state_store import StateStore
@@ -83,6 +85,22 @@ def build_parser() -> argparse.ArgumentParser:
     reopen.add_argument("--project", type=Path, required=True)
     reopen.add_argument("--gate", choices=[gate.value for gate in Gate], required=True)
     reopen.add_argument("--reason", required=True)
+
+    save_artifact = commands.add_parser("save-artifact")
+    save_artifact.add_argument("--project", type=Path, required=True)
+    save_artifact.add_argument(
+        "--kind", choices=[kind.value for kind in ArtifactKind], required=True
+    )
+    save_artifact.add_argument("--input", type=Path, required=True)
+
+    show_artifact = commands.add_parser("show-artifact")
+    show_artifact.add_argument("--project", type=Path, required=True)
+    show_artifact.add_argument(
+        "--kind", choices=[kind.value for kind in ArtifactKind], required=True
+    )
+
+    list_artifacts = commands.add_parser("list-artifacts")
+    list_artifacts.add_argument("--project", type=Path, required=True)
     return parser
 
 
@@ -199,6 +217,51 @@ def dispatch(args: argparse.Namespace) -> dict[str, object]:
             Gate(args.gate), args.reason
         )
         return {"ok": True, "command": command, "state": state.as_dict()}
+    if command == "save-artifact":
+        manifest = projects.load(args.project)
+        input_path = policy.assert_source_readable(args.input)
+        if not input_path.is_file():
+            raise ArtifactValidationError(
+                f"Artifact input must be a JSON file: {input_path}"
+            )
+        try:
+            payload = json.loads(input_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ArtifactValidationError(
+                f"Artifact input is not valid JSON: {input_path}"
+            ) from exc
+        if not isinstance(payload, dict):
+            raise ArtifactValidationError("Artifact input must contain a JSON object")
+        artifact = ArtifactStore(
+            Path(manifest.project_root), policy
+        ).save(ArtifactKind(args.kind), payload)
+        return {
+            "ok": True,
+            "command": command,
+            "artifact": artifact.as_dict(),
+        }
+    if command == "show-artifact":
+        manifest = projects.load(args.project)
+        artifact = ArtifactStore(
+            Path(manifest.project_root), policy
+        ).latest(ArtifactKind(args.kind))
+        return {
+            "ok": True,
+            "command": command,
+            "artifact": artifact.as_dict(),
+        }
+    if command == "list-artifacts":
+        manifest = projects.load(args.project)
+        artifacts = ArtifactStore(
+            Path(manifest.project_root), policy
+        ).list_latest()
+        return {
+            "ok": True,
+            "command": command,
+            "artifacts": {
+                kind: artifact.as_dict() for kind, artifact in artifacts.items()
+            },
+        }
     raise CliUsageError(f"Unsupported command: {command}")
 
 
@@ -210,7 +273,9 @@ def _print_json(payload: dict[str, Any], stream: Any) -> None:
 def _exit_code(error: Exception) -> int:
     if isinstance(error, ProtectedPathError):
         return 3
-    if isinstance(error, (ProjectNotFoundError, MaterialImportError)):
+    if isinstance(
+        error, (ProjectNotFoundError, MaterialImportError, ArtifactValidationError)
+    ):
         return 4
     if isinstance(error, InvalidTransitionError):
         return 5

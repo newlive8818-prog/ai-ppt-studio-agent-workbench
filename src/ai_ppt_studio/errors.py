@@ -23,3 +23,7 @@ class InvalidTransitionError(AiPptError):
 
 class MaterialImportError(AiPptError):
     """Raised when user-provided source material cannot be imported safely."""
+
+
+class ArtifactValidationError(AiPptError):
+    """Raised when a project artifact lacks required semantic content."""
