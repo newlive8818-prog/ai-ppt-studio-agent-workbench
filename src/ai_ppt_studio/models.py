@@ -69,3 +69,41 @@ class MaterialSource:
         payload["kind"] = self.kind.value
         payload["mode"] = self.mode.value
         return payload
+
+
+class Gate(str, Enum):
+    G0 = "G0"
+    G1 = "G1"
+    G2 = "G2"
+    G3 = "G3"
+    G4 = "G4"
+
+
+class GateStatus(str, Enum):
+    LOCKED = "locked"
+    OPEN = "open"
+    PASSED = "passed"
+
+
+@dataclass(frozen=True)
+class ProjectState:
+    """Current resumable G0-G4 workflow state."""
+
+    schema_version: str
+    revision: int
+    gates: dict[str, str]
+    current_gate: str
+    updated_at: str
+
+    def as_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "ProjectState":
+        return cls(
+            schema_version=str(payload["schema_version"]),
+            revision=int(payload["revision"]),
+            gates={str(key): str(value) for key, value in payload["gates"].items()},
+            current_gate=str(payload["current_gate"]),
+            updated_at=str(payload["updated_at"]),
+        )
