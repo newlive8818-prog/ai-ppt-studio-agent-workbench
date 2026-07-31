@@ -43,9 +43,12 @@ class PathPolicy:
         return candidate
 
     def assert_source_readable(self, source: Path) -> Path:
-        candidate = source.expanduser().resolve(strict=True)
-        if candidate.is_symlink():
-            raise MaterialImportError(f"Source cannot be a symlink: {candidate}")
+        expanded = source.expanduser()
+        lexical = expanded if expanded.is_absolute() else Path.cwd() / expanded
+        lexical = Path(os.path.abspath(lexical))
+        if lexical.is_symlink():
+            raise MaterialImportError(f"Source cannot be a symlink: {lexical}")
+        candidate = lexical.resolve(strict=True)
         if not (candidate.is_file() or candidate.is_dir()):
             raise MaterialImportError(
                 f"Source must be a regular file or directory: {candidate}"

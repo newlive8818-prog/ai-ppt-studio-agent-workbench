@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from enum import Enum
 from typing import Any
 
 
@@ -36,3 +37,35 @@ class ProjectManifest:
             ),
             project_root=str(payload["project_root"]),
         )
+
+
+class SourceKind(str, Enum):
+    FILE = "file"
+    DIRECTORY = "directory"
+    URL = "url"
+    TEXT = "text"
+
+
+class ImportMode(str, Enum):
+    REFERENCE = "reference"
+    COPY = "copy"
+
+
+@dataclass(frozen=True)
+class MaterialSource:
+    """One immutable record of user-provided source material."""
+
+    source_id: str
+    kind: SourceKind
+    mode: ImportMode
+    original_ref: str
+    managed_ref: str | None
+    sha256: str | None
+    size_bytes: int | None
+    created_at: str
+
+    def as_dict(self) -> dict[str, object]:
+        payload = asdict(self)
+        payload["kind"] = self.kind.value
+        payload["mode"] = self.mode.value
+        return payload
