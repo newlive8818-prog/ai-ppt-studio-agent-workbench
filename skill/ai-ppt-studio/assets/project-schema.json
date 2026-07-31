@@ -1,0 +1,6 @@
+{
+  "schema_version": "1.0",
+  "project_manifest": "project.json",
+  "event_log": "events/events.jsonl",
+  "state_file": "state/state.json"
+}
