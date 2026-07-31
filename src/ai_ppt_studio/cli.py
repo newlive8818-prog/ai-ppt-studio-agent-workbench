@@ -113,6 +113,7 @@ def dispatch(args: argparse.Namespace) -> dict[str, object]:
                 "visual_conception": False,
                 "image2": False,
                 "presentations": False,
+                "ppt_compilation": False,
                 "delivery_validation": False,
                 "experience_evolution": False,
             },
