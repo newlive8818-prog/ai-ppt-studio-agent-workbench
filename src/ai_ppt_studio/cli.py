@@ -41,7 +41,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--install-root", type=Path, required=True)
     parser.add_argument("--upstream-root", type=Path, required=True)
     parser.add_argument(
-        "--extra-protected-root", type=Path, action="append", default=[]
+        "--extra-protected-root",
+        "--protect",
+        dest="extra_protected_root",
+        type=Path,
+        action="append",
+        default=[],
     )
     commands = parser.add_subparsers(dest="command", required=True)
 
