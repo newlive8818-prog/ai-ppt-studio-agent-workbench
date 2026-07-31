@@ -56,6 +56,8 @@ class ReviewHtmlTests(unittest.TestCase):
             self.assertIn("客户为什么现在需要建设", body)
             self.assertIn("data-review-action", body)
             self.assertIn("自然语言修改意见", body)
+            self.assertIn('rel="icon"', body)
+            self.assertIn("data:image/svg+xml", body)
             parser = TagCollector()
             parser.feed(body)
             self.assertEqual(parser.external_resources, [])

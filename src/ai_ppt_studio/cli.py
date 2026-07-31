@@ -168,13 +168,13 @@ def dispatch(args: argparse.Namespace) -> dict[str, object]:
             "write_policy": {"ok": True, "probe": str(probe)},
             "capabilities": {
                 "runtime_foundation": True,
-                "content_blueprint": False,
-                "visual_conception": False,
-                "image2": False,
-                "presentations": False,
-                "ppt_compilation": False,
-                "delivery_validation": False,
-                "experience_evolution": False,
+                "content_blueprint": True,
+                "visual_conception": True,
+                "image2": True,
+                "presentations": True,
+                "ppt_compilation": True,
+                "delivery_validation": True,
+                "experience_evolution": True,
             },
         }
     if command == "init":

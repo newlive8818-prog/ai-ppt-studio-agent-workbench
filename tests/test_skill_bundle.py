@@ -47,8 +47,19 @@ class SkillBundleTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             payload = json.loads(completed.stdout)
             self.assertEqual(payload["ok"], True)
-            self.assertEqual(payload["capabilities"]["runtime_foundation"], True)
-            self.assertEqual(payload["capabilities"]["ppt_compilation"], False)
+            self.assertEqual(
+                payload["capabilities"],
+                {
+                    "runtime_foundation": True,
+                    "content_blueprint": True,
+                    "visual_conception": True,
+                    "image2": True,
+                    "presentations": True,
+                    "ppt_compilation": True,
+                    "delivery_validation": True,
+                    "experience_evolution": True,
+                },
+            )
 
 
 if __name__ == "__main__":
