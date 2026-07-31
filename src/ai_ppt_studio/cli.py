@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import sys
 from pathlib import Path
@@ -36,10 +37,11 @@ class JsonArgumentParser(argparse.ArgumentParser):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = JsonArgumentParser(prog="ai-ppt-studio")
-    parser.add_argument("--runtime-root", type=Path, required=True)
-    parser.add_argument("--source-repo-root", type=Path, required=True)
-    parser.add_argument("--install-root", type=Path, required=True)
-    parser.add_argument("--upstream-root", type=Path, required=True)
+    parser.add_argument("--workspace-config", type=Path)
+    parser.add_argument("--runtime-root", type=Path)
+    parser.add_argument("--source-repo-root", type=Path)
+    parser.add_argument("--install-root", type=Path)
+    parser.add_argument("--upstream-root", type=Path)
     parser.add_argument(
         "--extra-protected-root",
         "--protect",
@@ -85,12 +87,44 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def build_config(args: argparse.Namespace) -> RuntimeConfig:
+    explicit = (
+        args.runtime_root,
+        args.source_repo_root,
+        args.install_root,
+        args.upstream_root,
+    )
+    if any(value is not None for value in explicit):
+        if not all(value is not None for value in explicit):
+            raise ConfigurationError(
+                "Explicit configuration requires all four root arguments"
+            )
+        return RuntimeConfig.create(
+            runtime_root=args.runtime_root,
+            source_repo_root=args.source_repo_root,
+            install_root=args.install_root,
+            upstream_root=args.upstream_root,
+            extra_protected_roots=tuple(args.extra_protected_root),
+        )
+    profile = args.workspace_config
+    if profile is None:
+        environment_profile = os.environ.get("AI_PPT_WORKSPACE_CONFIG")
+        profile = (
+            Path(environment_profile)
+            if environment_profile
+            else Path.home() / "Documents" / "AI-PPT-Workspace" / "workspace.json"
+        )
+    config = RuntimeConfig.from_workspace_file(profile)
+    if not args.extra_protected_root:
+        return config
     return RuntimeConfig.create(
-        runtime_root=args.runtime_root,
-        source_repo_root=args.source_repo_root,
-        install_root=args.install_root,
-        upstream_root=args.upstream_root,
-        extra_protected_roots=tuple(args.extra_protected_root),
+        runtime_root=config.runtime_root,
+        source_repo_root=config.source_repo_root,
+        install_root=config.install_root,
+        upstream_root=config.upstream_root,
+        extra_protected_roots=(
+            *config.protected_roots,
+            *tuple(args.extra_protected_root),
+        ),
     )
 
 

@@ -153,3 +153,53 @@ class RuntimeConfig:
             upstream_root=Path(payload["upstream_root"]),
             extra_protected_roots=extra,
         )
+
+    @classmethod
+    def from_workspace_file(cls, path: Path) -> "RuntimeConfig":
+        """Load either a runtime config or the existing managed workspace profile."""
+
+        profile_path = path.expanduser().resolve(strict=True)
+        try:
+            payload = json.loads(profile_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ConfigurationError(
+                f"Cannot load managed workspace profile: {profile_path}"
+            ) from exc
+        runtime_value = payload.get("runtime_root") or payload.get("workspace_root")
+        source_value = payload.get("source_repo_root") or payload.get(
+            "source_repository"
+        )
+        install_value = payload.get("install_root") or payload.get(
+            "future_install_root"
+        )
+        protected_values = payload.get("protected_roots")
+        if not runtime_value or not source_value or not install_value:
+            raise ConfigurationError(
+                "Workspace profile requires workspace_root, source_repository, and future_install_root"
+            )
+        if not isinstance(protected_values, list) or not protected_values:
+            raise ConfigurationError(
+                "Workspace profile requires at least one protected root"
+            )
+        source = _canonical(Path(str(source_value)))
+        install = _canonical(Path(str(install_value)))
+        protected = tuple(_canonical(Path(str(item))) for item in protected_values)
+        explicit_upstream = payload.get("upstream_root")
+        if explicit_upstream:
+            upstream = _canonical(Path(str(explicit_upstream)))
+        else:
+            candidates = [root for root in protected if root not in {source, install}]
+            if not candidates:
+                raise ConfigurationError(
+                    "Workspace profile cannot identify an upstream protected root"
+                )
+            upstream = candidates[0]
+        primary = {source, install, upstream}
+        extras = tuple(root for root in protected if root not in primary)
+        return cls.create(
+            runtime_root=Path(str(runtime_value)),
+            source_repo_root=source,
+            install_root=install,
+            upstream_root=upstream,
+            extra_protected_roots=extras,
+        )
