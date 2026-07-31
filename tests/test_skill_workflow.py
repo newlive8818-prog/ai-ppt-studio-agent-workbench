@@ -1,0 +1,34 @@
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+SKILL = ROOT / "skill" / "ai-ppt-studio" / "SKILL.md"
+
+
+class SkillWorkflowTests(unittest.TestCase):
+    def test_skill_routes_pptx_to_codex_presentations(self) -> None:
+        body = SKILL.read_text(encoding="utf-8")
+        self.assertLess(len(body.splitlines()), 220)
+        self.assertIn("Codex Presentations", body)
+        self.assertIn("Do not build or use a second PPTX editor", body)
+        self.assertIn("Image 2", body)
+        self.assertIn("G0", body)
+        self.assertIn("G4", body)
+        self.assertIn("No separate Image 2 privacy gate", body)
+
+    def test_skill_has_focused_workflow_references(self) -> None:
+        references = SKILL.parent / "references"
+        expected = {
+            "content-workflow.md",
+            "visual-workflow.md",
+            "presentations-handoff.md",
+            "review-and-feedback.md",
+            "experience-evolution.md",
+        }
+        self.assertTrue(expected.issubset({path.name for path in references.glob("*.md")}))
+
+
+if __name__ == "__main__":
+    unittest.main()
