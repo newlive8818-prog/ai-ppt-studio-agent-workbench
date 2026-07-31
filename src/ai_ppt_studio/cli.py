@@ -25,6 +25,7 @@ from .materials import ImportMode, MaterialIntake
 from .models import ArtifactKind, Gate
 from .paths import PathPolicy
 from .project_store import ProjectStore
+from .review_html import ReviewHtml, ReviewKind
 from .state_store import StateStore
 
 
@@ -101,6 +102,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     list_artifacts = commands.add_parser("list-artifacts")
     list_artifacts.add_argument("--project", type=Path, required=True)
+
+    review = commands.add_parser("review")
+    review.add_argument("--project", type=Path, required=True)
+    review.add_argument(
+        "--kind", choices=[kind.value for kind in ReviewKind], required=True
+    )
     return parser
 
 
@@ -261,6 +268,16 @@ def dispatch(args: argparse.Namespace) -> dict[str, object]:
             "artifacts": {
                 kind: artifact.as_dict() for kind, artifact in artifacts.items()
             },
+        }
+    if command == "review":
+        manifest = projects.load(args.project)
+        review_path = ReviewHtml(
+            Path(manifest.project_root), policy
+        ).generate(ReviewKind(args.kind))
+        return {
+            "ok": True,
+            "command": command,
+            "review_path": str(review_path),
         }
     raise CliUsageError(f"Unsupported command: {command}")
 
