@@ -29,6 +29,21 @@ class SkillWorkflowTests(unittest.TestCase):
         }
         self.assertTrue(expected.issubset({path.name for path in references.glob("*.md")}))
 
+    def test_skill_requires_cross_project_experience_recommend_apply_evaluate_loop(self) -> None:
+        body = SKILL.read_text(encoding="utf-8")
+        evolution = (SKILL.parent / "references" / "experience-evolution.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("experience-recommend", body)
+        self.assertIn("experience-apply", body)
+        self.assertIn("experience-evaluate", body)
+        self.assertIn("personal-memory/experience-index.json", evolution)
+        self.assertIn("evaluation/applications.jsonl", evolution)
+        self.assertIn("candidate -> personal", evolution)
+        self.assertIn("personal -> candidate", evolution)
+        self.assertIn("experience-rollback", evolution)
+        self.assertIn("stable Skill core", evolution)
+
 
 if __name__ == "__main__":
     unittest.main()

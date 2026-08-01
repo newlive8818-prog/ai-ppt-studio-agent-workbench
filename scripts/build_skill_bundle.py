@@ -62,7 +62,7 @@ def build_bundle(source_root: Path, output_root: Path) -> Path:
         runtime_bundle / "ai_ppt_studio",
         ignore=ignored,
     )
-    (runtime_bundle / "VERSION").write_text("0.1.0\n", encoding="utf-8")
+    (runtime_bundle / "VERSION").write_text("0.2.0\n", encoding="utf-8")
     _reject_symlinks(bundle)
     return bundle.resolve()
 

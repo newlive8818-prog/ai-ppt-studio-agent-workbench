@@ -27,3 +27,7 @@ class MaterialImportError(AiPptError):
 
 class ArtifactValidationError(AiPptError):
     """Raised when a project artifact lacks required semantic content."""
+
+
+class ExperienceValidationError(AiPptError):
+    """Raised when personal experience data or an evolution action is invalid."""

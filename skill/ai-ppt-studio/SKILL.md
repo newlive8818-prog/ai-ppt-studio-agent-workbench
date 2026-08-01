@@ -13,8 +13,10 @@ Treat AI as the principal presentation strategist and maker. Let the user concen
 2. Read `references/runtime-workflow.md` before creating or resuming a project.
 3. Run `python3 scripts/ai_ppt_runtime.py preflight`; it discovers the managed workspace profile automatically.
 4. Initialize or resume a project under the managed runtime root. Never write into the current working directory unless it is that managed project.
-5. Treat user-provided originals as read-only. Copy before OCR, conversion, crop, annotation, or transformation.
-6. Use only sources the user provides. Do not search the internet for customer-project material.
+5. After mission context is known, run `experience-recommend --input CONTEXT.json`. Inspect scope, evidence level, and match reasons; a recommendation is not silent permission to apply it.
+6. When a recommendation materially influences work, record the exact version with `experience-apply --project PROJECT --experience ID --input CONTEXT.json`.
+7. Treat user-provided originals as read-only. Copy before OCR, conversion, crop, annotation, or transformation.
+8. Use only sources the user provides. Do not search the internet for customer-project material.
 
 ## Capability routing
 
@@ -48,7 +50,7 @@ Freeze the Visual Contract at G3 after concentrated human approval. Then use Cod
 
 ### 6. Revision and learning
 
-Read `references/review-and-feedback.md` for scoped changes and `references/experience-evolution.md` before promoting any learning. Preserve old versions. Reopen only affected gates. Record raw feedback separately from model interpretation. A single reaction never changes the stable Skill core.
+Read `references/review-and-feedback.md` for scoped changes and `references/experience-evolution.md` before promoting any learning. Preserve old versions. Reopen only affected gates. Record raw feedback separately from model interpretation. After the user accepts, rejects, or materially revises experience-influenced work, run `experience-evaluate --application ID --input EVALUATION.json`. A single reaction never changes the stable Skill core.
 
 ## User interaction rule
 

@@ -60,6 +60,14 @@ class SkillBundleTests(unittest.TestCase):
                     "experience_evolution": True,
                 },
             )
+            evolution = payload["capability_evidence"]["experience_evolution"]
+            self.assertTrue(evolution["ready"])
+            self.assertIn("evaluate", evolution["operations"])
+            self.assertFalse(evolution["stable_kernel_auto_mutation"])
+            self.assertEqual(
+                (bundle / "runtime" / "VERSION").read_text(encoding="utf-8").strip(),
+                "0.2.0",
+            )
 
 
 if __name__ == "__main__":

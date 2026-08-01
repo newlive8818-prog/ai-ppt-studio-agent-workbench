@@ -13,7 +13,7 @@ class PackageShapeTests(unittest.TestCase):
     def test_python_package_and_skill_metadata_exist(self) -> None:
         from ai_ppt_studio import __version__
 
-        self.assertEqual(__version__, "0.1.0")
+        self.assertEqual(__version__, "0.2.0")
         skill = ROOT / "skill" / "ai-ppt-studio"
         self.assertTrue((skill / "SKILL.md").is_file())
         self.assertTrue((skill / "agents" / "openai.yaml").is_file())

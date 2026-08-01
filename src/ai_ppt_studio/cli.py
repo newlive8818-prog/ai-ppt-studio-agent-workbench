@@ -16,11 +16,14 @@ from .errors import (
     AiPptError,
     ArtifactValidationError,
     ConfigurationError,
+    ExperienceValidationError,
     InvalidTransitionError,
     MaterialImportError,
     ProjectNotFoundError,
     ProtectedPathError,
 )
+from .experience_models import ExperienceLevel
+from .experience_store import ExperienceStore
 from .materials import ImportMode, MaterialIntake
 from .models import ArtifactKind, Gate
 from .paths import PathPolicy
@@ -108,6 +111,43 @@ def build_parser() -> argparse.ArgumentParser:
     review.add_argument(
         "--kind", choices=[kind.value for kind in ReviewKind], required=True
     )
+
+    experience_create = commands.add_parser("experience-create")
+    experience_create.add_argument("--project", type=Path, required=True)
+    experience_create.add_argument("--input", type=Path, required=True)
+
+    experience_list = commands.add_parser("experience-list")
+    experience_list.add_argument(
+        "--level", choices=[level.value for level in ExperienceLevel]
+    )
+
+    experience_show = commands.add_parser("experience-show")
+    experience_show.add_argument("--experience", required=True)
+
+    experience_recommend = commands.add_parser("experience-recommend")
+    experience_recommend.add_argument("--input", type=Path, required=True)
+    experience_recommend.add_argument("--limit", type=int, default=5)
+
+    experience_apply = commands.add_parser("experience-apply")
+    experience_apply.add_argument("--project", type=Path, required=True)
+    experience_apply.add_argument("--experience", required=True)
+    experience_apply.add_argument("--input", type=Path, required=True)
+
+    experience_evaluate = commands.add_parser("experience-evaluate")
+    experience_evaluate.add_argument("--application", required=True)
+    experience_evaluate.add_argument("--input", type=Path, required=True)
+
+    experience_set_level = commands.add_parser("experience-set-level")
+    experience_set_level.add_argument("--experience", required=True)
+    experience_set_level.add_argument(
+        "--level", choices=[level.value for level in ExperienceLevel], required=True
+    )
+    experience_set_level.add_argument("--reason", required=True)
+
+    experience_rollback = commands.add_parser("experience-rollback")
+    experience_rollback.add_argument("--experience", required=True)
+    experience_rollback.add_argument("--version", type=int, required=True)
+    experience_rollback.add_argument("--reason", required=True)
     return parser
 
 
@@ -157,9 +197,11 @@ def dispatch(args: argparse.Namespace) -> dict[str, object]:
     config = build_config(args)
     policy = PathPolicy(config)
     projects = ProjectStore(config, policy)
+    experiences = ExperienceStore(config, policy)
     command = args.command
     if command == "preflight":
         probe = policy.assert_write_allowed(config.runtime_root / "projects" / ".probe")
+        experience_status = experiences.capability_status()
         return {
             "ok": True,
             "command": command,
@@ -174,7 +216,10 @@ def dispatch(args: argparse.Namespace) -> dict[str, object]:
                 "presentations": True,
                 "ppt_compilation": True,
                 "delivery_validation": True,
-                "experience_evolution": True,
+                "experience_evolution": bool(experience_status["ready"]),
+            },
+            "capability_evidence": {
+                "experience_evolution": experience_status,
             },
         }
     if command == "init":
@@ -279,7 +324,93 @@ def dispatch(args: argparse.Namespace) -> dict[str, object]:
             "command": command,
             "review_path": str(review_path),
         }
+    if command == "experience-create":
+        manifest = projects.load(args.project)
+        payload = _load_json_object(args.input, policy, "Experience input")
+        experience = experiences.create_candidate(manifest, payload)
+        return {
+            "ok": True,
+            "command": command,
+            "experience": experience.as_dict(),
+        }
+    if command == "experience-list":
+        level = ExperienceLevel(args.level) if args.level else None
+        items = experiences.list(level)
+        return {
+            "ok": True,
+            "command": command,
+            "experiences": [item.as_dict() for item in items],
+        }
+    if command == "experience-show":
+        experience = experiences.get(args.experience)
+        return {
+            "ok": True,
+            "command": command,
+            "experience": experience.as_dict(),
+        }
+    if command == "experience-recommend":
+        payload = _load_json_object(args.input, policy, "Experience context")
+        recommendations = experiences.recommend(payload, limit=args.limit)
+        return {
+            "ok": True,
+            "command": command,
+            "recommendations": recommendations,
+        }
+    if command == "experience-apply":
+        manifest = projects.load(args.project)
+        payload = _load_json_object(args.input, policy, "Experience context")
+        application = experiences.record_application(
+            manifest, args.experience, payload
+        )
+        return {
+            "ok": True,
+            "command": command,
+            "application": application.as_dict(),
+            "experience": experiences.get(args.experience).as_dict(),
+        }
+    if command == "experience-evaluate":
+        payload = _load_json_object(args.input, policy, "Experience evaluation")
+        evaluation = experiences.evaluate(args.application, payload)
+        return {
+            "ok": True,
+            "command": command,
+            "evaluation": evaluation.as_dict(),
+            "experience": experiences.get(evaluation.experience_id).as_dict(),
+        }
+    if command == "experience-set-level":
+        experience = experiences.set_level(
+            args.experience, ExperienceLevel(args.level), args.reason
+        )
+        return {
+            "ok": True,
+            "command": command,
+            "experience": experience.as_dict(),
+        }
+    if command == "experience-rollback":
+        experience = experiences.rollback(
+            args.experience, args.version, args.reason
+        )
+        return {
+            "ok": True,
+            "command": command,
+            "experience": experience.as_dict(),
+        }
     raise CliUsageError(f"Unsupported command: {command}")
+
+
+def _load_json_object(path: Path, policy: PathPolicy, label: str) -> dict[str, object]:
+    input_path = policy.assert_source_readable(path)
+    if not input_path.is_file():
+        raise ExperienceValidationError(f"{label} must be a JSON file: {input_path}")
+    try:
+        payload = json.loads(input_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ExperienceValidationError(
+            f"{label} is not valid JSON: {input_path}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ExperienceValidationError(f"{label} must contain a JSON object")
+    return payload
 
 
 def _print_json(payload: dict[str, Any], stream: Any) -> None:
@@ -291,7 +422,13 @@ def _exit_code(error: Exception) -> int:
     if isinstance(error, ProtectedPathError):
         return 3
     if isinstance(
-        error, (ProjectNotFoundError, MaterialImportError, ArtifactValidationError)
+        error,
+        (
+            ProjectNotFoundError,
+            MaterialImportError,
+            ArtifactValidationError,
+            ExperienceValidationError,
+        ),
     ):
         return 4
     if isinstance(error, InvalidTransitionError):
