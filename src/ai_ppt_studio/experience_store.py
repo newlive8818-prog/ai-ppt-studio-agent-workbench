@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
 from datetime import UTC, datetime
@@ -77,6 +78,16 @@ class ExperienceStore:
                 self.index_path,
                 {"schema_version": "1.0", "updated_at": _now(), "experiences": []},
             )
+        for log_path in (
+            self.applications_path,
+            self.evaluations_path,
+            self.decisions_path,
+        ):
+            if not log_path.exists():
+                descriptor = os.open(
+                    log_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+                )
+                os.close(descriptor)
 
     def capability_status(self) -> dict[str, object]:
         """Return evidence that the local experience subsystem is operational."""
@@ -91,13 +102,24 @@ class ExperienceStore:
             "rollback",
         )
         operations = [name for name in required if callable(getattr(self, name, None))]
-        ready = len(operations) == len(required) and self.index_path.is_file()
+        ready = len(operations) == len(required) and all(
+            path.is_file()
+            for path in (
+                self.index_path,
+                self.applications_path,
+                self.evaluations_path,
+                self.decisions_path,
+            )
+        )
         return {
             "ready": ready,
             "schema_version": "1.0",
             "personal_memory_root": str(self.personal_root),
             "evaluation_root": str(self.evaluation_root),
             "index_path": str(self.index_path),
+            "application_log": str(self.applications_path),
+            "evaluation_log": str(self.evaluations_path),
+            "decision_log": str(self.decisions_path),
             "operations": operations,
             "stable_kernel_auto_mutation": False,
         }

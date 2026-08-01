@@ -179,6 +179,9 @@ class ExperienceCliTests(unittest.TestCase):
             self.assertIn("rollback", evidence["operations"])
             self.assertFalse(evidence["stable_kernel_auto_mutation"])
             self.assertTrue(Path(evidence["index_path"]).is_file())
+            self.assertTrue(Path(evidence["application_log"]).is_file())
+            self.assertTrue(Path(evidence["evaluation_log"]).is_file())
+            self.assertTrue(Path(evidence["decision_log"]).is_file())
 
 
 if __name__ == "__main__":
