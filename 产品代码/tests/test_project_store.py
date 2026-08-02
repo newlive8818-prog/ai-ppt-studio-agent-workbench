@@ -42,6 +42,7 @@ class ProjectStoreTests(unittest.TestCase):
             expected = {
                 "sources",
                 "managed-assets",
+                "cognition",
                 "blueprint",
                 "visual",
                 "scene-graph",

@@ -18,6 +18,7 @@ from .paths import PathPolicy
 PROJECT_DIRECTORIES = (
     "sources",
     "managed-assets",
+    "cognition",
     "blueprint",
     "visual",
     "scene-graph",

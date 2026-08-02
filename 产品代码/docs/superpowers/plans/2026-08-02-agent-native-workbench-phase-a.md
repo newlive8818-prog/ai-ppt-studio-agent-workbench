@@ -37,10 +37,10 @@ The slice is complete only when all of these are true:
 - Modify: `../03-UI设计与交互规范-v1.0.md`
 - Create: `docs/superpowers/plans/2026-08-02-agent-native-workbench-phase-a.md`
 
-- [ ] Record the 2026-08-02 user instruction as RC1 approval; do not change functional scope.
-- [ ] Verify all Markdown relative links and prototype targets resolve.
-- [ ] Run the existing Python suite as the pre-change baseline.
-- [ ] Commit documentation before production implementation.
+- [x] Record the 2026-08-02 user instruction as RC1 approval; do not change functional scope.
+- [x] Verify all Markdown relative links and prototype targets resolve.
+- [x] Run the existing Python suite as the pre-change baseline.
+- [x] Commit documentation before production implementation.
 
 Verification:
 
@@ -78,12 +78,12 @@ Projection files are additive:
 
 `state/workbench.json` owns `schema_version`, `revision`, `active_space`, `updated_at`, `last_human_decision_id`, and `current_decision`. Existing `state/state.json` remains the G0–G4 source and is not rewritten by migration.
 
-- [ ] Write failing tests for schema-1.0 project migration, repeatable reopen, latest-artifact projection, current gate projection, and protected paths.
-- [ ] Add `cognition` to new project directories without changing existing directory contracts.
-- [ ] Implement an additive, idempotent `WorkbenchStore.ensure()` migration.
-- [ ] Derive an honest default cognition map from Mission, Content Blueprint, project sources, artifacts, and G0–G4 state. Missing data must become explicit uncertainty, never invented facts.
-- [ ] Return a compact, JSON-serializable `ProjectSnapshot`; do not expose whole materials or hidden reasoning.
-- [ ] Run the focused tests, then the full Python suite.
+- [x] Write failing tests for schema-1.0 project migration, repeatable reopen, latest-artifact projection, current gate projection, and protected paths.
+- [x] Add `cognition` to new project directories without changing existing directory contracts.
+- [x] Implement an additive, idempotent `WorkbenchStore.ensure()` migration.
+- [x] Derive an honest default cognition map from Mission, Content Blueprint, project sources, artifacts, and G0–G4 state. Missing data must become explicit uncertainty, never invented facts.
+- [x] Return a compact, JSON-serializable `ProjectSnapshot`; do not expose whole materials or hidden reasoning.
+- [x] Run the focused tests, then the full Python suite.
 
 ## Task 3: Implement revision-safe human decisions
 
@@ -105,18 +105,17 @@ Write contract:
 }
 ```
 
-- [ ] Write failing tests for accepted write, append-only decision/event, revision increment, stale write conflict, empty choice, and reopen persistence.
-- [ ] Implement a per-project lock and atomic `workbench.json` replacement.
-- [ ] Append the human decision only after revision validation.
-- [ ] Return `follow_up_message`, `model_context`, `affected_artifacts`, and refreshed snapshot.
-- [ ] Guarantee a conflict has no partial decision or event append.
+- [x] Write failing tests for accepted write, append-only decision/event, revision increment, stale write conflict, empty choice, and reopen persistence.
+- [x] Implement a per-project lock and atomic `workbench.json` replacement.
+- [x] Append the human decision only after revision validation.
+- [x] Return `follow_up_message`, `model_context`, `affected_artifacts`, and refreshed snapshot.
+- [x] Guarantee a conflict has no partial decision or event append.
 
 ## Task 4: Expose a machine-only Python bridge
 
 **Files:**
 
 - Create: `src/ai_ppt_studio/workbench_bridge.py`
-- Modify: `src/ai_ppt_studio/cli.py`
 - Create: `tests/test_workbench_bridge.py`
 
 Bridge operations:
@@ -127,10 +126,10 @@ Bridge operations:
 
 The bridge reads one JSON request from stdin and writes exactly one JSON result to stdout. Errors use stable codes: `PROJECT_NOT_FOUND`, `PATH_PROTECTED`, `REVISION_CONFLICT`, `VALIDATION_ERROR`, `INTERNAL_ERROR`.
 
-- [ ] Write subprocess tests first and confirm they fail.
-- [ ] Implement JSON request validation and runtime configuration loading.
-- [ ] Select the latest managed project only when no explicit project root is given; always return the selected root.
-- [ ] Keep diagnostics on stderr and never print secrets or free-form tracebacks to stdout.
+- [x] Write subprocess tests first and confirm they fail.
+- [x] Implement JSON request validation and runtime configuration loading.
+- [x] Select the latest managed project only when no explicit project root is given; always return the selected root.
+- [x] Keep diagnostics on stderr and never print secrets or free-form tracebacks to stdout.
 
 ## Task 5: Scaffold and validate the Codex plugin package
 

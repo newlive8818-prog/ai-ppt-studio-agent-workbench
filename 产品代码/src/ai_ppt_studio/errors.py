@@ -31,3 +31,18 @@ class ArtifactValidationError(AiPptError):
 
 class ExperienceValidationError(AiPptError):
     """Raised when personal experience data or an evolution action is invalid."""
+
+
+class WorkbenchValidationError(AiPptError):
+    """Raised when a workbench request is structurally invalid."""
+
+
+class RevisionConflictError(AiPptError):
+    """Raised when a workbench write targets an obsolete project revision."""
+
+    def __init__(self, expected_revision: int, actual_revision: int) -> None:
+        self.expected_revision = expected_revision
+        self.actual_revision = actual_revision
+        super().__init__(
+            f"Expected revision {expected_revision}, current revision is {actual_revision}"
+        )
