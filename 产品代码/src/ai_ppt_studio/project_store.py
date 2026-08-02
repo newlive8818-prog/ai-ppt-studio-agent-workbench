@@ -28,6 +28,8 @@ PROJECT_DIRECTORIES = (
     "state",
     "events",
     "logs",
+    "tasks",
+    "context",
 )
 
 

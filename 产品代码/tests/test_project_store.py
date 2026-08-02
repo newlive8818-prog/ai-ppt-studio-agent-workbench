@@ -52,6 +52,8 @@ class ProjectStoreTests(unittest.TestCase):
                 "state",
                 "events",
                 "logs",
+                "tasks",
+                "context",
             }
             self.assertEqual(
                 {path.name for path in project.iterdir() if path.is_dir()}, expected

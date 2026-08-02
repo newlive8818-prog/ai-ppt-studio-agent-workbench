@@ -18,6 +18,7 @@ class ProjectSnapshot:
     gate_state: dict[str, Any]
     cognition_map: dict[str, Any]
     artifacts: dict[str, Any]
+    space_projections: dict[str, Any]
     current_decision: dict[str, Any]
     last_human_decision_id: str | None
     allowed_next_actions: tuple[str, ...]

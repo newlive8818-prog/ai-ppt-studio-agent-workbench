@@ -20,6 +20,7 @@ from .json_io import append_jsonl, atomic_write_json
 from .models import ArtifactKind, ProjectManifest
 from .paths import PathPolicy
 from .state_store import StateStore
+from .space_projection import SpaceProjectionBuilder
 from .workbench_models import DecisionResult, ProjectSnapshot
 
 
@@ -262,6 +263,9 @@ class WorkbenchStore:
             gate_state=gate.as_dict(),
             cognition_map=cognition,
             artifacts=self._artifact_summaries(),
+            space_projections=SpaceProjectionBuilder(
+                self.project_root, self.policy
+            ).build(),
             current_decision=current_decision,
             last_human_decision_id=(
                 str(state["last_human_decision_id"])
