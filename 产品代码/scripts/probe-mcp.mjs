@@ -19,8 +19,14 @@ try {
   const listed = await client.listTools();
   const toolNames = listed.tools.map((tool) => tool.name).sort();
   const requiredTools = [
+    "add_ai_ppt_material",
+    "commit_ai_ppt_artifact",
+    "confirm_ai_ppt_gate",
     "get_ai_ppt_project_snapshot",
+    "read_ai_ppt_project_asset",
     "render_ai_ppt_workbench",
+    "reopen_ai_ppt_scope",
+    "request_ai_ppt_agent_action",
     "submit_ai_ppt_human_decision",
   ];
   for (const name of requiredTools) {

@@ -142,4 +142,16 @@ describe("Phase C visual workbench", () => {
     expect(screen.getByText("6 页场景图")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "冻结视觉实现合同并通过 G3" })).toBeInTheDocument();
   });
+
+  it("shows the visual contract as completed after G3 instead of asking to confirm it again", () => {
+    const initial = visualData({
+      selected_direction: "A",
+      visual_contract: { design_thesis: "深色空间中的连接光路", palette: {}, typography: {}, layout_rules: ["一页一个主张"], image_language: [], editability_rules: ["禁止整页位图"], page_families: [] },
+      scene_graph_coverage: 6,
+    });
+    initial.snapshot.gate_state = { current_gate: "G4", gates: { G0: "passed", G1: "passed", G2: "passed", G3: "passed", G4: "open" } };
+    render(<App initialData={initial} bridge={host(initial).bridge} />);
+    expect(screen.getByRole("button", { name: "视觉实现合同已确认" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "冻结视觉实现合同并通过 G3" })).not.toBeInTheDocument();
+  });
 });

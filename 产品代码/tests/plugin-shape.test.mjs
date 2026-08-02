@@ -13,6 +13,7 @@ test("plugin package declares one authoritative skill and an MCP server", () => 
   assert.equal(existsSync(mcpPath), true);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   assert.equal(manifest.name, "ai-ppt-studio");
+  assert.equal(manifest.version, "0.4.0");
   assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
   assert.equal(manifest.skills, "./skills/");
   assert.equal(manifest.mcpServers, "./.mcp.json");

@@ -12,7 +12,7 @@ function widgetDataFromResult(result: unknown): WidgetData | undefined {
 
 export function createMcpAppClient(): HostBridge {
   const app = new McpApp(
-    { name: "ai-ppt-studio", version: "0.3.1" },
+    { name: "ai-ppt-studio", version: "0.4.0" },
     { availableDisplayModes: ["inline", "fullscreen"] },
     { autoResize: true },
   );

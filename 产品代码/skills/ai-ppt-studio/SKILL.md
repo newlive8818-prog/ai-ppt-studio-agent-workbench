@@ -11,12 +11,13 @@ Treat AI as the principal presentation strategist and maker. Let the user concen
 
 1. Read isolation-policy.md before any file write, using `references/isolation-policy.md`.
 2. Read `references/runtime-workflow.md` before creating or resuming a project.
-3. Run `python3 scripts/ai_ppt_runtime.py preflight`; it discovers the managed workspace profile automatically.
-4. Initialize or resume a project under the managed runtime root. Never write into the current working directory unless it is that managed project.
-5. After mission context is known, run `experience-recommend --input CONTEXT.json`. Inspect scope, evidence level, and match reasons; a recommendation is not silent permission to apply it.
-6. When a recommendation materially influences work, record the exact version with `experience-apply --project PROJECT --experience ID --input CONTEXT.json`.
-7. Treat user-provided originals as read-only. Copy before OCR, conversion, crop, annotation, or transformation.
-8. Use only sources the user provides. Do not search the internet for customer-project material.
+3. Read `references/native-workbench.md` before opening the Widget or changing B–D artifacts.
+4. Run `python3 scripts/ai_ppt_runtime.py preflight`; it discovers the managed workspace profile automatically.
+5. Initialize or resume a project under the managed runtime root. Never write into the current working directory unless it is that managed project.
+6. After mission context is known, run `experience-recommend --input CONTEXT.json`. Inspect scope, evidence level, and match reasons; a recommendation is not silent permission to apply it.
+7. When a recommendation materially influences work, record the exact version with `experience-apply --project PROJECT --experience ID --input CONTEXT.json`.
+8. Treat user-provided originals as read-only. Copy before OCR, conversion, crop, annotation, or transformation.
+9. Use only sources the user provides. Do not search the internet for customer-project material.
 
 ## Capability routing
 
@@ -24,6 +25,7 @@ Treat AI as the principal presentation strategist and maker. Let the user concen
 - Image 2 is the visual concept collaborator. No separate Image 2 privacy gate exists in this product; user-provided materials may be used when the visual task needs them.
 - Codex Presentations is the sole execution route for every PPTX read, create, edit, render, and inspection operation. Do not build or use a second PPTX editor or compiler. Never use `python-pptx`.
 - Offline HTML pages support concentrated decisions; versioned project artifacts remain authoritative.
+- The native Widget is the structured cognition and decision surface; Codex chat remains the dynamic reasoning surface. Every consequential Agent result must return through the governed task and artifact tools.
 - `my-ppt-master`, local examples, courses, and outside references are inspiration only, never decision dependencies.
 
 ## G0–G4 workflow

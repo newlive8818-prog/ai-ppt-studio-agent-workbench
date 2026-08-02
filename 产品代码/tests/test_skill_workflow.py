@@ -26,8 +26,26 @@ class SkillWorkflowTests(unittest.TestCase):
             "presentations-handoff.md",
             "review-and-feedback.md",
             "experience-evolution.md",
+            "native-workbench.md",
         }
         self.assertTrue(expected.issubset({path.name for path in references.glob("*.md")}))
+
+    def test_skill_governs_native_workbench_agent_loop(self) -> None:
+        body = SKILL.read_text(encoding="utf-8")
+        workbench = (SKILL.parent / "references" / "native-workbench.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("native-workbench.md", body)
+        self.assertIn("request_ai_ppt_agent_action", workbench)
+        self.assertIn("commit_ai_ppt_artifact", workbench)
+        self.assertIn("confirm_ai_ppt_gate", workbench)
+        self.assertIn("expectedRevision", workbench)
+        self.assertIn("Image 2", workbench)
+        self.assertIn("Codex Presentations", workbench)
+        self.assertIn("材料空间", workbench)
+        self.assertIn("内容蓝图", workbench)
+        self.assertIn("视觉设计", workbench)
+        self.assertIn("制作与交付", workbench)
 
     def test_skill_requires_cross_project_experience_recommend_apply_evaluate_loop(self) -> None:
         body = SKILL.read_text(encoding="utf-8")

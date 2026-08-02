@@ -31,7 +31,9 @@ export function VisualWorkspace({ bridge, projectRoot, revision, gates, projecti
     () => projection.directions.find((direction) => direction.id === selectedId),
     [projection.directions, selectedId],
   );
-  const currentGate = (["G1", "G2", "G3"] as const).find((gate) => gates[gate] === "open") || "G3";
+  const currentGate: "G1" | "G2" | "G3" | "complete" = gates.G3 === "passed"
+    ? "complete"
+    : ((["G1", "G2", "G3"] as const).find((gate) => gates[gate] === "open") || "G3");
 
   async function saveDirection() {
     if (!selected) return;
@@ -67,6 +69,9 @@ export function VisualWorkspace({ bridge, projectRoot, revision, gates, projecti
   function primaryAction() {
     if (gates.G0 !== "passed") {
       return <button className="primary-button" type="button" disabled>请先确认内容蓝图</button>;
+    }
+    if (currentGate === "complete") {
+      return <button className="primary-button" type="button" disabled><Check size={16} />视觉实现合同已确认</button>;
     }
     if (currentGate === "G1") {
       if (!projection.directions.length) {
@@ -168,7 +173,7 @@ export function VisualWorkspace({ bridge, projectRoot, revision, gates, projecti
       )}
 
       <section className="visual-primary-action">
-        <div><span>{currentGate} · 当前视觉质量门</span><h2>{currentGate === "G1" ? "先选定方向，再进入可编辑工程验证" : currentGate === "G2" ? "用真实 PPTX 样张证明构想能够实现" : "冻结设计规则与逐页实现图"}</h2></div>
+        <div><span>{currentGate === "complete" ? "G3 · 已通过" : `${currentGate} · 当前视觉质量门`}</span><h2>{currentGate === "G1" ? "先选定方向，再进入可编辑工程验证" : currentGate === "G2" ? "用真实 PPTX 样张证明构想能够实现" : currentGate === "complete" ? "视觉方向、工程可行性与实现合同已锁定" : "冻结设计规则与逐页实现图"}</h2></div>
         {primaryAction()}
       </section>
     </div>
