@@ -63,10 +63,63 @@ export interface BlueprintProjection {
   active_task: AgentTaskSummary | null;
 }
 
+export interface VisualDirection {
+  id: string;
+  name: string;
+  thesis: string;
+  composition: string;
+  density: string;
+  image_language: string;
+  risk: string;
+  sample_asset_ref: string;
+  sample_exists: boolean;
+}
+
+export interface EngineeringSample {
+  sample_id: string;
+  slide_refs: string[];
+  render_ref: string;
+  render_exists: boolean;
+  native_element_ratio: number;
+  editable: boolean;
+  notes: string;
+}
+
+export interface VisualProjection {
+  status: string;
+  visual_brief: {
+    design_challenge: string;
+    audience: string;
+    desired_response: string;
+    design_posture: string;
+    constraints: string[];
+    visual_prohibitions: string[];
+  };
+  directions: VisualDirection[];
+  direction_count: number;
+  recommended_direction: string;
+  selected_direction: string;
+  engineering_samples: EngineeringSample[];
+  engineering_summary: string;
+  native_coverage: Record<string, boolean>;
+  engineering_qa_status: string;
+  visual_contract: {
+    design_thesis: string;
+    palette: Record<string, string>;
+    typography: Record<string, string>;
+    layout_rules: string[];
+    image_language: string[];
+    editability_rules: string[];
+    page_families: string[];
+  };
+  scene_graph_coverage: number;
+  active_task: AgentTaskSummary | null;
+}
+
 export interface SpaceProjections {
   materials: MaterialsProjection;
   blueprint: BlueprintProjection;
-  visual: Record<string, unknown>;
+  visual: VisualProjection;
   delivery: Record<string, unknown>;
 }
 

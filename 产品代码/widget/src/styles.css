@@ -412,6 +412,57 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .empty-blueprint h2 { margin: 14px 0 6px; }
 .empty-blueprint p { max-width: 560px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
 
+.visual-brief-strip { margin-top: 15px; display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--border); border-radius: 11px; background: #fafbfe; }
+.visual-brief-strip div { min-width: 0; padding: 13px 15px; display: grid; gap: 5px; border-right: 1px solid var(--border); }
+.visual-brief-strip div:last-child { border-right: 0; }
+.visual-brief-strip span, .contract-grid section > span { color: var(--muted); font-size: 10px; }
+.visual-brief-strip strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.route-label { padding: 6px 8px; display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; background: #f0edff; }
+.route-label.native { color: #087a4d; background: #eaf8f1; }
+.direction-grid { margin-top: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+.direction-card { min-width: 0; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 11px; color: inherit; background: white; text-align: left; cursor: pointer; }
+.direction-card:hover { border-color: #b8adff; }
+.direction-card.selected { border-color: var(--ai); box-shadow: 0 0 0 2px rgba(91,61,245,.12); }
+.direction-preview, .engineering-preview { position: relative; aspect-ratio: 16 / 8.5; overflow: hidden; background: #161a27; }
+.direction-preview img, .engineering-preview img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.asset-placeholder, .concept-wireframe { width: 100%; height: 100%; display: grid; place-content: center; justify-items: center; gap: 7px; color: #aeb5c5; background: linear-gradient(135deg, #1b2131, #293047); font-size: 11px; }
+.media-label { position: absolute; left: 10px; top: 10px; padding: 5px 7px; border-radius: 6px; color: white; background: rgba(68,40,215,.9); font-size: 9px; font-weight: 700; }
+.media-label.native { background: rgba(5,96,58,.9); }
+.direction-copy { padding: 14px 15px 15px; }
+.direction-copy > div:first-child { display: flex; align-items: center; gap: 8px; }
+.direction-copy > div:first-child > span { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; color: white; background: var(--ai); font-size: 10px; font-weight: 700; }
+.direction-copy > div:first-child > strong { font-size: 15px; }
+.direction-copy > div:first-child > small { margin-left: auto; color: var(--ai); font-size: 9px; }
+.direction-copy > p { min-height: 40px; margin: 9px 0 11px; color: #4c566a; font-size: 12px; line-height: 1.6; }
+.direction-copy dl { margin: 0; display: grid; grid-template-columns: 1fr .7fr; gap: 8px; }
+.direction-copy dl div { padding: 8px 9px; border-radius: 7px; background: #f7f8fb; }
+.direction-copy dt { color: var(--muted); font-size: 9px; }
+.direction-copy dd { margin: 3px 0 0; font-size: 11px; line-height: 1.4; }
+.direction-copy em { margin-top: 10px; display: flex; align-items: flex-start; gap: 5px; color: #9a5207; font-size: 10px; font-style: normal; line-height: 1.45; }
+.engineering-section { border-color: #cde7dc; }
+.engineering-grid { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(230px, .75fr); gap: 13px; }
+.engineering-card { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
+.engineering-card > div:last-child { padding: 12px 14px; }
+.engineering-card > div:last-child strong { font-size: 12px; }
+.engineering-card > div:last-child p { margin: 6px 0 8px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.engineering-card > div:last-child span { color: var(--confirmed); font-size: 11px; font-weight: 700; }
+.editability-proof { padding: 16px; border-radius: 10px; color: white; background: #16251f; }
+.editability-proof > span { color: #83d5b2; font-size: 10px; font-weight: 700; }
+.editability-proof > strong { margin-top: 7px; display: block; font-size: 15px; line-height: 1.5; }
+.editability-proof ul { margin: 14px 0 0; padding: 0; display: grid; gap: 8px; list-style: none; }
+.editability-proof li { display: flex; align-items: center; gap: 6px; color: #cfe1d9; font-size: 11px; }
+.contract-grid { display: grid; grid-template-columns: 1.2fr .9fr .9fr; gap: 13px; }
+.contract-grid .workspace-section { min-width: 0; }
+.contract-thesis h2 { margin: 8px 0; font-size: 17px; line-height: 1.45; }
+.contract-thesis p, .palette-panel p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.contract-rules ul { margin: 9px 0 0; padding-left: 17px; font-size: 11px; line-height: 1.7; }
+.palette-panel > div { margin: 10px 0; display: flex; gap: 5px; }
+.palette-panel i { width: 29px; height: 29px; border: 2px solid white; border-radius: 8px; box-shadow: 0 0 0 1px var(--border); }
+.visual-primary-action { margin-top: 18px; padding: 20px 22px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border: 1px solid #cfc7ff; border-radius: 12px; background: #fbfaff; }
+.visual-primary-action span { color: var(--ai); font-size: 10px; font-weight: 700; }
+.visual-primary-action h2 { margin: 6px 0 0; font-size: 17px; }
+.visual-primary-action .primary-button { flex: none; margin-top: 0; }
+
 .phase-placeholder { max-width: 660px; margin: 12vh auto 0; text-align: center; }
 .phase-placeholder > span { color: var(--ai); font-size: 12px; font-weight: 700; }
 .phase-placeholder h1 { margin: 10px 0; font-size: 25px; }
@@ -476,6 +527,12 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   .gate-action-panel { grid-template-columns: 1fr; }
   .gate-actions { display: grid; grid-template-columns: 1fr; }
   .gate-actions .secondary-button { width: 100%; }
+  .visual-brief-strip, .contract-grid { grid-template-columns: 1fr; }
+  .visual-brief-strip div { border-right: 0; border-bottom: 1px solid var(--border); }
+  .visual-brief-strip div:last-child { border-bottom: 0; }
+  .direction-grid, .engineering-grid { grid-template-columns: 1fr; }
+  .visual-primary-action { align-items: stretch; flex-direction: column; }
+  .visual-primary-action .primary-button { width: 100%; }
 }
 
 @media (max-width: 390px) {

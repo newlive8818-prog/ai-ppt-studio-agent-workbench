@@ -7,6 +7,7 @@ import { DecisionPanel } from "./components/DecisionPanel";
 import { MaterialsWorkspace } from "./components/MaterialsWorkspace";
 import { ProjectHeader } from "./components/ProjectHeader";
 import { StableNavigation } from "./components/StableNavigation";
+import { VisualWorkspace } from "./components/VisualWorkspace";
 import type { DecisionResult, HostBridge, SpaceId, WidgetData } from "./types";
 
 interface Props {
@@ -183,6 +184,16 @@ export function App({ initialData, bridge }: Props) {
               revision={snapshot.revision}
               gateStatus={snapshot.gate_state.gates.G0 || "locked"}
               projection={snapshot.space_projections.blueprint}
+              busy={phase === "saving"}
+              onRunTool={runWorkspaceTool}
+            />
+          ) : activeSpace === "visual" && snapshot.space_projections?.visual ? (
+            <VisualWorkspace
+              bridge={bridge}
+              projectRoot={snapshot.project.project_root}
+              revision={snapshot.revision}
+              gates={snapshot.gate_state.gates}
+              projection={snapshot.space_projections.visual}
               busy={phase === "saving"}
               onRunTool={runWorkspaceTool}
             />
