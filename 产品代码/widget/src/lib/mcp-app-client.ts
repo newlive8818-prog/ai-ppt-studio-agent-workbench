@@ -1,6 +1,6 @@
 import { App as McpApp } from "@modelcontextprotocol/ext-apps";
 
-import type { DecisionResult, HostBridge, WidgetData } from "../types";
+import type { HostBridge, WidgetData } from "../types";
 
 function widgetDataFromResult(result: unknown): WidgetData | undefined {
   const value = result as {
@@ -36,12 +36,12 @@ export function createMcpAppClient(): HostBridge {
         || (window.openai?.toolOutput as WidgetData | undefined);
       if (initial?.snapshot && onData) onData(initial);
     },
-    async callTool(name, args) {
+    async callTool<T>(name: string, args: Record<string, unknown>): Promise<T> {
       const result = await app.callServerTool({ name, arguments: args });
-      const structured = result?.structuredContent as DecisionResult | undefined;
-      if (result?.isError || !structured?.snapshot) {
+      const structured = result?.structuredContent as T | undefined;
+      if (result?.isError || !structured) {
         const error = new Error("AI PPT Studio 工具调用失败") as Error & { code?: string };
-        error.code = (structured as unknown as { error?: { code?: string } })?.error?.code;
+        error.code = (structured as { error?: { code?: string } } | undefined)?.error?.code;
         throw error;
       }
       return structured;

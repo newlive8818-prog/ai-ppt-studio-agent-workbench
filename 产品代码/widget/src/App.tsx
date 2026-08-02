@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { CognitionMap } from "./components/CognitionMap";
+import { BlueprintWorkspace } from "./components/BlueprintWorkspace";
 import { ContextInspector } from "./components/ContextInspector";
 import { DecisionPanel } from "./components/DecisionPanel";
+import { MaterialsWorkspace } from "./components/MaterialsWorkspace";
 import { ProjectHeader } from "./components/ProjectHeader";
 import { StableNavigation } from "./components/StableNavigation";
-import type { HostBridge, SpaceId, WidgetData } from "./types";
+import type { DecisionResult, HostBridge, SpaceId, WidgetData } from "./types";
 
 interface Props {
   initialData?: WidgetData;
@@ -109,11 +111,50 @@ export function App({ initialData, bridge }: Props) {
     }
   }
 
+  async function runWorkspaceTool(
+    name: string,
+    args: Record<string, unknown>,
+    continueInCodex = true,
+  ): Promise<DecisionResult> {
+    setPhase("saving");
+    setNotice("正在先写入项目，再更新 AI 上下文…");
+    try {
+      const result = await bridge.callTool<DecisionResult>(name, args);
+      setData((current) => current ? { ...current, snapshot: result.snapshot } : current);
+      setPhase("saved");
+      setNotice(`已保存为 revision ${result.snapshot.revision}。`);
+      if (continueInCodex && result.follow_up_message) {
+        try {
+          await bridge.updateModelContext(result.model_context);
+          await bridge.sendFollowUp(result.follow_up_message);
+          setNotice(`已保存为 revision ${result.snapshot.revision}，并已提交给 Codex 继续处理。`);
+        } catch (_hostError) {
+          setPhase("fallback");
+          setNotice(`操作已保存，但宿主未自动发起后续对话。请返回 Codex 对话继续，项目 revision ${result.snapshot.revision} 不会丢失。`);
+        }
+      }
+      return result;
+    } catch (error) {
+      const code = (error as Error & { code?: string }).code;
+      if (code === "REVISION_CONFLICT") {
+        setPhase("conflict");
+        setNotice("项目已在其他位置更新。当前输入仍被保留，请刷新后重新提交，系统没有覆盖新版本。");
+      } else if (code === "GATE_BLOCKED") {
+        setPhase("error");
+        setNotice("当前质量门仍缺少必要证据。项目未被修改，请先补齐页面提示的内容。");
+      } else {
+        setPhase("error");
+        setNotice("操作尚未保存。当前输入仍在页面中，可以重试或返回 Codex 继续。");
+      }
+      throw error;
+    }
+  }
+
   return (
     <div className="app-shell">
       <ProjectHeader projectName={snapshot.project.name} revision={snapshot.revision} status={statusLabel} onFullscreen={requestFullscreen} onRefresh={refresh} />
       <div className="mobile-space-tabs"><StableNavigation active={activeSpace} onChange={setActiveSpace} /></div>
-      <div className="workbench-grid">
+      <div className={`workbench-grid ${activeSpace === "overview" ? "" : "without-inspector"}`}>
         <StableNavigation active={activeSpace} onChange={setActiveSpace} />
         <main className="main-surface">
           {activeSpace === "overview" ? (
@@ -127,8 +168,24 @@ export function App({ initialData, bridge }: Props) {
               </section>
               <CognitionMap snapshot={snapshot} />
               <DecisionPanel decision={snapshot.current_decision} selected={selected} feedback={feedback} submitting={phase === "saving"} onSelected={setSelected} onFeedback={setFeedback} onSubmit={submitDecision} />
-              {notice && <div className={`system-notice ${phase}`} role="status">{notice}</div>}
             </>
+          ) : activeSpace === "materials" && snapshot.space_projections?.materials ? (
+            <MaterialsWorkspace
+              projectRoot={snapshot.project.project_root}
+              revision={snapshot.revision}
+              projection={snapshot.space_projections.materials}
+              busy={phase === "saving"}
+              onRunTool={runWorkspaceTool}
+            />
+          ) : activeSpace === "blueprint" && snapshot.space_projections?.blueprint ? (
+            <BlueprintWorkspace
+              projectRoot={snapshot.project.project_root}
+              revision={snapshot.revision}
+              gateStatus={snapshot.gate_state.gates.G0 || "locked"}
+              projection={snapshot.space_projections.blueprint}
+              busy={phase === "saving"}
+              onRunTool={runWorkspaceTool}
+            />
           ) : (
             <section className="phase-placeholder">
               <span>{activeSpace === "materials" ? "Phase B" : activeSpace === "blueprint" ? "Phase B" : activeSpace === "visual" ? "Phase C" : "Phase D"}</span>
@@ -137,6 +194,7 @@ export function App({ initialData, bridge }: Props) {
               <button className="secondary-button" type="button" onClick={() => setActiveSpace("overview")}>返回项目总览</button>
             </section>
           )}
+          {notice && <div className={`system-notice ${phase}`} role="status">{notice}</div>}
         </main>
         {activeSpace === "overview" && <ContextInspector snapshot={snapshot} />}
       </div>
