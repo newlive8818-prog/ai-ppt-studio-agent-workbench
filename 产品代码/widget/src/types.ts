@@ -219,6 +219,12 @@ export interface HostBridge {
 declare global {
   interface Window {
     __AI_PPT_PREVIEW__?: WidgetData;
+    __AI_PPT_PREVIEW_ASSETS__?: Record<string, {
+      assetRef: string;
+      mimeType: string;
+      bytes: number;
+      dataBase64: string;
+    }>;
     openai?: Record<string, unknown>;
   }
 }

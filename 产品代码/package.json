@@ -9,6 +9,7 @@
     "test": "npm run build && npm run test:node && npm run test:widget",
     "build": "node scripts/build-widget.mjs",
     "probe:mcp": "node scripts/probe-mcp.mjs",
+    "accept:bcd": "node scripts/run-bcd-acceptance.mjs",
     "quality": "npm test && npm run probe:mcp"
   },
   "dependencies": {

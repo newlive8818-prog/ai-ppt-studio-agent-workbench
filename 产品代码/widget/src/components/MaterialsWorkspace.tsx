@@ -33,6 +33,13 @@ function formatBytes(value: number | null) {
   return `${(value / 1024).toFixed(value < 10240 ? 1 : 0)} KB`;
 }
 
+function sourceStatusLabel(status: string) {
+  if (status === "usable") return "可用";
+  if (status === "partial") return "部分可用";
+  if (status === "classified") return "已提炼";
+  return "待提炼";
+}
+
 export function MaterialsWorkspace({ projectRoot, revision, projection, busy, onRunTool }: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [showText, setShowText] = useState(false);
@@ -157,7 +164,7 @@ export function MaterialsWorkspace({ projectRoot, revision, projection, busy, on
                 <span className="source-icon">{source.kind === "url" ? <Link2 size={16} /> : <FileText size={16} />}</span>
                 <div className="source-primary"><strong>{source.name}</strong><small>{source.kind} · {formatBytes(source.size_bytes)}</small></div>
                 <div className="source-classification"><span>{source.classification}</span><small>{source.purposes.join(" · ") || "等待用途判断"}</small></div>
-                <span className={`status-chip ${source.status}`}>{source.status === "usable" ? "可用" : source.status === "partial" ? "部分可用" : "待提炼"}</span>
+                <span className={`status-chip ${source.status}`}>{sourceStatusLabel(source.status)}</span>
               </div>
             ))}
           </div>

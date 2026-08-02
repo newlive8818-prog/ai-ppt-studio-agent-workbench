@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import unittest
+import json
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +19,17 @@ class SkillWorkflowTests(unittest.TestCase):
         self.assertIn("G0", body)
         self.assertIn("G4", body)
         self.assertIn("No separate Image 2 privacy gate", body)
+
+    def test_plugin_skill_entrypoint_can_run_preflight_from_source_tree(self) -> None:
+        result = subprocess.run(
+            ["python3", str(SKILL.parent / "scripts" / "ai_ppt_runtime.py"), "preflight"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(json.loads(result.stdout)["ok"])
 
     def test_skill_has_focused_workflow_references(self) -> None:
         references = SKILL.parent / "references"

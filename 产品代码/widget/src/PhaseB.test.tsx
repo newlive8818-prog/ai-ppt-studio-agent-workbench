@@ -32,11 +32,12 @@ function data(initialSpace: "materials" | "blueprint"): WidgetData {
       space_projections: {
         materials: {
           status: "classified",
-          source_count: 2,
+          source_count: 3,
           summary: "已识别客户需求和建设依据",
           sources: [
             { source_id: "s1", source_ref: "sources/s1.json", name: "需求说明.pdf", kind: "file", mode: "copy", size_bytes: 2048, classification: "客户需求材料", purposes: ["customer-needs"], status: "usable" },
             { source_id: "s2", source_ref: "sources/s2.json", name: "会议纪要链接", kind: "url", mode: "reference", size_bytes: null, classification: "会议结论", purposes: ["evidence"], status: "partial" },
+            { source_id: "s3", source_ref: "sources/s3.json", name: "建设目标.txt", kind: "file", mode: "copy", size_bytes: 128, classification: "建设目标", purposes: ["roadmap"], status: "classified" },
           ],
           findings: [{ finding_id: "F1", finding_type: "fact", content: "九月完成一期上线", source_ref: "sources/s1.json", locator: "第 3 页", fact_status: "source-fact", purposes: ["customer-needs"] }],
           conflicts: [],
@@ -99,6 +100,7 @@ describe("Phase B native workbench", () => {
     expect(screen.getByText(/文件、图片、文字和链接都从这里进入/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "选择文件" })).toBeInTheDocument();
     expect(screen.getByText("客户需求材料")).toBeInTheDocument();
+    expect(screen.getByText("已提炼")).toBeInTheDocument();
     expect(screen.getByText("缺少验收指标")).toBeInTheDocument();
     expect(screen.getByText(/AI 只使用你提供的材料/)).toBeInTheDocument();
     expect(screen.queryByText("必须上传客户需求材料")).not.toBeInTheDocument();

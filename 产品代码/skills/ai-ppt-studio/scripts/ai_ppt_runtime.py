@@ -6,7 +6,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-RUNTIME = Path(__file__).resolve().parents[1] / "runtime"
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+PLUGIN_SOURCE = Path(__file__).resolve().parents[3] / "src"
+RUNTIME = SKILL_ROOT / "runtime"
+if not RUNTIME.exists() and PLUGIN_SOURCE.exists():
+    RUNTIME = PLUGIN_SOURCE
 sys.path.insert(0, str(RUNTIME))
 
 from ai_ppt_studio.cli import main  # noqa: E402

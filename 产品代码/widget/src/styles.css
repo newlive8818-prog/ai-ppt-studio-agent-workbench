@@ -364,7 +364,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .source-primary strong, .source-classification span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .source-primary small, .source-classification small { color: var(--muted); font-size: 10px; }
 .status-chip { padding: 5px 8px; border-radius: 999px; color: #475467; background: #f2f4f7; font-size: 10px; white-space: nowrap; }
-.status-chip.usable { color: #087a4d; background: #eaf8f1; }
+.status-chip.usable, .status-chip.classified { color: #087a4d; background: #eaf8f1; }
 .status-chip.partial { color: #9a5207; background: #fff3df; }
 .findings-grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 14px; }
 .finding-card { margin-top: 10px; padding: 13px 14px; display: grid; gap: 6px; border: 1px solid var(--border); border-radius: 9px; }
