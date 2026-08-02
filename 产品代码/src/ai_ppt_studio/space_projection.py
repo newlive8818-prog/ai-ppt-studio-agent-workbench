@@ -198,6 +198,10 @@ class SpaceProjectionBuilder:
         ]
         gate = StateStore(self.project_root, self.policy).load().as_dict()
         qa_status = self._text(delivery.get("qa_status"), 80) or "not-run"
+        validation_ref = self._project_ref(
+            delivery.get("validation_ref") or handoff.get("source_notes_ref")
+        )
+        validation = self._read_json_asset(validation_ref)
         return {
             "status": "accepted" if gate["gates"].get("G4") == "passed" else ("qa-passed" if qa_status == "passed" else ("built" if pptx_ref else "empty")),
             "gate_state": gate,
@@ -209,7 +213,10 @@ class SpaceProjectionBuilder:
             "qa_status": qa_status,
             "editable": bool(delivery.get("editable") or (handoff.get("editability_contract") or {}).get("native_business_content")),
             "whole_slide_bitmap": bool((handoff.get("editability_contract") or {}).get("whole_slide_bitmap", False)),
-            "validation_ref": self._project_ref(delivery.get("validation_ref") or handoff.get("source_notes_ref")),
+            "validation_ref": validation_ref,
+            "qa_checks": dict(validation.get("checks") or {}),
+            "qa_notes": self._string_list(validation.get("notes"), 30),
+            "qa_issues": self._string_list(validation.get("issues"), 50),
             "source_count": len(delivery.get("sources", [])) if isinstance(delivery.get("sources"), list) else 0,
             "active_task": self._task_for(
                 active_task, {"build-pptx", "qa-render", "repair-pptx"}
@@ -305,6 +312,18 @@ class SpaceProjectionBuilder:
             return False
         path = (self.project_root / project_ref).resolve(strict=False)
         return is_within(path, self.project_root) and path.is_file()
+
+    def _read_json_asset(self, project_ref: str) -> dict[str, Any]:
+        if not project_ref:
+            return {}
+        path = (self.project_root / project_ref).resolve(strict=False)
+        if not is_within(path, self.project_root) or not path.is_file():
+            return {}
+        try:
+            payload = json.loads(path.read_text("utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return dict(payload) if isinstance(payload, dict) else {}
 
     @staticmethod
     def _source_name(original_ref: str, fallback: str) -> str:

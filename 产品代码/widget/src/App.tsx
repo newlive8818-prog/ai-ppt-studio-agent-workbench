@@ -4,6 +4,7 @@ import { CognitionMap } from "./components/CognitionMap";
 import { BlueprintWorkspace } from "./components/BlueprintWorkspace";
 import { ContextInspector } from "./components/ContextInspector";
 import { DecisionPanel } from "./components/DecisionPanel";
+import { DeliveryWorkspace } from "./components/DeliveryWorkspace";
 import { MaterialsWorkspace } from "./components/MaterialsWorkspace";
 import { ProjectHeader } from "./components/ProjectHeader";
 import { StableNavigation } from "./components/StableNavigation";
@@ -194,6 +195,15 @@ export function App({ initialData, bridge }: Props) {
               revision={snapshot.revision}
               gates={snapshot.gate_state.gates}
               projection={snapshot.space_projections.visual}
+              busy={phase === "saving"}
+              onRunTool={runWorkspaceTool}
+            />
+          ) : activeSpace === "delivery" && snapshot.space_projections?.delivery ? (
+            <DeliveryWorkspace
+              bridge={bridge}
+              projectRoot={snapshot.project.project_root}
+              revision={snapshot.revision}
+              projection={snapshot.space_projections.delivery}
               busy={phase === "saving"}
               onRunTool={runWorkspaceTool}
             />

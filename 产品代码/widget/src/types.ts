@@ -116,11 +116,33 @@ export interface VisualProjection {
   active_task: AgentTaskSummary | null;
 }
 
+export interface DeliveryProjection {
+  status: string;
+  gate_state: {
+    current_gate: string;
+    gates: Record<string, string>;
+  };
+  pptx_ref: string;
+  pptx_exists: boolean;
+  slide_count: number;
+  renders: Array<{ asset_ref: string; exists: boolean }>;
+  render_count: number;
+  qa_status: string;
+  editable: boolean;
+  whole_slide_bitmap: boolean;
+  validation_ref: string;
+  qa_checks: Record<string, unknown>;
+  qa_notes: string[];
+  qa_issues: string[];
+  source_count: number;
+  active_task: AgentTaskSummary | null;
+}
+
 export interface SpaceProjections {
   materials: MaterialsProjection;
   blueprint: BlueprintProjection;
   visual: VisualProjection;
-  delivery: Record<string, unknown>;
+  delivery: DeliveryProjection;
 }
 
 export interface ProjectSnapshot {

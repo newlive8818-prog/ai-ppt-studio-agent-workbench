@@ -154,6 +154,21 @@ class SpaceProjectionTests(unittest.TestCase):
             render.write_bytes(b"render")
             pptx = project / "ppt" / "deck.pptx"
             pptx.write_bytes(b"pptx")
+            validation = project / "reviews" / "delivery-validation.json"
+            validation.write_text(
+                json.dumps(
+                    {
+                        "checks": {
+                            "overflow": "passed",
+                            "whole_slide_bitmap": "not_used",
+                        },
+                        "notes": ["事实文字和关系均为原生可编辑对象"],
+                        "issues": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
             artifacts.save(
                 ArtifactKind.DELIVERY,
                 {
@@ -162,6 +177,7 @@ class SpaceProjectionTests(unittest.TestCase):
                     "qa_status": "passed",
                     "sources": [source_ref],
                     "editable": True,
+                    "validation_ref": "reviews/delivery-validation.json",
                 },
             )
 
@@ -176,6 +192,8 @@ class SpaceProjectionTests(unittest.TestCase):
             self.assertTrue(spaces["delivery"]["pptx_exists"])
             self.assertEqual(spaces["delivery"]["render_count"], 1)
             self.assertTrue(spaces["delivery"]["renders"][0]["exists"])
+            self.assertEqual(spaces["delivery"]["qa_checks"]["overflow"], "passed")
+            self.assertIn("原生可编辑对象", spaces["delivery"]["qa_notes"][0])
 
 
 if __name__ == "__main__":
