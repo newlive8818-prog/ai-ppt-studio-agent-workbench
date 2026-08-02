@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI PPT Studio｜制作与交付结构原型</title>
+  <style>
+    :root{--ink:#172033;--muted:#667085;--line:#e6e9f2;--bg:#f7f8fc;--violet:#5b3df5;--violet-2:#ede9ff;--green:#079455;--green-bg:#ecfdf3;--amber:#dc6803;--amber-bg:#fffaeb;--red:#d92d20}
+    *{box-sizing:border-box} body{margin:0;background:#eef1f7;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+    .canvas{width:1440px;height:1024px;margin:0 auto;background:#fff;display:grid;grid-template-columns:228px 1fr;overflow:hidden}
+    aside{border-right:1px solid var(--line);padding:22px 16px;display:flex;flex-direction:column;background:#fff}.brand{display:flex;gap:12px;align-items:center;padding:0 8px 24px}.logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(145deg,#4021df,#7358ff);display:grid;place-items:center;color:#fff;font-weight:800}.brand strong{font-size:18px}.brand small{display:block;color:var(--muted);margin-top:3px}.nav{display:grid;gap:6px}.nav div{padding:13px 14px;border-radius:9px;color:#344054;font-size:15px}.nav .on{background:var(--violet-2);color:var(--violet);font-weight:700}.sync{margin-top:auto;border-top:1px solid var(--line);padding:18px 10px 0;color:var(--muted);font-size:13px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:8px}
+    main{display:grid;grid-template-rows:74px 1fr;min-width:0}.top{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:0 28px}.title h1{font-size:20px;margin:0}.title p{font-size:12px;color:var(--muted);margin:5px 0 0}.project{display:flex;gap:12px;align-items:center}.pill{border:1px solid var(--line);border-radius:999px;padding:9px 14px;font-size:13px}.pill.ai{color:var(--green);background:var(--green-bg)}
+    .workspace{padding:20px 24px 22px;background:var(--bg);display:grid;grid-template-rows:auto auto 1fr auto;gap:14px;min-height:0}.hero{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 20px}.hero strong{font-size:16px}.hero span{color:var(--muted);font-size:13px}.hero b{color:var(--violet)}
+    .gates{display:grid;grid-template-columns:repeat(5,1fr);background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 12px}.gate{position:relative;padding:0 14px}.gate:not(:last-child):after{content:"→";position:absolute;right:-5px;top:5px;color:#98a2b3}.gate small{display:block;color:var(--muted);margin-top:4px}.gate.done strong{color:var(--green)}.gate.current strong{color:var(--violet)}
+    .core{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;min-height:0}.review{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;grid-template-rows:auto 1fr;min-height:0}.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.section-head h2{font-size:16px;margin:0}.tabs{font-size:12px;color:var(--muted)}.tabs b{color:var(--violet)}
+    .deck{display:grid;grid-template-columns:310px 1fr;gap:16px;min-height:0}.selected{display:grid;grid-template-rows:178px auto;gap:10px}.slide-big{background:linear-gradient(135deg,#0d2554,#4356b8 58%,#dce7ff);border-radius:8px;padding:18px;color:#fff;position:relative;overflow:hidden}.slide-big:after{content:"";position:absolute;width:220px;height:220px;border:1px solid rgba(255,255,255,.24);border-radius:50%;right:-48px;bottom:-100px}.slide-big h3{margin:0 0 12px;font-size:19px}.slide-big p{font-size:12px;width:70%;line-height:1.6}.compare{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}.compare b{color:var(--green)}.issues{background:var(--amber-bg);color:var(--amber);padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.7}
+    .sheet{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-content:start;overflow:hidden}.thumb{border:1px solid var(--line);border-radius:8px;padding:7px;background:#fff}.thumb.on{border:2px solid var(--violet);padding:6px}.mini{height:76px;border-radius:5px;background:linear-gradient(145deg,#112757,#4d61bb);position:relative;overflow:hidden}.mini.light{background:linear-gradient(145deg,#fff,#e8edff)}.mini .bar{position:absolute;left:10px;top:10px;width:46%;height:6px;border-radius:4px;background:rgba(255,255,255,.85)}.mini.light .bar{background:#4453a7}.mini .cols{position:absolute;left:10px;right:10px;bottom:10px;height:32px;display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.mini .cols i{background:rgba(255,255,255,.22);border-radius:3px}.mini.light .cols i{background:#d7def6}.thumb footer{display:flex;justify-content:space-between;font-size:10px;margin-top:6px;color:var(--muted)}.pass{color:var(--green)!important}.fix{color:var(--violet)!important}.ask{color:var(--amber)!important}
+    .inspector{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;min-height:0}.inspector h2{font-size:16px;margin:0 0 12px}.checks{display:grid;gap:8px}.check{display:flex;justify-content:space-between;border-bottom:1px solid #f0f2f7;padding:6px 0;font-size:12px}.decision{margin-top:14px;background:var(--amber-bg);border:1px solid #fedf89;border-radius:9px;padding:12px}.decision strong{font-size:13px}.decision p{font-size:12px;color:#7a2e0e;line-height:1.55;margin:7px 0}.choice{display:grid;grid-template-columns:1fr 1fr;gap:7px}.choice button{border:1px solid #fdb022;background:#fff;border-radius:7px;padding:8px;font-size:11px}.choice button:first-child{background:#fff1d6}.auto{margin-top:auto;background:var(--violet);color:#fff;border:0;border-radius:9px;padding:12px;font-weight:700}
+    .delivery{background:#fff;border:1px solid var(--line);border-radius:12px;padding:13px 16px;display:grid;grid-template-columns:1fr auto;gap:18px;align-items:center}.files{display:flex;gap:10px;overflow:hidden}.file{border-right:1px solid var(--line);padding-right:12px;font-size:11px;color:var(--muted)}.file b{display:block;color:#344054;margin-bottom:3px}.actions{display:flex;gap:8px}.actions button{border:1px solid #cfd4e4;background:#fff;border-radius:8px;padding:10px 13px}.actions .primary{background:var(--violet);border-color:var(--violet);color:#fff;font-weight:700}.actions .disabled{color:#98a2b3;background:#f2f4f7}
+    .watermark{position:absolute;right:18px;bottom:12px;font-size:10px;color:#98a2b3}
+  </style>
+</head>
+<body>
+<div class="canvas">
+  <aside>
+    <div class="brand"><div class="logo">PPT</div><div><strong>AI PPT Studio</strong><small>智慧园区解决方案</small></div></div>
+    <div class="nav"><div>⌂　项目总览</div><div>▤　材料工作台</div><div>▦　内容蓝图</div><div>◉　视觉设计</div><div class="on">➤　制作与交付</div></div>
+    <div class="sync"><span class="dot"></span>认知状态已同步<br><br>2 分钟前更新</div>
+  </aside>
+  <main>
+    <header class="top"><div class="title"><h1>制作与交付 / AI 生成可编辑 PPTX 并完成质量验收</h1><p>用户判断最终质量，AI 负责生成、渲染、检查与可撤销修复</p></div><div class="project"><span class="pill">智慧园区一期建设解决方案⌄</span><span class="pill ai">● AI 正在推进中</span></div></header>
+    <section class="workspace">
+      <div class="hero"><div><strong>v0.9 已生成：<b>24/24 页可编辑</b>，21 页通过视觉还原验收，3 页正在自动修复</strong><br><span>尚未达到最终交付门槛，系统保留上一份可用版本</span></div><span>预计 6 分钟完成本轮修复</span></div>
+      <div class="gates"><div class="gate done"><strong>✓ 内容已冻结</strong><small>G0 已通过</small></div><div class="gate done"><strong>✓ 视觉合同已确认</strong><small>G3 已通过</small></div><div class="gate done"><strong>✓ 原生 PPTX 已生成</strong><small>24 页完整</small></div><div class="gate current"><strong>● 渲染验收中</strong><small>21/24 通过</small></div><div class="gate"><strong>最终交付待确认</strong><small>通过 G4 后解锁</small></div></div>
+      <div class="core">
+        <div class="review"><div class="section-head"><h2>整套渲染审阅</h2><div class="tabs"><b>全部 24</b>　通过 21　修复中 2　需判断 1</div></div><div class="deck">
+          <div class="selected"><div class="slide-big"><h3>P17　风险与保障</h3><p>把复杂风险转化为“可识别、可控制、可追踪”的建设保障体系</p><div class="watermark">PPTX 渲染</div></div><div class="compare"><span>视觉还原 <b>92%</b></span><span>原生可编辑 <b>100%</b></span></div><div class="issues">自动修复中：图标间距偏差<br>需要复核：一处文本换行</div></div>
+          <div class="sheet">
+            <div class="thumb"><div class="mini"><i class="bar"></i><div class="cols"><i></i><i></i><i></i></div></div><footer><span>P01 封面</span><span class="pass">通过</span></footer></div>
+            <div class="thumb"><div class="mini light"><i class="bar"></i><div class="cols"><i></i><i></i><i></i></div></div><footer><span>P02 摘要</span><span class="pass">通过</span></footer></div>
+            <div class="thumb"><div class="mini"><i class="bar"></i><div class="cols"><i></i><i></i><i></i></div></div><footer><span>P03 框架</span><span class="pass">通过</span></footer></div>
+            <div class="thumb"><div class="mini light"><i class="bar"></i><div class="cols"><i></i><i></i><i></i></div></div><footer><span>P04 政策</span><span class="pass">通过</span></footer></div>
+            <div class="thumb"><div class="mini"><i class="bar"></i><div class="cols"><i></i><i></i><i></i></div></div><footer><span>P08 路径</span><span class="pass">通过</span></footer></div>
+            <div class="thumb"><div class="mini light"><i class="bar"></i><div class="cols"><i></i><i></i><i></i></div></div><footer><span>P12 架构</span><span class="fix">修复中</span></footer></div>
+            <div class="thumb on"><div class="mini"><i class="bar"></i><div class="cols"><i></i><i></i><i></i></div></div><footer><span>P17 风险</span><span class="ask">需判断</span></footer></div>
+            <div class="thumb"><div class="mini light"><i class="bar"></i><div class="cols"><i></i><i></i><i></i></div></div><footer><span>P20 价值</span><span class="pass">通过</span></footer></div>
+            <div class="thumb"><div class="mini"><i class="bar"></i><div class="cols"><i></i><i></i><i></i></div></div><footer><span>P21 案例</span><span class="pass">通过</span></footer></div>
+            <div class="thumb"><div class="mini light"><i class="bar"></i><div class="cols"><i></i><i></i><i></i></div></div><footer><span>P22 计划</span><span class="fix">修复中</span></footer></div>
+            <div class="thumb"><div class="mini"><i class="bar"></i><div class="cols"><i></i><i></i><i></i></div></div><footer><span>P23 附录</span><span class="pass">通过</span></footer></div>
+            <div class="thumb"><div class="mini light"><i class="bar"></i><div class="cols"><i></i><i></i><i></i></div></div><footer><span>P24 结束</span><span class="pass">通过</span></footer></div>
+          </div>
+        </div></div>
+        <div class="inspector"><h2>AI 交付质检</h2><div class="checks"><div class="check"><span>原生对象可编辑性</span><b class="pass">100%</b></div><div class="check"><span>字体可用性</span><b class="pass">通过</b></div><div class="check"><span>文本溢出与裁切</span><b class="fix">1 项修复中</b></div><div class="check"><span>图片分辨率</span><b class="pass">通过</b></div><div class="check"><span>对齐与间距</span><b class="fix">2 项修复中</b></div><div class="check"><span>来源追溯</span><b class="pass">24/24</b></div><div class="check"><span>演讲备注</span><b class="pass">完整</b></div><div class="check"><span>文件完整性</span><b class="pass">通过</b></div></div><div class="decision"><strong>需要你的判断</strong><p>P17 是否保留当前风险页的强对比表达？这会影响风险章节的整体情绪强度。</p><div class="choice"><button>保留强对比</button><button>降低张力</button></div></div><button class="auto">继续自动修复</button></div>
+      </div>
+      <div class="delivery"><div class="files"><div class="file"><b>智慧园区一期建设解决方案-v0.9.pptx</b>原生可编辑</div><div class="file"><b>全稿预览.pdf</b>会审版本</div><div class="file"><b>逐页审阅.html</b>问题与反馈</div><div class="file"><b>来源清单.md</b>事实追溯</div><div class="file"><b>交付报告.json</b>机器验收</div></div><div class="actions"><button>向 Codex 提出整体修改</button><button class="disabled">完成验收并交付</button><button class="primary">继续自动修复</button></div></div>
+    </section>
+  </main>
+</div>
+</body>
+</html>
