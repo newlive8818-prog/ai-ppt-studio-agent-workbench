@@ -30,6 +30,7 @@ const snapshot = {
     dialogue_focus: "案例证据仍需补充",
   },
   artifacts: {},
+  space_projections: { materials: {}, blueprint: {}, visual: {}, delivery: {} },
   current_decision: {
     target_ref: "project://next-focus",
     status: "available",
@@ -44,11 +45,16 @@ async function connectedClient() {
   const calls = [];
   const invokeBridge = async (request) => {
     calls.push(request);
-    if (request.operation === "submit-human-decision") {
+    if (request.operation !== "get-project-snapshot") {
       return {
         ok: true,
         result: {
-          decision: { decision_id: "d1", choice: request.choice },
+          decision: {
+            decision_id: "d1",
+            choice: request.choice,
+            task_id: "task-1",
+            status: "requested",
+          },
           snapshot: { ...snapshot, revision: 4 },
           follow_up_message: "继续处理",
           model_context: { project_revision: 4 },
@@ -72,8 +78,14 @@ test("MCP exposes decoupled data tools and one render tool", async () => {
     assert.deepEqual(
       tools.tools.map((tool) => tool.name).sort(),
       [
+        "add_ai_ppt_material",
+        "commit_ai_ppt_artifact",
+        "confirm_ai_ppt_gate",
         "get_ai_ppt_project_snapshot",
+        "read_ai_ppt_project_asset",
         "render_ai_ppt_workbench",
+        "reopen_ai_ppt_scope",
+        "request_ai_ppt_agent_action",
         "submit_ai_ppt_human_decision",
       ],
     );
@@ -90,6 +102,50 @@ test("MCP exposes decoupled data tools and one render tool", async () => {
     assert.equal(result._meta.widgetData.snapshot.revision, 3);
     assert.equal(result._meta["openai/outputTemplate"], AI_PPT_WIDGET_URI);
     assert.equal(calls[0].operation, "get-project-snapshot");
+  } finally {
+    await client.close();
+  }
+});
+
+test("BCD tools map governed inputs to bridge operations", async () => {
+  const { client, calls } = await connectedClient();
+  try {
+    const material = await client.callTool({
+      name: "add_ai_ppt_material",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        materialType: "text",
+        value: "客户确认九月上线",
+        label: "会议纪要",
+      },
+    });
+    assert.equal(material.structuredContent.snapshot.revision, 4);
+    assert.equal(calls.at(-1).operation, "add-material");
+
+    const requested = await client.callTool({
+      name: "request_ai_ppt_agent_action",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        actionType: "generate-blueprint",
+        targetRefs: ["artifact://content-blueprint"],
+        instructions: "生成内容蓝图",
+      },
+    });
+    assert.equal(requested.structuredContent.decision.task_id, "task-1");
+    assert.equal(calls.at(-1).operation, "request-agent-action");
+
+    const gate = await client.callTool({
+      name: "confirm_ai_ppt_gate",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        gate: "G0",
+      },
+    });
+    assert.equal(gate.structuredContent.snapshot.revision, 4);
+    assert.equal(calls.at(-1).operation, "confirm-gate");
   } finally {
     await client.close();
   }

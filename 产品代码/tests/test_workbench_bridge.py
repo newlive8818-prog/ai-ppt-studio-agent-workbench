@@ -121,6 +121,54 @@ class WorkbenchBridgeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertEqual(json.loads(result.stdout)["error"]["code"], "VALIDATION_ERROR")
 
+    def test_bcd_operations_use_stable_json_contracts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config_path, project = self.make_workspace(Path(temp))
+            common = {
+                "workspace_config": str(config_path),
+                "project_root": str(project),
+            }
+            added = self.run_bridge(
+                {
+                    **common,
+                    "operation": "add-material",
+                    "expected_revision": 0,
+                    "material_type": "text",
+                    "value": "客户需要九月上线",
+                    "label": "会议纪要",
+                }
+            )
+            self.assertEqual(added.returncode, 0, added.stderr)
+            self.assertEqual(json.loads(added.stdout)["result"]["snapshot"]["revision"], 1)
+
+            requested = self.run_bridge(
+                {
+                    **common,
+                    "operation": "request-agent-action",
+                    "expected_revision": 1,
+                    "action_type": "classify-materials",
+                    "target_refs": ["project://sources"],
+                    "instructions": "提炼事实与缺口",
+                }
+            )
+            self.assertEqual(requested.returncode, 0, requested.stderr)
+            requested_payload = json.loads(requested.stdout)["result"]
+            self.assertEqual(requested_payload["snapshot"]["revision"], 2)
+            self.assertTrue(requested_payload["model_context"]["context_ref"].startswith("context/"))
+
+            blocked = self.run_bridge(
+                {
+                    **common,
+                    "operation": "confirm-gate",
+                    "expected_revision": 2,
+                    "gate": "G0",
+                }
+            )
+            self.assertEqual(blocked.returncode, 2)
+            error = json.loads(blocked.stdout)["error"]
+            self.assertEqual(error["code"], "GATE_BLOCKED")
+            self.assertIn("mission", error["details"]["missing_evidence"])
+
 
 if __name__ == "__main__":
     unittest.main()
