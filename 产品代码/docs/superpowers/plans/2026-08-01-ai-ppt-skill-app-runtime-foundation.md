@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Source repository: `/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师/PPT-codex-app`.
+- Source repository: `/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师/PPT-codex-app/产品代码`.
 - Upstream Web product protected root: `/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师/PPT  web app `.
 - Default future install root: `/Users/defei/.codex/skills/ai-ppt-studio`.
 - Default managed runtime root: `/Users/defei/Documents/AI-PPT-Workspace`.

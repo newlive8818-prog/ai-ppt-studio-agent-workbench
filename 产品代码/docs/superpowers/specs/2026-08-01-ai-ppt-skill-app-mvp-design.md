@@ -106,7 +106,7 @@
 
 ### 5.2 区域二：Skill App 源码仓库
 
-- 路径：`/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师/PPT-codex-app`
+- 路径：`/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师/PPT-codex-app/产品代码`
 - 权限：开发期可写；
 - 用途：Skill、引用、脚本、资产、测试、规格和人工发布的上游基线快照；
 - 禁止：保存真实客户材料、项目输出和个人长期记忆。
@@ -569,7 +569,7 @@ Codex 中发起 PPT 任务
 
 ### 17.2 已确认开发输入
 
-- 源码仓库：`/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师/PPT-codex-app`；
+- 源码仓库：`/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师/PPT-codex-app/产品代码`；
 - 未来默认安装目录：`/Users/defei/.codex/skills/ai-ppt-studio`；
 - 未来默认运行根目录：`/Users/defei/Documents/AI-PPT-Workspace`；
 - 上游 Web 产品保护根：`/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师/PPT  web app `；
