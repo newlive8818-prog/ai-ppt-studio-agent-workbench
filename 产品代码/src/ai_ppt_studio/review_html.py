@@ -229,7 +229,7 @@ class ReviewHtml:
         candidates = (
             here.parents[2] / "assets" / "review-template.html",
             here.parents[2]
-            / "skill"
+            / "skills"
             / "ai-ppt-studio"
             / "assets"
             / "review-template.html",

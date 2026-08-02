@@ -14,7 +14,7 @@ class PackageShapeTests(unittest.TestCase):
         from ai_ppt_studio import __version__
 
         self.assertEqual(__version__, "0.2.0")
-        skill = ROOT / "skill" / "ai-ppt-studio"
+        skill = ROOT / "skills" / "ai-ppt-studio"
         self.assertTrue((skill / "SKILL.md").is_file())
         self.assertTrue((skill / "agents" / "openai.yaml").is_file())
         self.assertTrue((skill / "references" / "isolation-policy.md").is_file())
@@ -22,7 +22,7 @@ class PackageShapeTests(unittest.TestCase):
         self.assertTrue((skill / "assets" / "project-schema.json").is_file())
 
     def test_skill_is_thin_and_contains_hard_safety_language(self) -> None:
-        body = (ROOT / "skill" / "ai-ppt-studio" / "SKILL.md").read_text(
+        body = (ROOT / "skills" / "ai-ppt-studio" / "SKILL.md").read_text(
             encoding="utf-8"
         )
         self.assertLess(len(body.splitlines()), 180)

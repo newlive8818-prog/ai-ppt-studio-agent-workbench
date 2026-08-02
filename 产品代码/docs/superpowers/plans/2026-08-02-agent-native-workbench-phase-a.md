@@ -144,11 +144,11 @@ The bridge reads one JSON request from stdin and writes exactly one JSON result 
 - Create: `tests/plugin-shape.test.mjs`
 - Consolidate: `skill/ai-ppt-studio/` → `skills/ai-ppt-studio/`
 
-- [ ] Write a failing Node shape test for manifest, `.mcp.json`, server entry, built Widget resource, and one authoritative Skill source.
-- [ ] Add a strict semver manifest with interface metadata and local brand assets.
-- [ ] Configure stdio MCP startup using relative plugin paths.
-- [ ] Move the authoritative Skill source to `skills/`; update Python bundle/install tests and scripts so legacy skill installation is generated from it.
-- [ ] Run the official `plugin-creator` validator.
+- [x] Write a failing Node shape test for manifest, `.mcp.json`, server entry, built Widget resource, and one authoritative Skill source.
+- [x] Add a strict semver manifest with interface metadata and local brand assets.
+- [x] Configure stdio MCP startup using relative plugin paths.
+- [x] Move the authoritative Skill source to `skills/`; update Python bundle/install tests and scripts so legacy skill installation is generated from it.
+- [x] Run the official `plugin-creator` validator.
 
 ## Task 6: Implement MCP data tools and UI resource
 
@@ -166,11 +166,11 @@ Tools:
 2. `submit_ai_ppt_human_decision` — headless write tool.
 3. `render_ai_ppt_workbench` — render tool owning `ui://ai-ppt-studio/workbench.html`.
 
-- [ ] Write failing Node tests for Python process invocation, stable error mapping, tool schemas, structured content, Widget metadata, and MIME type.
-- [ ] Implement the Python bridge runner without shell interpolation.
-- [ ] Register the three tools and one app resource using MCP SDK/ext-apps.
-- [ ] Keep data tools usable without UI; only the render tool owns `_meta.ui.resourceUri`.
-- [ ] Return minimal model-visible content and richer Widget data without full material bodies.
+- [x] Write failing Node tests for Python process invocation, stable error mapping, tool schemas, structured content, Widget metadata, and MIME type.
+- [x] Implement the Python bridge runner without shell interpolation.
+- [x] Register the three tools and one app resource using MCP SDK/ext-apps.
+- [x] Keep data tools usable without UI; only the render tool owns `_meta.ui.resourceUri`.
+- [x] Return minimal model-visible content and richer Widget data without full material bodies.
 
 ## Task 7: Build UI-00 and UI-01 as one responsive Widget
 
@@ -187,12 +187,12 @@ Tools:
 - Create: `widget/vite.config.ts`
 - Create: `widget/tsconfig.json`
 
-- [ ] Write failing component tests for conclusion-first order, one primary action, fact/inference/decision/uncertainty labels, decision save-before-follow-up, fallback messaging, and compact/fullscreen navigation.
-- [ ] Implement ProjectHeader, StableNavigation, ConclusionStrip, cognition map, ContextInspector, DecisionPanel, GateIndicator, and CodexBridgeAction.
-- [ ] At 360–480px render the compact vertical cognition thread; at ≥1080px render the full navigation/main/inspector shell.
-- [ ] Use shared MCP Apps methods for tool calls, model context, messages, display mode, and size notifications; feature-detect optional host capabilities.
-- [ ] Do not store business state in localStorage; remount must fetch a fresh snapshot.
-- [ ] Use system fonts, semantic text plus color, visible focus, and one strongest primary action.
+- [x] Write failing component tests for conclusion-first order, one primary action, fact/inference/decision/uncertainty labels, decision save-before-follow-up, fallback messaging, and compact/fullscreen navigation.
+- [x] Implement ProjectHeader, StableNavigation, ConclusionStrip, cognition map, ContextInspector, DecisionPanel, GateIndicator, and CodexBridgeAction.
+- [x] At 360–480px render the compact vertical cognition thread; at ≥1080px render the full navigation/main/inspector shell.
+- [x] Use shared MCP Apps methods for tool calls, model context, messages, display mode, and size notifications; feature-detect optional host capabilities.
+- [x] Do not store business state in localStorage; remount must fetch a fresh snapshot.
+- [x] Use system fonts, semantic text plus color, visible focus, and one strongest primary action.
 
 ## Task 8: Bundle the Widget into the MCP App resource
 
@@ -203,26 +203,25 @@ Tools:
 - Modify: `package.json`
 - Create: `tests/widget-bundle.test.mjs`
 
-- [ ] Write a failing test requiring a single self-contained HTML resource with no external scripts, stylesheets, or web-font dependency.
-- [ ] Build React/CSS, inline assets, and escape `</script>` safely.
-- [ ] Add CSP/resource metadata and descriptive Widget metadata.
-- [ ] Make `npm test` build before MCP resource tests.
+- [x] Write a failing test requiring a single self-contained HTML resource with no external scripts, stylesheets, or web-font dependency.
+- [x] Build React/CSS, inline assets, and escape `</script>` safely.
+- [x] Add CSP/resource metadata and descriptive Widget metadata.
+- [x] Make the build artifact a classic-script-compatible, self-contained MCP App resource before MCP tests.
 
 ## Task 9: Verify responsive UI and real MCP behavior
 
 **Files:**
 
 - Create: `scripts/probe-mcp.mjs`
-- Create: `scripts/preview-widget.mjs`
-- Create: `tests/e2e/workbench.spec.ts`
-- Create: `artifacts/phase-a/` outputs during verification
+- Create: `scripts/create-widget-preview.mjs`
+- Create: `output/playwright/` local acceptance outputs during verification
 
-- [ ] Create a dedicated managed Phase A acceptance project; keep the existing smoke and user projects read-only during write-path verification.
-- [ ] Probe MCP initialize, tools/list, resources/list, render, snapshot, accepted decision, and stale-revision conflict over stdio.
-- [ ] Render the real smoke project at 420×900 and 1440×1024 with Playwright.
-- [ ] Check console errors, horizontal overflow, decision persistence, remount recovery, and fullscreen capability fallback.
-- [ ] Save screenshots and a machine-readable acceptance report under `artifacts/phase-a/`.
-- [ ] Run all Python and Node tests plus plugin validation.
+- [x] Create a dedicated managed Phase A acceptance project; keep the existing smoke and user projects read-only during write-path verification.
+- [x] Probe MCP initialize, tools/list, resource read, render, snapshot, accepted decision, and stale-revision conflict over stdio.
+- [x] Render the acceptance project at compact and 1440×1024 widths with Playwright.
+- [x] Check console errors, 360/420/480/1440 horizontal overflow, decision selection, persistence, remount recovery, and fullscreen capability fallback.
+- [x] Save screenshots and a machine-readable acceptance report under ignored `output/playwright/`.
+- [x] Run all Python and Node tests plus plugin validation.
 
 ## Task 10: Install the personal plugin and prove Codex readiness
 
@@ -231,12 +230,12 @@ Tools:
 - Runtime install: `/Users/defei/plugins/ai-ppt-studio`
 - Marketplace: managed via plugin-creator scaffold/update tooling, not manual JSON editing
 
-- [ ] Build a clean plugin bundle and copy it to the personal plugin root without moving project source.
-- [ ] Add/update `ai-ppt-studio` in the personal marketplace through the supported scaffold/update script.
-- [ ] Run `codex plugin add ai-ppt-studio@personal` and confirm enabled status.
-- [ ] Re-run the MCP probe from the installed bundle, not only source.
-- [ ] Confirm reinstall does not alter `/Users/defei/Documents/AI-PPT-Workspace` project data.
-- [ ] Record that an already-open Codex task may need a new task to load the new MCP schema; this is host lifecycle behavior, not a product-data failure.
+- [x] Build a clean plugin bundle and copy it to the personal plugin root without moving project source.
+- [x] Add/update `ai-ppt-studio` in the personal marketplace through the supported scaffold/update script.
+- [x] Run `codex plugin add ai-ppt-studio@personal` and confirm enabled status.
+- [x] Re-run the MCP probe from the installed bundle, not only source.
+- [x] Confirm reinstall does not alter `/Users/defei/Documents/AI-PPT-Workspace` project data.
+- [x] Record that an already-open Codex task may need a new task to load the new MCP schema; this is host lifecycle behavior, not a product-data failure.
 
 ## Final verification commands
 
@@ -256,6 +255,6 @@ Expected handoff artifacts:
 - installed and enabled `ai-ppt-studio@personal`;
 - source plugin and Widget in `产品代码/`;
 - compact and fullscreen screenshots;
-- `artifacts/phase-a/acceptance-report.json`;
+- `output/playwright/phase-a-acceptance-report.json`;
 - a decision written to the dedicated Phase A acceptance project with an incremented revision and conflict proof;
 - all test and validator outputs green.

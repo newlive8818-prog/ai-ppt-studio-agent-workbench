@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="AI PPT Studio">
+  <defs>
+    <linearGradient id="g" x1="18" y1="14" x2="112" y2="118" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7867FF"/>
+      <stop offset="1" stop-color="#4A2EE8"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#g)"/>
+  <path d="M34 33h45c12 0 21 9 21 21s-9 21-21 21H55v20H34V33Zm21 18v7h22c2 0 4-2 4-4s-2-3-4-3H55Z" fill="#fff"/>
+  <circle cx="94" cy="92" r="13" fill="#C8FFEA"/>
+  <path d="m89 92 4 4 7-9" fill="none" stroke="#176C50" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "skill" / "ai-ppt-studio" / "SKILL.md"
+SKILL = ROOT / "skills" / "ai-ppt-studio" / "SKILL.md"
 
 
 class SkillWorkflowTests(unittest.TestCase):

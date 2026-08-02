@@ -38,7 +38,7 @@ def build_bundle(source_root: Path, output_root: Path) -> Path:
     source = source_root.expanduser().resolve(strict=True)
     output = output_root.expanduser().resolve(strict=False)
     _assert_safe_output(source, output)
-    skill_source = source / "skill" / "ai-ppt-studio"
+    skill_source = source / "skills" / "ai-ppt-studio"
     runtime_source = source / "src" / "ai_ppt_studio"
     if not skill_source.is_dir() or not runtime_source.is_dir():
         raise FileNotFoundError("Skill source or Python runtime package is missing")

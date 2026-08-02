@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "ai_ppt_studio": {
+      "title": "AI PPT Studio Native Workbench",
+      "description": "Read and update governed AI PPT projects and render the native Codex workbench.",
+      "command": "node",
+      "args": [
+        "./scripts/start-mcp.mjs"
+      ],
+      "cwd": "."
+    }
+  }
+}
