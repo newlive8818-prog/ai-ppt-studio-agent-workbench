@@ -15,7 +15,7 @@
 
 以下目录继续承载长期独立 Web 产品方向，MVP Skill App 只读，不得自动修改：
 
-`/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师`
+`/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师/PPT  web app `
 
 主要权威输入包括：
 
@@ -99,14 +99,14 @@
 
 ### 5.1 区域一：上游 Web 产品设计
 
-- 路径：`/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师`
+- 路径：`/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师/PPT  web app `
 - 权限：MVP 默认只读；
 - 用途：长期完整产品设计、专项基线、探索性产品示意和未来 Web 正式设计；
 - 禁止：Skill App 自动写入、生成缓存、创建项目状态、安装依赖或输出 PPTX。
 
 ### 5.2 区域二：Skill App 源码仓库
 
-- 路径：`/Users/defei/Documents/Codex/ai-ppt-skill-app-mvp`
+- 路径：`/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师/PPT-codex-app`
 - 权限：开发期可写；
 - 用途：Skill、引用、脚本、资产、测试、规格和人工发布的上游基线快照；
 - 禁止：保存真实客户材料、项目输出和个人长期记忆。
@@ -569,10 +569,10 @@ Codex 中发起 PPT 任务
 
 ### 17.2 已确认开发输入
 
-- 源码仓库：`/Users/defei/Documents/Codex/ai-ppt-skill-app-mvp`；
+- 源码仓库：`/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师/PPT-codex-app`；
 - 未来默认安装目录：`/Users/defei/.codex/skills/ai-ppt-studio`；
 - 未来默认运行根目录：`/Users/defei/Documents/AI-PPT-Workspace`；
-- 上游 Web 产品保护根：`/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师`；
+- 上游 Web 产品保护根：`/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师/PPT  web app `；
 - 首个开发目标：安全运行骨架和一个真实项目的 G0–G4 纵向闭环；
 - 实现计划必须先覆盖隔离测试，再实现视觉与 PPT 能力。
 
