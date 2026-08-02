@@ -46,3 +46,14 @@ class RevisionConflictError(AiPptError):
         super().__init__(
             f"Expected revision {expected_revision}, current revision is {actual_revision}"
         )
+
+
+class GateBlockedError(AiPptError):
+    """Raised when a user tries to pass a quality gate without its evidence."""
+
+    def __init__(self, gate: str, missing_evidence: tuple[str, ...]) -> None:
+        self.gate = gate
+        self.missing_evidence = missing_evidence
+        super().__init__(
+            f"{gate} is missing required evidence: {', '.join(missing_evidence)}"
+        )
