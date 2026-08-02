@@ -16,6 +16,7 @@ from .paths import PathPolicy
 from .project_store import normalize_slug
 
 HASH_CHUNK_SIZE = 1024 * 1024
+MAX_UPLOAD_BYTES = 16 * 1024 * 1024
 
 
 def file_sha256(path: Path) -> str:
@@ -101,6 +102,50 @@ class MaterialIntake:
         self._write_record(project, record)
         return record
 
+    def add_bytes(
+        self,
+        project_root: Path,
+        filename: str,
+        data: bytes,
+        mime_type: str,
+    ) -> MaterialSource:
+        """Copy one host-uploaded file into the managed project.
+
+        The host supplies bytes explicitly; this method never follows a path from
+        the browser and never performs a network request.
+        """
+
+        project = self.policy.assert_write_allowed(project_root)
+        if not isinstance(data, bytes) or not data:
+            raise MaterialImportError("Uploaded material cannot be empty")
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise MaterialImportError(
+                f"Uploaded material exceeds {MAX_UPLOAD_BYTES} bytes"
+            )
+        exact_name = Path(filename.strip()).name
+        suffix = Path(exact_name).suffix.lower()[:16]
+        safe_stem = normalize_slug(Path(exact_name).stem)[:64]
+        safe_name = f"{safe_stem}{suffix}" if suffix else safe_stem
+        source_id = str(uuid.uuid4())
+        destination = self.policy.assert_write_allowed(
+            project / "managed-assets" / "uploads" / source_id / safe_name
+        )
+        destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        destination.write_bytes(data)
+        digest = file_sha256(destination)
+        record = MaterialSource(
+            source_id=source_id,
+            kind=SourceKind.FILE,
+            mode=ImportMode.COPY,
+            original_ref=f"upload:{exact_name or safe_name};mime={mime_type.strip() or 'application/octet-stream'}",
+            managed_ref=str(destination),
+            sha256=digest,
+            size_bytes=len(data),
+            created_at=datetime.now(UTC).isoformat(),
+        )
+        self._write_record(project, record)
+        return record
+
     def _add_file(
         self,
         project: Path,
@@ -148,4 +193,10 @@ class MaterialIntake:
         atomic_write_json(destination, record.as_dict())
 
 
-__all__ = ["ImportMode", "MaterialIntake", "MaterialSource", "SourceKind"]
+__all__ = [
+    "ImportMode",
+    "MAX_UPLOAD_BYTES",
+    "MaterialIntake",
+    "MaterialSource",
+    "SourceKind",
+]

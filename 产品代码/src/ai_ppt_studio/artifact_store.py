@@ -14,10 +14,12 @@ from .models import ArtifactKind, ArtifactVersion
 from .paths import PathPolicy
 
 ARTIFACT_DIRECTORIES = {
+    ArtifactKind.MATERIAL_FINDINGS: Path("cognition/material-findings"),
     ArtifactKind.MISSION: Path("blueprint/mission"),
     ArtifactKind.CONTENT_BLUEPRINT: Path("blueprint/content-blueprint"),
     ArtifactKind.VISUAL_BRIEF: Path("visual/visual-brief"),
     ArtifactKind.CONCEPT_SET: Path("visual/concept-set"),
+    ArtifactKind.ENGINEERING_SAMPLES: Path("visual/engineering-samples"),
     ArtifactKind.VISUAL_CONTRACT: Path("visual/visual-contract"),
     ArtifactKind.SLIDE_SCENE_GRAPH: Path("scene-graph/slide-scene-graph"),
     ArtifactKind.FEEDBACK: Path("reviews/feedback"),
@@ -44,7 +46,40 @@ def _require_non_empty(payload: dict[str, object], fields: tuple[str, ...]) -> N
 def validate_artifact(kind: ArtifactKind, payload: dict[str, object]) -> None:
     if not isinstance(payload, dict):
         raise ArtifactValidationError("Artifact payload must be a JSON object")
-    if kind is ArtifactKind.MISSION:
+    if kind is ArtifactKind.MATERIAL_FINDINGS:
+        _require_non_empty(payload, ("summary", "findings", "source_assignments"))
+        findings = payload.get("findings")
+        if not isinstance(findings, list) or not findings:
+            raise ArtifactValidationError(
+                "Material findings requires at least one finding"
+            )
+        required = (
+            "finding_id",
+            "finding_type",
+            "content",
+            "source_ref",
+            "locator",
+            "fact_status",
+            "purposes",
+        )
+        for index, finding in enumerate(findings, start=1):
+            if not isinstance(finding, dict):
+                raise ArtifactValidationError(f"Finding {index} must be an object")
+            missing = [field for field in required if field not in finding]
+            if missing:
+                raise ArtifactValidationError(
+                    f"Finding {index} is missing fields: {', '.join(missing)}"
+                )
+            if not str(finding.get("source_ref", "")).startswith("sources/"):
+                raise ArtifactValidationError(
+                    f"Finding {index} source_ref must reference sources/"
+                )
+        assignments = payload.get("source_assignments")
+        if not isinstance(assignments, list) or not assignments:
+            raise ArtifactValidationError(
+                "Material findings requires at least one source assignment"
+            )
+    elif kind is ArtifactKind.MISSION:
         _require_non_empty(payload, ("title", "audience", "goal", "context"))
     elif kind is ArtifactKind.CONTENT_BLUEPRINT:
         _require_non_empty(payload, ("title", "audience", "goal", "slides"))
@@ -82,6 +117,41 @@ def validate_artifact(kind: ArtifactKind, payload: dict[str, object]) -> None:
         if not isinstance(directions, list) or len(directions) < 2:
             raise ArtifactValidationError(
                 "Concept set requires at least two distinct directions"
+            )
+    elif kind is ArtifactKind.ENGINEERING_SAMPLES:
+        _require_non_empty(payload, ("summary", "samples", "native_coverage", "qa_status"))
+        samples = payload.get("samples")
+        if not isinstance(samples, list) or not samples:
+            raise ArtifactValidationError(
+                "Engineering samples requires at least one sample"
+            )
+        required = (
+            "sample_id",
+            "slide_refs",
+            "render_ref",
+            "native_element_ratio",
+            "editable",
+            "notes",
+        )
+        for index, sample in enumerate(samples, start=1):
+            if not isinstance(sample, dict):
+                raise ArtifactValidationError(
+                    f"Engineering sample {index} must be an object"
+                )
+            missing = [field for field in required if field not in sample]
+            if missing:
+                raise ArtifactValidationError(
+                    f"Engineering sample {index} is missing fields: {', '.join(missing)}"
+                )
+            ratio = sample.get("native_element_ratio")
+            if not isinstance(ratio, (int, float)) or not 0 <= float(ratio) <= 1:
+                raise ArtifactValidationError(
+                    f"Engineering sample {index} native_element_ratio must be between 0 and 1"
+                )
+        coverage = payload.get("native_coverage")
+        if not isinstance(coverage, dict) or "whole_slide_bitmap" not in coverage:
+            raise ArtifactValidationError(
+                "Engineering samples requires native_coverage.whole_slide_bitmap"
             )
     elif kind is ArtifactKind.VISUAL_CONTRACT:
         _require_non_empty(

@@ -110,10 +110,12 @@ class ProjectState:
 
 
 class ArtifactKind(str, Enum):
+    MATERIAL_FINDINGS = "material-findings"
     MISSION = "mission"
     CONTENT_BLUEPRINT = "content-blueprint"
     VISUAL_BRIEF = "visual-brief"
     CONCEPT_SET = "concept-set"
+    ENGINEERING_SAMPLES = "engineering-samples"
     VISUAL_CONTRACT = "visual-contract"
     SLIDE_SCENE_GRAPH = "slide-scene-graph"
     FEEDBACK = "feedback"
