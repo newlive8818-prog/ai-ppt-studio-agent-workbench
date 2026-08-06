@@ -28,7 +28,7 @@
 - Consumes: `.app-header`, `.workspace`, `.document-outline`, `#outlineToggle`, `.reading-surface`。
 - Produces: 1440×1100、1000×1000、760×1000 三档失败证据。
 
-- [ ] **Step 1: 启动本地静态服务器和 Playwright 会话**
+- [x] **Step 1: 启动本地静态服务器和 Playwright 会话**
 
 ```bash
 python3 -m http.server 8765 --bind 127.0.0.1 --directory 产品代码
@@ -36,7 +36,7 @@ PWCLI=/Users/defei/.codex/skills/playwright/scripts/playwright_cli.sh
 "$PWCLI" -s=contract-review open http://127.0.0.1:8765/prototypes/06-fullscreen-contract-review-exploration.html
 ```
 
-- [ ] **Step 2: 在每个视口运行同一条行为断言**
+- [x] **Step 2: 在每个视口运行同一条行为断言**
 
 ```javascript
 () => {
@@ -73,7 +73,7 @@ Expected before implementation: 1440px fails because the directory is a sticky l
 - Consumes: `#documentOutline`, `#outlineToggle`, `#outlineBackdrop`, `#closeOutline`, `#commentDrawer`。
 - Produces: `setOutlineState(open, restoreFocus)`, `openOutline()`, `closeOutline()` 的全视口通用行为。
 
-- [ ] **Step 1: 实现最小 CSS 变化**
+- [x] **Step 1: 实现最小 CSS 变化**
 
 ```css
 :root { --header-h: 64px; }
@@ -90,7 +90,7 @@ Expected before implementation: 1440px fails because the directory is a sticky l
 
 将 1440px 的目录常驻列规则删除；在 1000px 和 760px 下隐藏英文副标题、长保存状态，必要时隐藏项目长标题，但保持目录、文档切换、标记和保存按钮可见。
 
-- [ ] **Step 2: 实现全视口目录状态**
+- [x] **Step 2: 实现全视口目录状态**
 
 ```javascript
 function setOutlineState(open, restoreFocus = false) {
@@ -104,7 +104,7 @@ function setOutlineState(open, restoreFocus = false) {
 
 删除只对 900–1279px 生效的 `splitViewQuery` 分支；目录项定位后在所有视口关闭目录，内容/视觉切换后保持关闭。
 
-- [ ] **Step 3: 重跑 Task 1 的三档断言**
+- [x] **Step 3: 重跑 Task 1 的三档断言**
 
 Expected: 三档均返回 Header 约 64px、`.workspace` 为 `block`、目录 `fixed` 且默认不可见、`aria-hidden=true`、目录按钮可见。
 
@@ -121,7 +121,7 @@ Expected: 三档均返回 Header 约 64px、`.workspace` 为 `block`、目录 `f
 - Consumes: 已实现的目录抽屉、内容/视觉切换、标记抽屉和 `localStorage` 保存。
 - Produces: UI 唯一基线中的默认折叠目录与 64px 单行 Header 合同、真实浏览器证据。
 
-- [ ] **Step 1: 验证目录不会挤压正文**
+- [x] **Step 1: 验证目录不会挤压正文**
 
 ```javascript
 () => {
@@ -140,15 +140,15 @@ Expected: 三档均返回 Header 约 64px、`.workspace` 为 `block`、目录 `f
 }
 ```
 
-- [ ] **Step 2: 回归交互**
+- [x] **Step 2: 回归交互**
 
 验证背景、关闭按钮和 `Escape` 均可关闭目录；目录与标记抽屉不能同时打开；内容/视觉切换后目录关闭且标签同步；新增标记可保存并在刷新后保留。
 
-- [ ] **Step 3: 同步 UI 唯一基线**
+- [x] **Step 3: 同步 UI 唯一基线**
 
 在 UI-03/UI-04 共用审阅规则中明确：目录默认折叠、所有模式按需覆盖、选择后关闭、不得挤压正文；Header 约 64px 单行，按优先级隐藏非核心文案。
 
-- [ ] **Step 4: 截图与最终检查**
+- [x] **Step 4: 截图与最终检查**
 
 在 1440×1100、1000×1000、760×1000 下截图；检查控制台 0 错误、页面无目录导致的横向溢出、提示遮罩不存在，并运行：
 

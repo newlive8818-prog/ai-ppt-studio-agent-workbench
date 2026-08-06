@@ -1,0 +1,1633 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
+  <title>AI PPT Studio｜分屏与全屏合同审阅原型</title>
+  <!--
+    Page Brief
+    - 状态：探索性产品示意；不覆盖产品基线。
+    - 核心用户：需要集中审阅售前方案内容与视觉合同的方案负责人。
+    - 单一使命：在 Codex 右侧分屏或完整 PC 页面连续阅读、精确标记并显式保存本轮意见。
+    - P0：当前文档、完整正文/合同、未保存标记和右上角保存动作。
+    - P1：来源、讲解稿、内部通过证据和锚点页证据。
+    - P2：智能体与内部过程摘要。
+    - 明确排除：900px 以下正式确认、返回聊天、G1/G2 用户操作、最终 PPTX 验收。
+  -->
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #f2f3f5;
+      --paper: #ffffff;
+      --paper-warm: #fbfaf7;
+      --ink: #172033;
+      --ink-soft: #394257;
+      --muted: #737b8d;
+      --line: #e3e5e9;
+      --line-strong: #cdd2da;
+      --violet: #5d43e5;
+      --violet-dark: #4932c6;
+      --violet-soft: #f0edff;
+      --blue: #2f62c8;
+      --blue-soft: #edf4ff;
+      --green: #087957;
+      --green-soft: #eaf7f1;
+      --amber: #a85c08;
+      --amber-soft: #fff5df;
+      --red: #b63b36;
+      --red-soft: #fff0ef;
+      --navy: #17233a;
+      --teal: #21a58f;
+      --copper: #c88b56;
+      --shadow: 0 18px 50px rgba(23, 32, 51, .12);
+      --header-h: 68px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--canvas);
+      font-family: "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+      text-rendering: optimizeLegibility;
+    }
+    button, textarea, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+      outline: 3px solid rgba(93, 67, 229, .26);
+      outline-offset: 2px;
+    }
+    [hidden] { display: none !important; }
+
+    .app-header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      height: var(--header-h);
+      padding: 0 22px;
+      display: grid;
+      grid-template-columns: minmax(290px, 1fr) auto minmax(290px, 1fr);
+      align-items: center;
+      gap: 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .96);
+      backdrop-filter: blur(16px);
+    }
+    .brand-area, .header-meta, .save-state, .document-switch, .mini-status,
+    .document-kicker, .status-row, .section-label, .sheet-index, .evidence-title,
+    .comment-inline-head, .drawer-head, .drawer-target,
+    .toast, .legend-row, .proof-line, .contract-state, .outline-title-row {
+      display: flex;
+      align-items: center;
+    }
+    .brand-area { min-width: 0; gap: 12px; }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      color: #fff;
+      background: var(--violet);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: -.03em;
+    }
+    .brand-copy { min-width: 0; }
+    .brand-copy strong, .brand-copy span { display: block; }
+    .brand-copy strong { font-size: 14px; line-height: 1.35; }
+    .brand-copy span {
+      margin-top: 2px;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 11px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .document-switch {
+      padding: 4px;
+      gap: 4px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: #f6f7f9;
+    }
+    .document-switch button {
+      min-height: 34px;
+      padding: 0 15px;
+      border: 0;
+      border-radius: 8px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 650;
+    }
+    .document-switch button.active {
+      color: var(--ink);
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(23, 32, 51, .11);
+    }
+    .header-meta { min-width: 0; justify-content: flex-end; gap: 14px; }
+    .comment-count-button {
+      min-height: 36px;
+      padding: 0 11px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .comment-count-button:hover { border-color: #b9afea; }
+    .save-state { gap: 7px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .save-state i { width: 7px; height: 7px; border-radius: 999px; background: var(--green); }
+    .save-state.unsaved { color: var(--amber); }
+    .save-state.unsaved i { background: var(--amber); }
+
+    .workspace {
+      min-height: calc(100vh - var(--header-h));
+      display: grid;
+      grid-template-columns: 236px minmax(0, 1fr);
+    }
+    .document-outline {
+      position: sticky;
+      top: var(--header-h);
+      height: calc(100vh - var(--header-h));
+      padding: 26px 18px 42px;
+      overflow: auto;
+      border-right: 1px solid var(--line);
+      background: #f7f8fa;
+    }
+    .outline-title-row { justify-content: space-between; gap: 10px; }
+    .outline-title-row strong { font-size: 13px; }
+    .outline-title-row span { color: var(--muted); font-size: 11px; }
+    .outline-group { margin-top: 24px; }
+    .outline-group > span {
+      display: block;
+      margin: 0 8px 8px;
+      color: #989ead;
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: .08em;
+    }
+    .outline-link {
+      width: 100%;
+      min-height: 42px;
+      padding: 8px 8px;
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      border: 0;
+      border-radius: 8px;
+      color: var(--ink-soft);
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+    .outline-link:hover { background: #eceef2; }
+    .outline-link.active { color: var(--violet-dark); background: var(--violet-soft); }
+    .outline-link b { font-size: 11px; font-variant-numeric: tabular-nums; }
+    .outline-link em {
+      overflow: hidden;
+      font-size: 12px;
+      font-style: normal;
+      font-weight: 620;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .outline-link small {
+      min-width: 18px;
+      height: 18px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      color: var(--amber);
+      background: var(--amber-soft);
+      font-size: 10px;
+    }
+    .outline-foot {
+      margin-top: 26px;
+      padding: 15px 10px 0;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.65;
+    }
+
+    .reading-surface {
+      min-width: 0;
+      padding: 46px clamp(28px, 4vw, 70px) 80px;
+    }
+    .document-view { width: min(1080px, 100%); margin: 0 auto; }
+    .document-head {
+      padding: 0 4px 34px;
+      border-bottom: 1px solid var(--line-strong);
+    }
+    .document-kicker { gap: 8px; color: var(--violet); font-size: 11px; font-weight: 750; letter-spacing: .06em; }
+    .document-kicker::before { content: ""; width: 18px; height: 2px; background: var(--violet); }
+    .document-head h1 {
+      max-width: 840px;
+      margin: 15px 0 13px;
+      font-family: "Songti SC", STSong, "Noto Serif CJK SC", serif;
+      font-size: clamp(33px, 3vw, 46px);
+      line-height: 1.2;
+      letter-spacing: -.035em;
+    }
+    .document-summary {
+      max-width: 850px;
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 16px;
+      line-height: 1.78;
+    }
+    .status-row { margin-top: 22px; flex-wrap: wrap; gap: 8px; }
+    .status-chip {
+      min-height: 28px;
+      padding: 0 9px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      color: var(--muted);
+      background: #eceef2;
+      font-size: 11px;
+      font-weight: 650;
+    }
+    .status-chip.passed { color: var(--green); background: var(--green-soft); }
+    .status-chip.version { color: var(--blue); background: var(--blue-soft); }
+    .status-chip.warning { color: var(--amber); background: var(--amber-soft); }
+
+    .document-section { padding: 42px 4px 0; scroll-margin-top: calc(var(--header-h) + 22px); }
+    .section-label { gap: 9px; color: var(--violet); font-size: 11px; font-weight: 750; letter-spacing: .06em; }
+    .section-label b {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      color: #fff;
+      background: var(--violet);
+      font-size: 10px;
+    }
+    .document-section > h2 {
+      margin: 12px 0 8px;
+      font-size: 25px;
+      line-height: 1.34;
+      letter-spacing: -.02em;
+    }
+    .section-intro { max-width: 820px; margin: 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+
+    .review-proof {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 20px;
+      padding: 18px 20px;
+      border: 1px solid #cce8dd;
+      border-radius: 10px;
+      background: #f6fbf8;
+    }
+    .review-proof strong { display: block; color: var(--green); font-size: 14px; }
+    .review-proof p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .proof-agents { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+    .proof-agents span { padding: 5px 8px; border-radius: 999px; color: #406153; background: #e7f4ed; font-size: 10px; }
+
+    .strategy-table, .design-system-table {
+      margin-top: 22px;
+      border-top: 1px solid var(--line-strong);
+      border-bottom: 1px solid var(--line-strong);
+    }
+    .strategy-row, .design-system-row {
+      display: grid;
+      grid-template-columns: 170px minmax(0, 1fr);
+      border-bottom: 1px solid var(--line);
+    }
+    .strategy-row:last-child, .design-system-row:last-child { border-bottom: 0; }
+    .strategy-row dt, .strategy-row dd, .design-system-row dt, .design-system-row dd { margin: 0; padding: 14px 10px; }
+    .strategy-row dt, .design-system-row dt { color: var(--muted); font-size: 12px; font-weight: 650; }
+    .strategy-row dd, .design-system-row dd { font-size: 13px; font-weight: 560; line-height: 1.65; }
+
+    .argument-map {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border-top: 1px solid var(--line-strong);
+      border-bottom: 1px solid var(--line-strong);
+    }
+    .argument-stage { padding: 20px 18px; border-right: 1px solid var(--line); }
+    .argument-stage:last-child { border-right: 0; }
+    .argument-stage small { color: var(--violet); font-size: 10px; font-weight: 750; }
+    .argument-stage strong { display: block; margin-top: 7px; font-size: 15px; line-height: 1.45; }
+    .argument-stage p { margin: 9px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+    .sheet-list { margin-top: 26px; }
+    .review-sheet {
+      position: relative;
+      scroll-margin-top: calc(var(--header-h) + 18px);
+      padding: 30px 34px 32px;
+      border-top: 1px solid var(--line-strong);
+      background: var(--paper);
+    }
+    .review-sheet:last-child { border-bottom: 1px solid var(--line-strong); }
+    .review-sheet.has-comments::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 30px;
+      bottom: 30px;
+      width: 3px;
+      border-radius: 3px;
+      background: #e6a22b;
+    }
+    .sheet-index { justify-content: space-between; gap: 18px; }
+    .sheet-index > div:first-child { display: flex; align-items: baseline; gap: 10px; }
+    .sheet-index b { color: var(--violet); font-size: 12px; }
+    .sheet-index span { color: var(--muted); font-size: 11px; }
+    .sheet-index .sheet-state { color: var(--green); font-weight: 650; }
+    .review-sheet h3 { margin: 12px 0 20px; font-size: 22px; line-height: 1.4; letter-spacing: -.015em; }
+    .sheet-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(250px, .65fr); gap: 34px; }
+    .field-stack { display: grid; gap: 18px; }
+    .review-field {
+      position: relative;
+      padding: 0 34px 17px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .review-field:last-child { border-bottom: 0; }
+    .review-field > span, .meta-block > span {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: .06em;
+    }
+    .review-field p, .review-field ul, .meta-block p { margin: 0; color: var(--ink-soft); font-size: 13px; line-height: 1.72; }
+    .review-field ul { padding-left: 18px; }
+    .review-field li + li { margin-top: 5px; }
+    .comment-action {
+      position: absolute;
+      top: -5px;
+      right: 0;
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      color: #969cab;
+      background: transparent;
+      cursor: pointer;
+      opacity: .55;
+    }
+    .review-field:hover .comment-action, .contract-field:hover .comment-action,
+    .comment-action:focus-visible { opacity: 1; color: var(--violet); border-color: #cfc6ff; background: var(--violet-soft); }
+    .comment-action svg { width: 15px; height: 15px; }
+    .sheet-meta { padding-left: 22px; border-left: 1px solid var(--line); }
+    .meta-block { padding: 0 0 17px; margin-bottom: 17px; border-bottom: 1px solid var(--line); }
+    .meta-block:last-child { border-bottom: 0; }
+    .source-link { color: var(--blue); text-decoration: none; }
+    .source-link:hover { text-decoration: underline; }
+    .fact-note { color: var(--amber) !important; }
+    .inline-comment {
+      margin-top: 22px;
+      padding: 14px 16px;
+      border-left: 3px solid #e6a22b;
+      background: var(--amber-soft);
+    }
+    .comment-inline-head { justify-content: space-between; gap: 12px; }
+    .comment-inline-head strong { color: var(--amber); font-size: 11px; }
+    .comment-inline-head span { color: var(--muted); font-size: 10px; }
+    .inline-comment p { margin: 7px 0 0; color: #694718; font-size: 12px; line-height: 1.6; }
+
+    .rule-legend { margin-top: 20px; padding: 14px 16px; border: 1px solid var(--line); background: var(--paper-warm); }
+    .legend-row { flex-wrap: wrap; gap: 18px; }
+    .legend-item { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; }
+    .legend-item i { width: 9px; height: 9px; border-radius: 999px; }
+    .legend-item.must i { background: var(--red); }
+    .legend-item.minimum i { background: var(--amber); }
+    .legend-item.reference i { background: var(--blue); }
+
+    .palette-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .swatch {
+      width: 30px;
+      height: 30px;
+      border: 1px solid rgba(23, 32, 51, .12);
+      border-radius: 8px;
+    }
+    .family-list { display: flex; flex-wrap: wrap; gap: 7px; }
+    .family-list span { padding: 6px 9px; border-radius: 7px; color: #4a5263; background: #eef0f3; font-size: 11px; }
+
+    .anchor-grid { margin-top: 24px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .anchor-evidence { border: 1px solid var(--line-strong); background: #fff; }
+    .anchor-slide {
+      aspect-ratio: 16 / 9;
+      position: relative;
+      overflow: hidden;
+      color: #fff;
+      background: var(--navy);
+    }
+    .anchor-slide.cover::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 0 54%;
+      background:
+        radial-gradient(circle at 60% 46%, rgba(33,165,143,.8), transparent 4%),
+        radial-gradient(circle at 42% 65%, rgba(200,139,86,.7), transparent 3%),
+        linear-gradient(135deg, rgba(33,165,143,.2), transparent 52%),
+        #22334f;
+    }
+    .anchor-slide.cover::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 54%;
+      width: 5px;
+      background: var(--teal);
+    }
+    .anchor-slide-content { position: relative; z-index: 1; width: 54%; height: 100%; padding: 8% 7%; }
+    .anchor-slide-content small { color: #d3a16f; font-size: 7px; letter-spacing: .08em; }
+    .anchor-slide-content strong { display: block; margin-top: 15%; font-size: clamp(14px, 1.5vw, 22px); line-height: 1.3; }
+    .anchor-slide-content p { max-width: 90%; margin: 8% 0 0; color: #cbd4e2; font-size: 8px; line-height: 1.6; }
+    .anchor-slide.architecture { padding: 7%; background: #f5f2ea; color: var(--navy); }
+    .arch-title { font-size: clamp(12px, 1.2vw, 18px); font-weight: 750; }
+    .arch-layers { margin-top: 8%; display: grid; gap: 7px; }
+    .arch-layers div { min-height: 24px; padding: 0 9px; display: flex; align-items: center; justify-content: space-between; background: #fff; border-left: 4px solid var(--teal); font-size: 7px; }
+    .arch-layers div:nth-child(2) { border-left-color: var(--copper); }
+    .arch-layers div:nth-child(3) { color: #fff; background: var(--navy); border-left-color: var(--teal); }
+    .anchor-caption { padding: 15px 16px; }
+    .evidence-title { justify-content: space-between; gap: 12px; }
+    .evidence-title strong { font-size: 13px; }
+    .evidence-title span { color: var(--green); font-size: 10px; font-weight: 700; }
+    .proof-line { margin-top: 9px; flex-wrap: wrap; gap: 7px 12px; color: var(--muted); font-size: 10px; }
+    .proof-line b { color: var(--ink-soft); }
+
+    .visual-contract-sheet { padding-top: 34px; }
+    .contract-two-column { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 34px; }
+    .contract-column { min-width: 0; }
+    .contract-column + .contract-column { padding-left: 32px; border-left: 1px solid var(--line); }
+    .contract-column > h4 { margin: 0 0 18px; color: var(--violet); font-size: 12px; }
+    .contract-field { position: relative; padding: 0 34px 16px 0; margin-bottom: 17px; border-bottom: 1px solid var(--line); }
+    .contract-field:last-child { border-bottom: 0; }
+    .contract-field > span { display: block; margin-bottom: 6px; color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .05em; }
+    .contract-field p, .contract-field ul { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.7; }
+    .contract-field ul { padding-left: 17px; }
+    .contract-state { margin-top: 20px; justify-content: space-between; gap: 18px; padding: 12px 14px; color: var(--green); background: var(--green-soft); font-size: 11px; font-weight: 680; }
+    .contract-state span:last-child { color: #477264; font-weight: 540; }
+
+    .primary-button, .secondary-button, .text-button {
+      border: 0;
+      cursor: pointer;
+      font-weight: 680;
+    }
+    .primary-button {
+      min-height: 42px;
+      padding: 0 17px;
+      border-radius: 9px;
+      color: #fff;
+      background: var(--violet);
+      box-shadow: 0 5px 13px rgba(93, 67, 229, .2);
+    }
+    .primary-button:hover { background: var(--violet-dark); }
+    .primary-button:disabled { cursor: not-allowed; opacity: .42; box-shadow: none; }
+    .header-save-button { min-height: 36px; padding: 0 14px; white-space: nowrap; }
+    .secondary-button {
+      min-height: 42px;
+      padding: 0 14px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      background: #fff;
+    }
+    .secondary-button:hover { border-color: #b9afea; background: #fbfaff; }
+    .text-button { min-height: 36px; padding: 0 8px; color: var(--muted); background: transparent; }
+
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      background: rgba(23, 32, 51, .25);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease;
+    }
+    .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+    .comment-drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 90;
+      width: min(430px, 92vw);
+      padding: 22px 22px 26px;
+      overflow: auto;
+      border-left: 1px solid var(--line-strong);
+      background: #fff;
+      box-shadow: var(--shadow);
+      transform: translateX(102%);
+      transition: transform .22s ease;
+    }
+    .comment-drawer.open { transform: translateX(0); }
+    .drawer-head { justify-content: space-between; gap: 16px; }
+    .drawer-head strong { font-size: 17px; }
+    .close-button {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 9px;
+      color: var(--muted);
+      background: #f3f4f6;
+      cursor: pointer;
+      font-size: 18px;
+    }
+    .drawer-target {
+      margin-top: 22px;
+      padding: 12px 13px;
+      align-items: flex-start;
+      gap: 10px;
+      border-left: 3px solid var(--violet);
+      background: var(--violet-soft);
+    }
+    .drawer-target b { flex: 0 0 auto; color: var(--violet); font-size: 10px; }
+    .drawer-target span { color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+    .quote-box {
+      margin-top: 14px;
+      padding: 12px 13px;
+      color: var(--muted);
+      background: #f6f7f9;
+      font-size: 12px;
+      line-height: 1.65;
+    }
+    .drawer-form { margin-top: 22px; }
+    .drawer-form label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 680; }
+    .drawer-form textarea {
+      width: 100%;
+      min-height: 150px;
+      padding: 12px 13px;
+      resize: vertical;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      color: var(--ink);
+      background: #fff;
+      line-height: 1.65;
+    }
+    .drawer-form textarea::placeholder { color: #a0a6b2; }
+    .drawer-note { margin: 10px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+    .drawer-actions { margin-top: 18px; display: flex; justify-content: flex-end; gap: 9px; }
+    .saved-comments { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--line); }
+    .saved-comments > strong { font-size: 13px; }
+    .saved-comment-item { margin-top: 12px; padding: 13px; border: 1px solid var(--line); background: var(--paper-warm); }
+    .saved-comment-item span { color: var(--muted); font-size: 10px; }
+    .saved-comment-item p { margin: 6px 0 0; font-size: 12px; line-height: 1.55; }
+
+    .selection-toolbar {
+      position: fixed;
+      z-index: 70;
+      display: none;
+      padding: 6px;
+      border-radius: 9px;
+      background: var(--navy);
+      box-shadow: 0 10px 28px rgba(23, 32, 51, .24);
+    }
+    .selection-toolbar.visible { display: block; }
+    .selection-toolbar button { min-height: 32px; padding: 0 10px; border: 0; border-radius: 6px; color: #fff; background: transparent; cursor: pointer; font-size: 11px; font-weight: 680; }
+    .selection-toolbar button:hover { background: rgba(255,255,255,.12); }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 96px;
+      z-index: 120;
+      min-height: 42px;
+      padding: 0 15px;
+      gap: 9px;
+      border-radius: 10px;
+      color: #fff;
+      background: var(--navy);
+      box-shadow: var(--shadow);
+      font-size: 12px;
+      opacity: 0;
+      transform: translate(-50%, 14px);
+      pointer-events: none;
+      transition: opacity .18s ease, transform .18s ease;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    @media (max-width: 1080px) {
+      .app-header { grid-template-columns: minmax(220px, 1fr) auto; }
+      .document-switch { order: 3; grid-column: 1 / -1; justify-self: center; margin-top: -8px; transform: translateY(8px); }
+      .app-header { height: 104px; }
+      :root { --header-h: 104px; }
+      .workspace { grid-template-columns: 200px minmax(0, 1fr); }
+      .sheet-grid, .contract-two-column { grid-template-columns: 1fr; }
+      .sheet-meta, .contract-column + .contract-column { padding: 20px 0 0; border: 0; border-top: 1px solid var(--line); }
+      .argument-map, .anchor-grid { grid-template-columns: 1fr; }
+      .argument-stage { border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+
+    /*
+      2026-08-07 独立视觉方向：Editorial Review System
+      不继承既有 AI PPT Studio UI 规范。产品 UI 使用编辑部式黑白骨架、
+      钴蓝交互信号和纸面阅读秩序；锚点页内部色彩仅属于 PPT 合同证据。
+    */
+    :root {
+      --canvas: #e7e5df;
+      --paper: #fffefb;
+      --paper-warm: #f3f1eb;
+      --ink: #111318;
+      --ink-soft: #343840;
+      --muted: #70736f;
+      --line: #d6d3ca;
+      --line-strong: #a9a79f;
+      --violet: #1559d6;
+      --violet-dark: #0c44aa;
+      --violet-soft: #e9f0ff;
+      --blue: #1559d6;
+      --blue-soft: #e9f0ff;
+      --green: #137252;
+      --green-soft: #e9f4ee;
+      --amber: #a85c00;
+      --amber-soft: #fff0c7;
+      --red: #ba2d24;
+      --red-soft: #ffebe8;
+      --navy: #121922;
+      --shadow: 0 26px 70px rgba(20, 22, 25, .12);
+      --header-h: 78px;
+    }
+
+    body {
+      background:
+        linear-gradient(90deg, rgba(17, 19, 24, .025) 1px, transparent 1px) 0 0 / 84px 84px,
+        var(--canvas);
+    }
+
+    .app-header {
+      height: var(--header-h);
+      padding: 0 28px;
+      border: 0;
+      color: #f7f6f2;
+      background: #111318;
+      backdrop-filter: none;
+    }
+    .brand-mark {
+      width: 44px;
+      height: 44px;
+      border: 1px solid #535761;
+      border-radius: 1px;
+      background: transparent;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      letter-spacing: .08em;
+    }
+    .brand-copy strong { color: #fff; font-size: 13px; letter-spacing: .01em; }
+    .brand-copy span {
+      margin-top: 4px;
+      color: #9297a1;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 9px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    .document-switch {
+      align-self: stretch;
+      padding: 0;
+      gap: 26px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .document-switch button {
+      position: relative;
+      height: 100%;
+      padding: 0 2px;
+      border-radius: 0;
+      color: #9da2ac;
+      background: transparent;
+      font-size: 13px;
+      font-weight: 620;
+    }
+    .document-switch button::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 3px;
+      background: transparent;
+    }
+    .document-switch button.active {
+      color: #fff;
+      background: transparent;
+      box-shadow: none;
+    }
+    .document-switch button.active::after { background: #4d82ff; }
+    .comment-count-button {
+      border-color: #484d56;
+      border-radius: 1px;
+      color: #d5d7dc;
+      background: transparent;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+    }
+    .comment-count-button { border-color: #484d56; color: #d5d7dc; background: transparent; }
+    .save-state { color: #b0b4bc; }
+    .save-state.unsaved { color: #ffc45a; }
+
+    .workspace { grid-template-columns: 260px minmax(0, 1fr); }
+    .document-outline {
+      padding: 34px 22px 44px;
+      border-right: 1px solid #c6c3bb;
+      background: rgba(226, 223, 215, .94);
+    }
+    .outline-title-row strong, .outline-group > span {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .outline-title-row strong { font-size: 11px; }
+    .outline-title-row span { color: #686b69; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .outline-group { margin-top: 30px; }
+    .outline-group > span { margin-left: 10px; color: #777a77; font-size: 9px; }
+    .outline-link {
+      position: relative;
+      min-height: 44px;
+      padding: 8px 10px;
+      border-radius: 0;
+      color: #4f534f;
+    }
+    .outline-link::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 8px;
+      bottom: 8px;
+      width: 2px;
+      background: transparent;
+    }
+    .outline-link:hover { background: rgba(255,255,255,.48); }
+    .outline-link.active { color: #0d3e99; background: #fffefb; }
+    .outline-link.active::before { background: #1559d6; }
+    .outline-link b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .outline-link small { border-radius: 1px; color: #5b3900; background: #ffd66e; }
+    .outline-foot { color: #777a77; }
+
+    .reading-surface { padding: 54px clamp(32px, 5vw, 82px) 96px; }
+    .document-view {
+      width: min(1120px, 100%);
+      padding: 0 58px 64px;
+      background: var(--paper);
+      box-shadow: 0 1px 0 rgba(17,19,24,.14), 0 26px 70px rgba(20,22,25,.08);
+    }
+    .document-head { padding: 68px 4px 42px; border-bottom: 2px solid var(--ink); }
+    .document-kicker {
+      color: #1559d6;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .document-kicker::before { width: 30px; background: #1559d6; }
+    .document-head h1 {
+      max-width: 880px;
+      margin-top: 19px;
+      font-family: "Songti SC", STSong, "Noto Serif CJK SC", serif;
+      font-size: clamp(38px, 3.2vw, 52px);
+      font-weight: 700;
+      line-height: 1.18;
+      letter-spacing: -.045em;
+    }
+    .document-summary { max-width: 900px; color: #50545c; font-size: 15px; line-height: 1.9; }
+    .status-row { margin-top: 28px; gap: 6px; }
+    .status-chip {
+      min-height: 26px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 1px;
+      color: #5f635f;
+      background: transparent;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 9px;
+      letter-spacing: .03em;
+    }
+    .status-chip.passed { border-color: #9dc7b5; color: #145f46; background: #f0f8f4; }
+    .status-chip.version { border-color: #aebfe9; color: #17438d; background: #f0f4ff; }
+    .status-chip.warning { border-color: #e1b85c; color: #6b4300; background: #fff6dd; }
+
+    .document-section { padding-top: 54px; }
+    .section-label {
+      color: #1559d6;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 9px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .section-label b { border-radius: 1px; background: #1559d6; font-family: inherit; }
+    .document-section > h2 { max-width: 860px; margin-top: 15px; font-size: 27px; letter-spacing: -.03em; }
+    .section-intro { color: #696c69; }
+
+    .review-proof {
+      padding: 20px 22px;
+      border: 0;
+      border-left: 4px solid #137252;
+      border-radius: 0;
+      background: #edf5f0;
+    }
+    .proof-agents span { border: 1px solid #c0d9cd; border-radius: 1px; background: transparent; }
+    .strategy-table, .design-system-table { border-color: var(--ink); }
+    .strategy-row, .design-system-row { grid-template-columns: 190px minmax(0, 1fr); }
+    .strategy-row dt, .design-system-row dt {
+      color: #585c58;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      letter-spacing: .04em;
+    }
+    .strategy-row dd, .design-system-row dd { padding-right: 18px; }
+    .argument-map { color: #f8f7f3; background: #14171d; border: 0; }
+    .argument-stage { padding: 24px 20px; border-color: #383d46; }
+    .argument-stage small { color: #78a1ff; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .argument-stage p { color: #b8bdc7; }
+
+    .sheet-list { margin-top: 34px; }
+    .review-sheet {
+      margin-left: 36px;
+      padding: 36px 34px 40px;
+      border-top: 1px solid var(--ink);
+      background: transparent;
+    }
+    .review-sheet::after {
+      content: attr(data-page);
+      position: absolute;
+      left: -38px;
+      top: 38px;
+      color: #969996;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      writing-mode: vertical-rl;
+      letter-spacing: .09em;
+    }
+    .review-sheet.has-comments::before { left: -2px; background: #e5a22e; }
+    .sheet-index b, .sheet-index span, .sheet-index .sheet-state {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 9px;
+      letter-spacing: .04em;
+    }
+    .sheet-index b { color: #1559d6; }
+    .review-sheet h3 { margin-top: 14px; font-size: 23px; letter-spacing: -.025em; }
+    .review-field > span, .meta-block > span, .contract-field > span {
+      color: #6d706d;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 9px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .comment-action { border-radius: 1px; }
+    .inline-comment { border-left-color: #d28a12; background: #fff0c7; }
+    .comment-inline-head strong { color: #6f4500; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .rule-legend { border-color: #b7b4ac; background: #f5f2eb; }
+    .legend-item, .family-list span { border-radius: 1px; }
+    .swatch { border-radius: 1px; }
+    .anchor-evidence { border-color: #aaa79f; }
+    .contract-state { border-left: 3px solid #137252; background: #edf5f0; }
+
+    .secondary-button, .primary-button, .close-button, .drawer-form textarea {
+      border-radius: 1px;
+    }
+    .primary-button { border-radius: 1px; background: #1559d6; box-shadow: none; }
+    .primary-button:hover { background: #0c44aa; }
+
+    .drawer-backdrop { background: rgba(17,19,24,.42); }
+    .comment-drawer { border-color: #292d34; background: #fffefb; }
+    .drawer-head { padding-bottom: 18px; border-bottom: 2px solid var(--ink); }
+    .drawer-head strong { font-family: "Songti SC", STSong, serif; font-size: 21px; }
+    .close-button { background: #e9e7e1; }
+    .drawer-target { border-left-color: #1559d6; background: #e9f0ff; }
+    .quote-box { background: #eeece6; }
+    .saved-comment-item { background: #f4f1e9; }
+    .toast { border-radius: 1px; background: #111318; }
+
+    @media (max-width: 1080px) {
+      .app-header { height: 112px; }
+      :root { --header-h: 112px; }
+      .workspace { grid-template-columns: 210px minmax(0, 1fr); }
+      .document-view { padding-left: 36px; padding-right: 36px; }
+      .review-sheet { margin-left: 24px; }
+      .review-sheet::after { left: -27px; }
+    }
+
+    /*
+      One document, one navigation behavior:
+      the outline is collapsed by default and opens as an overlay at every width.
+    */
+    :root { --header-h: 64px; }
+    .app-header {
+      z-index: 60;
+      height: var(--header-h);
+      padding: 0 18px;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 14px;
+    }
+    .brand-area { min-width: 0; }
+    .brand-copy { min-width: 0; }
+    .brand-copy strong {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .brand-copy span { display: none; }
+    .document-switch {
+      order: initial;
+      grid-column: auto;
+      justify-self: center;
+      margin-top: 0;
+      transform: none;
+    }
+    .document-switch button { min-height: 40px; padding: 0 14px; }
+    .header-meta { min-width: 0; gap: 8px; }
+    .save-state { font-size: 10px; }
+    .outline-toggle, .outline-close { display: none; }
+    .outline-toggle {
+      min-height: 40px;
+      padding: 0 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid #4d82ff;
+      border-radius: 1px;
+      color: #fff;
+      background: transparent;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 680;
+      white-space: nowrap;
+    }
+    .outline-toggle svg { width: 15px; height: 15px; }
+    .outline-toggle small { color: #9eb9f8; font-size: 9px; font-weight: 560; }
+    .comment-count-button, .header-save-button { min-height: 40px; }
+    .workspace { display: block; min-height: calc(100vh - var(--header-h)); }
+    .document-outline {
+      position: fixed;
+      top: var(--header-h);
+      bottom: 0;
+      left: 0;
+      z-index: 55;
+      width: min(320px, calc(100vw - 24px));
+      height: calc(100vh - var(--header-h));
+      padding: 24px 20px 42px;
+      border-right: 1px solid #aaa79f;
+      box-shadow: 22px 0 60px rgba(17, 19, 24, .18);
+      transform: translateX(-102%);
+      transition: transform .2s ease;
+    }
+    .document-outline.open { transform: translateX(0); }
+    .outline-close {
+      width: 34px;
+      height: 34px;
+      margin-left: auto;
+      place-items: center;
+      border: 1px solid #b9b7af;
+      border-radius: 1px;
+      color: #515551;
+      background: transparent;
+      cursor: pointer;
+      font-size: 18px;
+    }
+    .outline-title-row { align-items: center; }
+    .outline-title-row .outline-close { display: grid; }
+    .outline-backdrop {
+      position: fixed;
+      inset: var(--header-h) 0 0;
+      z-index: 54;
+      background: rgba(17, 19, 24, .38);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease;
+    }
+    .outline-backdrop.open { opacity: 1; pointer-events: auto; }
+
+    @media (max-width: 1279px) {
+      .reading-surface { padding: 24px 18px 56px; }
+      .document-view {
+        width: 100%;
+        max-width: none;
+        padding: 0 clamp(30px, 4vw, 44px) 64px;
+      }
+      .document-head { padding-top: 48px; }
+      .document-head h1 { font-size: clamp(34px, 4.6vw, 46px); }
+      .document-section { padding-left: 0; padding-right: 0; }
+      .review-proof { grid-template-columns: 1fr; align-items: start; }
+      .proof-agents { justify-content: flex-start; }
+      .sheet-grid, .contract-two-column, .argument-map, .anchor-grid { grid-template-columns: 1fr; }
+      .sheet-meta, .contract-column + .contract-column {
+        padding: 22px 0 0;
+        border: 0;
+        border-top: 1px solid var(--line);
+      }
+      .argument-stage { border-right: 0; border-bottom: 1px solid #383d46; }
+      .argument-stage:last-child { border-bottom: 0; }
+      .contract-state { align-items: flex-start; flex-direction: column; gap: 6px; }
+    }
+
+    @media (max-width: 840px) {
+      .app-header { padding: 0 12px; gap: 10px; }
+      .brand-copy { display: none; }
+      .save-state span { display: none; }
+      .save-state { min-width: 7px; }
+      .document-switch button { padding: 0 10px; }
+      .outline-toggle { padding: 0 8px; }
+      .header-meta { gap: 6px; }
+      .comment-count-button { padding-left: 8px; padding-right: 8px; }
+      .header-save-button { padding-left: 12px; padding-right: 12px; }
+    }
+
+    @media (min-width: 1280px) {
+      .reading-surface { padding: 34px clamp(24px, 2.5vw, 40px) 64px; }
+      .document-view { width: min(1450px, 100%); }
+    }
+
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand-area">
+      <div class="brand-mark" aria-hidden="true">PPT</div>
+      <div class="brand-copy">
+        <strong>智慧园区运营中台解决方案</strong>
+        <span>AI PPT Studio · Editorial Review / 2026</span>
+      </div>
+    </div>
+
+    <nav class="document-switch" aria-label="审阅文档">
+      <button type="button" class="active" data-view="content">内容审阅</button>
+      <button type="button" data-view="visual">视觉合同</button>
+    </nav>
+
+    <div class="header-meta">
+      <button class="outline-toggle" id="outlineToggle" type="button" aria-controls="documentOutline" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        <span>目录</span><small id="outlineToggleLabel">内容</small>
+      </button>
+      <div class="save-state" id="saveState"><i></i><span>所有标记已保存</span></div>
+      <button class="comment-count-button" id="commentCountButton" type="button">1 条标记</button>
+      <button class="primary-button header-save-button" id="headerSaveButton" type="button">保存标记</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <aside class="document-outline" id="documentOutline" aria-label="文档目录" aria-hidden="true">
+      <div class="outline-title-row"><strong id="outlineTitle">内容目录</strong><span>6 页</span><button class="outline-close" id="closeOutline" type="button" aria-label="关闭目录">×</button></div>
+      <div id="contentOutline">
+        <div class="outline-group">
+          <span>整套审阅</span>
+          <button class="outline-link active" type="button" data-target="content-strategy"><b>00</b><em>内容策略与论证结构</em></button>
+        </div>
+        <div class="outline-group">
+          <span>逐页内容</span>
+          <button class="outline-link" type="button" data-target="content-s01"><b>01</b><em>从分散系统走向闭环</em></button>
+          <button class="outline-link" type="button" data-target="content-s02"><b>02</b><em>真正的问题是什么</em></button>
+          <button class="outline-link" type="button" data-target="content-s03"><b>03</b><em>统一事件链</em></button>
+          <button class="outline-link" type="button" data-target="content-s04"><b>04</b><em>四层架构</em></button>
+          <button class="outline-link" type="button" data-target="content-s05"><b>05</b><em>高频事件闭环</em><small>1</small></button>
+          <button class="outline-link" type="button" data-target="content-s06"><b>06</b><em>六个月价值递进</em></button>
+        </div>
+      </div>
+      <div id="visualOutline" hidden>
+        <div class="outline-group">
+          <span>整套合同</span>
+          <button class="outline-link active" type="button" data-target="visual-system"><b>00</b><em>Deck Design System</em></button>
+          <button class="outline-link" type="button" data-target="visual-anchors"><b>A</b><em>锚点页与实机证据</em></button>
+        </div>
+        <div class="outline-group">
+          <span>逐页合同</span>
+          <button class="outline-link" type="button" data-target="visual-s01"><b>01</b><em>封面与设计命题</em></button>
+          <button class="outline-link" type="button" data-target="visual-s02"><b>02</b><em>现状诊断</em></button>
+          <button class="outline-link" type="button" data-target="visual-s03"><b>03</b><em>目标运营模型</em></button>
+          <button class="outline-link" type="button" data-target="visual-s04"><b>04</b><em>解决方案架构</em></button>
+          <button class="outline-link" type="button" data-target="visual-s05"><b>05</b><em>场景证明</em></button>
+          <button class="outline-link" type="button" data-target="visual-s06"><b>06</b><em>路线图与决策</em></button>
+        </div>
+      </div>
+      <p class="outline-foot">目录只负责长文档定位。完整正文、合同和批注始终在主阅读区连续展开。</p>
+    </aside>
+
+    <main class="reading-surface">
+      <section class="document-view" id="contentView">
+        <header class="document-head">
+          <div class="document-kicker">G0 · 用户审阅版本</div>
+          <h1>内容蓝图已经内部通过，等待集中审阅</h1>
+          <p class="document-summary">这份方案以“连接既有系统，形成统一事件闭环”为核心命题，先建立改变的必要性，再证明可落地路径，最后将决策收束到一期范围与联合工作组。</p>
+          <div class="status-row">
+            <span class="status-chip passed">✓ 内部内容审查通过</span>
+            <span class="status-chip version">内容版本 v3</span>
+            <span class="status-chip">6 页 · 3 个章节</span>
+            <span class="status-chip warning">1 条标记已保存</span>
+          </div>
+        </header>
+
+        <section class="document-section" id="content-strategy">
+          <div class="section-label"><b>00</b>整套内容策略</div>
+          <h2>先让领导确认为什么要改变，再证明如何低风险启动</h2>
+          <p class="section-intro">用户看到的版本已经经过售前策略、证据、叙事、表达和独立总编审查；内部失败稿未进入本审阅页。</p>
+          <div class="review-proof">
+            <div><strong>内容内部质量门：通过</strong><p>事实身份、关键主张、证据覆盖、章节推进和逐页表达均已完成隔离审查。</p></div>
+            <div class="proof-agents"><span>售前内容策略专家</span><span>证据审查专家</span><span>叙事审查专家</span><span>独立总编</span></div>
+          </div>
+          <dl class="strategy-table">
+            <div class="strategy-row"><dt>汇报对象</dt><dd>园区管委会领导、运营负责人和信息化负责人</dd></div>
+            <div class="strategy-row"><dt>期望决策</dt><dd>确认一期建设路径、首个闭环场景与双方联合工作组</dd></div>
+            <div class="strategy-row"><dt>核心矛盾</dt><dd>多套专业系统已经建成，但跨系统事件仍依赖电话、表格和人工协调，无法形成统一责任、状态与结果证据。</dd></div>
+            <div class="strategy-row"><dt>方案边界</dt><dd>不推倒重建既有系统；一期以连接、事件编排和可验收场景为主，不承诺六个月覆盖全部能力。</dd></div>
+          </dl>
+          <div class="argument-map">
+            <div class="argument-stage"><small>第一章 · 必要性</small><strong>真正的问题不是缺系统</strong><p>把技术分散转译为领导可判断的运营后果。</p></div>
+            <div class="argument-stage"><small>第二章 · 解决路径</small><strong>用事件链连接已有能力</strong><p>先讲未来如何运营，再给出支撑闭环的四层架构。</p></div>
+            <div class="argument-stage"><small>第三章 · 启动决策</small><strong>用三次验收降低风险</strong><p>从一个高频场景开始，让价值在六个月内逐步可见。</p></div>
+          </div>
+        </section>
+
+        <section class="document-section" aria-labelledby="content-pages-title">
+          <div class="section-label"><b>01</b>完整内容审阅</div>
+          <h2 id="content-pages-title">按最终页序连续阅读全部内容</h2>
+          <p class="section-intro">正文、讲解稿和来源均完整展示。点击任一字段右上角的标记图标，或选中文字后添加意见。</p>
+          <div class="sheet-list">
+            <article class="review-sheet" id="content-s01" data-page="S01">
+              <div class="sheet-index"><div><b>S01</b><span>封面与设计命题</span></div><span class="sheet-state">内容通过</span></div>
+              <h3>从分散系统，走向统一运营闭环</h3>
+              <div class="sheet-grid">
+                <div class="field-stack">
+                  <div class="review-field" data-target="S01 · 页面目标"><span>页面目标</span><p>建立项目愿景，并明确本方案不是推倒重来。</p><button class="comment-action" aria-label="标记 S01 页面目标"></button></div>
+                  <div class="review-field" data-target="S01 · 核心主张"><span>核心主张</span><p>连接既有系统，比再建设一个孤立平台更重要。</p><button class="comment-action" aria-label="标记 S01 核心主张"></button></div>
+                  <div class="review-field" data-target="S01 · 页面文字"><span>页面完整文字</span><ul><li>智慧园区运营中台解决方案</li><li>连接既有系统 · 形成事件闭环 · 六个月看见成效</li></ul><button class="comment-action" aria-label="标记 S01 页面文字"></button></div>
+                  <div class="review-field" data-target="S01 · 讲解稿"><span>完整讲解稿</span><p>本方案关注运营结果，不以替换既有系统为前提。我们先连接关键数据和事件，再用可量化场景证明价值。</p><button class="comment-action" aria-label="标记 S01 讲解稿"></button></div>
+                </div>
+                <aside class="sheet-meta">
+                  <div class="meta-block"><span>事实身份</span><p>方案建议</p></div>
+                  <div class="meta-block"><span>来源</span><p><a class="source-link" href="#">《客户现状》· 全文</a></p></div>
+                  <div class="meta-block"><span>材料使用</span><p>客户现状与核心矛盾</p></div>
+                </aside>
+              </div>
+            </article>
+
+            <article class="review-sheet" id="content-s02" data-page="S02">
+              <div class="sheet-index"><div><b>S02</b><span>现状诊断</span></div><span class="sheet-state">内容通过</span></div>
+              <h3>真正的问题不是缺系统，而是事件无法形成闭环</h3>
+              <div class="sheet-grid">
+                <div class="field-stack">
+                  <div class="review-field" data-target="S02 · 页面目标"><span>页面目标</span><p>把技术分散转化为领导可以判断的运营后果。</p><button class="comment-action" aria-label="标记 S02 页面目标"></button></div>
+                  <div class="review-field" data-target="S02 · 核心主张"><span>核心主张</span><p>系统各自在线，跨部门运营仍然依赖电话和表格。</p><button class="comment-action" aria-label="标记 S02 核心主张"></button></div>
+                  <div class="review-field" data-target="S02 · 页面文字"><span>页面完整文字</span><ul><li>看不全：运行状态分散在多个系统</li><li>转不动：跨部门事件依靠人工协调</li><li>难复盘：处理过程和结果缺少统一证据</li></ul><button class="comment-action" aria-label="标记 S02 页面文字"></button></div>
+                  <div class="review-field" data-target="S02 · 讲解稿"><span>完整讲解稿</span><p>客户材料明确指出安防、能耗、工单、招商和资产系统分别建设。问题不在单个系统不可用，而在跨系统事件没有统一责任、状态和时限。</p><button class="comment-action" aria-label="标记 S02 讲解稿"></button></div>
+                </div>
+                <aside class="sheet-meta">
+                  <div class="meta-block"><span>事实身份</span><p>来源事实 + AI 归纳</p></div>
+                  <div class="meta-block"><span>来源</span><p><a class="source-link" href="#">《客户现状》· 系统现状段落</a></p></div>
+                  <div class="meta-block"><span>证据缺口</span><p>尚缺跨部门事件实际流转记录，当前不使用虚构效率数据。</p></div>
+                </aside>
+              </div>
+            </article>
+
+            <article class="review-sheet" id="content-s03" data-page="S03">
+              <div class="sheet-index"><div><b>S03</b><span>目标运营模型</span></div><span class="sheet-state">内容通过</span></div>
+              <h3>用一条事件链，贯通感知、决策、处置与复盘</h3>
+              <div class="sheet-grid">
+                <div class="field-stack">
+                  <div class="review-field" data-target="S03 · 页面目标"><span>页面目标</span><p>让听众先理解业务闭环，再进入系统架构。</p><button class="comment-action" aria-label="标记 S03 页面目标"></button></div>
+                  <div class="review-field" data-target="S03 · 核心主张"><span>核心主张</span><p>统一事件中枢，是连接现有系统与运营动作的最短路径。</p><button class="comment-action" aria-label="标记 S03 核心主张"></button></div>
+                  <div class="review-field" data-target="S03 · 页面文字"><span>页面完整文字</span><ul><li>感知：汇聚关键状态和异常</li><li>研判：识别影响与优先级</li><li>协同：自动分派责任与时限</li><li>复盘：沉淀证据并持续优化</li></ul><button class="comment-action" aria-label="标记 S03 页面文字"></button></div>
+                  <div class="review-field" data-target="S03 · 讲解稿"><span>完整讲解稿</span><p>这一页不讲产品模块，而讲园区未来每天如何工作。每个异常都进入同一条可追踪链路，领导看到结果，部门看到责任，运营人员看到下一步。</p><button class="comment-action" aria-label="标记 S03 讲解稿"></button></div>
+                </div>
+                <aside class="sheet-meta">
+                  <div class="meta-block"><span>事实身份</span><p>目标运营模式建议</p></div>
+                  <div class="meta-block"><span>来源</span><p><a class="source-link" href="#">《一期目标》· 建设目标</a></p></div>
+                  <div class="meta-block"><span>下游作用</span><p>作为 S04 四层架构的业务前置。</p></div>
+                </aside>
+              </div>
+            </article>
+
+            <article class="review-sheet" id="content-s04" data-page="S04">
+              <div class="sheet-index"><div><b>S04</b><span>解决方案架构</span></div><span class="sheet-state">内容通过</span></div>
+              <h3>四层架构保护既有投资，并把能力逐步汇聚起来</h3>
+              <div class="sheet-grid">
+                <div class="field-stack">
+                  <div class="review-field" data-target="S04 · 页面目标"><span>页面目标</span><p>向业务和技术听众共同证明方案具备可实施性。</p><button class="comment-action" aria-label="标记 S04 页面目标"></button></div>
+                  <div class="review-field" data-target="S04 · 核心主张"><span>核心主张</span><p>以连接和编排为核心，既有系统继续承担专业能力。</p><button class="comment-action" aria-label="标记 S04 核心主张"></button></div>
+                  <div class="review-field" data-target="S04 · 页面文字"><span>页面完整文字</span><ul><li>运营驾驶舱：统一态势与决策视图</li><li>场景应用层：事件、能耗、企业服务与运营分析</li><li>统一事件中枢：规则、工单、协同、时限与复盘</li><li>数据连接层：对接安防、能耗、资产、招商等既有系统</li></ul><button class="comment-action" aria-label="标记 S04 页面文字"></button></div>
+                  <div class="review-field" data-target="S04 · 讲解稿"><span>完整讲解稿</span><p>架构不要求一次性替换现有系统。数据连接层接入关键数据，事件中枢提供跨系统协同，场景应用逐步上线，驾驶舱只展示能够支持决策的结果。</p><button class="comment-action" aria-label="标记 S04 讲解稿"></button></div>
+                </div>
+                <aside class="sheet-meta">
+                  <div class="meta-block"><span>事实身份</span><p>方案建议</p></div>
+                  <div class="meta-block"><span>来源</span><p><a class="source-link" href="#">《客户现状》· 既有系统清单</a></p></div>
+                  <div class="meta-block"><span>必须保持</span><p>不得表达为替换全部现有系统。</p></div>
+                </aside>
+              </div>
+            </article>
+
+            <article class="review-sheet has-comments" id="content-s05" data-page="S05">
+              <div class="sheet-index"><div><b>S05</b><span>场景证明</span></div><span class="sheet-state">有已保存标记</span></div>
+              <h3>先用一个高频事件闭环，证明协同效率可以被改变</h3>
+              <div class="sheet-grid">
+                <div class="field-stack">
+                  <div class="review-field" data-target="S05 · 页面目标"><span>页面目标</span><p>用一个可以验证的模拟案例说明价值形成过程。</p><button class="comment-action" aria-label="标记 S05 页面目标"></button></div>
+                  <div class="review-field" data-target="S05 · 核心主张"><span>核心主张</span><p>减少流转环节，比增加更多展示指标更能快速创造运营价值。</p><button class="comment-action" aria-label="标记 S05 核心主张"></button></div>
+                  <div class="review-field" data-target="S05 · 页面文字"><span>页面完整文字</span><ul><li>现状：发现 → 电话确认 → 表格登记 → 多次转派 → 结果回填</li><li>目标：自动识别 → 统一派单 → 跨部门协同 → 超时提醒 → 结果复盘</li><li>模拟验证：平均流转环节由 6 个减少到 3 个</li></ul><button class="comment-action" aria-label="标记 S05 页面文字"></button></div>
+                  <div class="review-field" data-target="S05 · 讲解稿"><span>完整讲解稿</span><p>本页数据来自模拟案例，仅用于说明验证方法，不代表真实客户成果。正式汇报必须替换为经过确认的案例数据。</p><button class="comment-action" aria-label="标记 S05 讲解稿"></button></div>
+                  <div class="inline-comment" data-comment-id="seed-comment"><div class="comment-inline-head"><strong>已保存标记</strong><span>已绑定当前内容</span></div><p>建议把“6 个减少到 3 个”进一步突出为模拟数据，避免领导误认为这是客户真实成效。</p></div>
+                </div>
+                <aside class="sheet-meta">
+                  <div class="meta-block"><span>事实身份</span><p class="fact-note">模拟数据，禁止作为客户真实成果</p></div>
+                  <div class="meta-block"><span>来源</span><p><a class="source-link" href="#">《会议背景》· 验证场景</a></p></div>
+                  <div class="meta-block"><span>高影响风险</span><p>模拟数据身份若不清晰，将损害整套方案可信度。</p></div>
+                </aside>
+              </div>
+            </article>
+
+            <article class="review-sheet" id="content-s06" data-page="S06">
+              <div class="sheet-index"><div><b>S06</b><span>路线图与决策页</span></div><span class="sheet-state">内容通过</span></div>
+              <h3>六个月不是建完所有能力，而是完成三次可验收的价值递进</h3>
+              <div class="sheet-grid">
+                <div class="field-stack">
+                  <div class="review-field" data-target="S06 · 页面目标"><span>页面目标</span><p>降低启动风险，并把汇报收束到明确的下一步决策。</p><button class="comment-action" aria-label="标记 S06 页面目标"></button></div>
+                  <div class="review-field" data-target="S06 · 核心主张"><span>核心主张</span><p>以场景验收驱动平台生长，确保每个阶段都有可见结果。</p><button class="comment-action" aria-label="标记 S06 核心主张"></button></div>
+                  <div class="review-field" data-target="S06 · 页面文字"><span>页面完整文字</span><ul><li>0–2 月：连接关键系统，建立统一事件底座</li><li>3–4 月：上线首批闭环场景，形成责任与时限机制</li><li>5–6 月：扩展驾驶舱与运营分析，完成一期价值评估</li><li>建议决策：确认一期范围与联合工作组</li></ul><button class="comment-action" aria-label="标记 S06 页面文字"></button></div>
+                  <div class="review-field" data-target="S06 · 讲解稿"><span>完整讲解稿</span><p>一期不追求覆盖所有场景。建议会后共同确认首批系统、首个闭环场景、价值指标和双方工作组，随后进入两周蓝图设计。</p><button class="comment-action" aria-label="标记 S06 讲解稿"></button></div>
+                </div>
+                <aside class="sheet-meta">
+                  <div class="meta-block"><span>事实身份</span><p>一期建设建议</p></div>
+                  <div class="meta-block"><span>来源</span><p><a class="source-link" href="#">《一期目标》· 时间与验收节奏</a></p></div>
+                  <div class="meta-block"><span>用户确认点</span><p>一期范围、首个场景、价值指标、联合工作组。</p></div>
+                </aside>
+              </div>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section class="document-view" id="visualView" hidden>
+        <header class="document-head">
+          <div class="document-kicker">G3 · 整套视觉合同</div>
+          <h1>设计系统、逐页合同与锚点证据已经齐备</h1>
+          <p class="document-summary">整套方案以“克制的前瞻感”为设计命题：深墨蓝建立可信秩序，青绿色表达跨系统连接，少量铜金用于决策强调；内容页保持工程证据的清晰与克制。</p>
+          <div class="status-row">
+            <span class="status-chip passed">✓ G1 概念收敛通过</span>
+            <span class="status-chip passed">✓ G2 工程与实机验证通过</span>
+            <span class="status-chip version">视觉合同 v3</span>
+            <span class="status-chip">严格路线 B</span>
+          </div>
+        </header>
+
+        <section class="document-section" id="visual-system">
+          <div class="section-label"><b>00</b>Deck Design System</div>
+          <h2>用连接光路表达“从分散到闭环”，用编辑秩序保证阅读可信</h2>
+          <p class="section-intro">以下规则适用于整套方案；逐页合同会完整说明具体执行、例外和验证条件。</p>
+          <div class="rule-legend"><div class="legend-row"><span class="legend-item must"><i></i>必须严格遵守</span><span class="legend-item minimum"><i></i>最低审美要求</span><span class="legend-item reference"><i></i>参考实现，可被更优秀方案替代</span></div></div>
+          <dl class="design-system-table">
+            <div class="design-system-row"><dt>设计命题</dt><dd>让领导感到方案稳健、清晰、可落地，同时保留足以建立记忆的前瞻感。</dd></div>
+            <div class="design-system-row"><dt>构图语法</dt><dd>一页一个核心主张；结构页使用大关系而不是卡片墙；证据页使用强网格与清晰编号；相邻页面轮廓必须有变化。</dd></div>
+            <div class="design-system-row"><dt>色彩系统</dt><dd><div class="palette-line"><i class="swatch" style="background:#17233a" title="深墨蓝"></i><i class="swatch" style="background:#22334f" title="海军蓝"></i><i class="swatch" style="background:#21a58f" title="青绿"></i><i class="swatch" style="background:#c88b56" title="铜金"></i><i class="swatch" style="background:#f5f2ea" title="暖纸白"></i></div></dd></div>
+            <div class="design-system-row"><dt>字体与层级</dt><dd>中文使用苹方，Windows 替代为微软雅黑；一级标题 28–32pt、正文 15–18pt；标题不为适配布局而牺牲语义。</dd></div>
+            <div class="design-system-row"><dt>页面家族</dt><dd><div class="family-list"><span>封面/章节页</span><span>判断页</span><span>关系结构页</span><span>证据页</span><span>路线图/决策页</span></div></dd></div>
+            <div class="design-system-row"><dt>可编辑边界</dt><dd>事实文字、数字、关系、表格、流程和架构全部使用 PowerPoint 原生对象；背景、纹理和非语义光效允许作为独立可替换图片层。</dd></div>
+            <div class="design-system-row"><dt>明确禁止</dt><dd>蓝色科技模板、密集仪表盘、整页位图、霓虹赛博朋克、无来源数字、用 Image 2 生成带业务文字的整页方案。</dd></div>
+          </dl>
+        </section>
+
+        <section class="document-section" id="visual-anchors">
+          <div class="section-label"><b>A</b>Anchor Slide Evidence</div>
+          <h2>锚点页已经完成原生设计与目标 PowerPoint 实机复核</h2>
+          <p class="section-intro">这里展示最终采纳证据，不再提供方向选择。两页分别覆盖场景视觉与复杂架构两类高风险页面。</p>
+          <div class="anchor-grid">
+            <article class="anchor-evidence">
+              <div class="anchor-slide cover"><div class="anchor-slide-content"><small>PRESALES SOLUTION / 2026</small><strong>智慧园区运营中台解决方案</strong><p>连接既有系统 · 形成事件闭环 · 六个月看见成效</p></div></div>
+              <div class="anchor-caption"><div class="evidence-title"><strong>S01 · 封面页锚点</strong><span>四门通过</span></div><div class="proof-line"><b>PowerPoint for macOS</b><span>原生首版</span><span>非语义背景层可替换</span></div></div>
+            </article>
+            <article class="anchor-evidence">
+              <div class="anchor-slide architecture"><div class="arch-title">四层架构保护既有投资</div><div class="arch-layers"><div><span>运营驾驶舱</span><span>统一态势与决策</span></div><div><span>场景应用层</span><span>事件 · 能耗 · 企业服务</span></div><div><span>统一事件中枢</span><span>规则 · 协同 · 时限 · 复盘</span></div><div><span>数据连接层</span><span>既有专业系统</span></div></div></div>
+              <div class="anchor-caption"><div class="evidence-title"><strong>S04 · 架构页锚点</strong><span>四门通过</span></div><div class="proof-line"><b>PowerPoint for macOS</b><span>文字与关系原生可编辑</span><span>无整页位图</span></div></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="document-section" aria-labelledby="visual-pages-title">
+          <div class="section-label"><b>01</b>全部 Slide Visual Contract</div>
+          <h2 id="visual-pages-title">冻结内容与视觉实现逐页对应</h2>
+          <p class="section-intro">每页都完整展示内容、讲解稿、来源、构图、层级、介质边界和硬验收条件。</p>
+          <div class="sheet-list" id="visualContractList"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="outline-backdrop" id="outlineBackdrop"></div>
+
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+  <aside class="comment-drawer" id="commentDrawer" aria-label="保存标记" aria-hidden="true">
+    <div class="drawer-head"><strong id="drawerTitle">添加标记</strong><button class="close-button" id="closeDrawer" type="button" aria-label="关闭">×</button></div>
+    <div class="drawer-target"><b>目标</b><span id="drawerTarget">尚未选择区块</span></div>
+    <div class="quote-box" id="quoteBox">选择文字或点击字段右上角的标记图标。</div>
+    <form class="drawer-form" id="commentForm">
+      <label for="commentText">修改意见</label>
+      <textarea id="commentText" placeholder="说明你观察到的问题或希望调整的方向。专业评审由聊天中的后续流程统一处理，不会把意见直接泛化为规则。"></textarea>
+      <p class="drawer-note">保存后，标记会绑定当前内容或视觉合同；专业评审与修订由聊天中的后续流程承接。</p>
+      <div class="drawer-actions"><button class="text-button" id="cancelComment" type="button">取消</button><button class="primary-button" id="saveComment" type="submit">保存标记</button></div>
+    </form>
+    <div class="saved-comments" id="savedComments"><strong>当前已保存标记</strong><div id="savedCommentList"></div></div>
+  </aside>
+
+  <div class="selection-toolbar" id="selectionToolbar"><button type="button" id="markSelection">标记选中内容</button></div>
+
+  <div class="toast" id="toast"><span>✓</span><span id="toastText">标记已保存</span></div>
+
+  <script>
+    const iconMarkup = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></svg>';
+    document.querySelectorAll('.comment-action').forEach((button) => { button.innerHTML = iconMarkup; });
+
+    const visualContracts = [
+      {
+        id: 'S01', role: '封面与设计命题', title: '从分散系统，走向统一运营闭环',
+        content: ['智慧园区运营中台解决方案', '连接既有系统 · 形成事件闭环 · 六个月看见成效'],
+        notes: '本方案关注运营结果，不以替换既有系统为前提。', source: '《客户现状》· 全文',
+        layout: '左右分割构图。左侧 54% 承载标题与核心主张，右侧真实园区场景形成可信尺度，中线青绿连接光路作为唯一强记忆点。',
+        hierarchy: '项目名称 → 核心命题 → 三段式价值表达；避免加入模块清单或指标。', media: '宽幅真实园区场景；可使用独立可替换的非语义环境图，不含业务文字。',
+        editable: '标题、副标题、连接线与页脚均为 PowerPoint 原生对象。'
+      },
+      {
+        id: 'S02', role: '现状诊断', title: '真正的问题不是缺系统，而是事件无法形成闭环',
+        content: ['看不全：运行状态分散在多个系统', '转不动：跨部门事件依靠人工协调', '难复盘：处理过程和结果缺少统一证据'],
+        notes: '问题不在单个系统不可用，而在跨系统事件没有统一责任、状态和时限。', source: '《客户现状》· 系统现状段落',
+        layout: '横向三段后果链，不使用三张孤立卡片。三类问题通过一条断裂的事件路径相连，结论在页面顶部先行。',
+        hierarchy: '核心判断 → 三类运营后果 → 来源脚注；“缺系统”与“缺闭环”形成清晰对照。', media: '不使用装饰性科技图片；以原生关系线、标签和少量系统图标表达。',
+        editable: '全部文字、图标、关系线和强调块原生可编辑。'
+      },
+      {
+        id: 'S03', role: '目标运营模型', title: '用一条事件链，贯通感知、决策、处置与复盘',
+        content: ['感知：汇聚关键状态和异常', '研判：识别影响与优先级', '协同：自动分派责任与时限', '复盘：沉淀证据并持续优化'],
+        notes: '每个异常都进入同一条可追踪链路。', source: '《一期目标》· 建设目标',
+        layout: '中心闭环作为页面唯一视觉焦点，四个动作按顺时针阅读；中央说明“统一事件中枢”的作用，而不是放产品 Logo。',
+        hierarchy: '核心主张 → 四阶段闭环 → 对不同角色的结果说明。', media: '所有关系与文字使用原生对象；可选的低对比纹理只能作为独立背景层。',
+        editable: '节点、箭头、阶段名称、说明文字全部可单独修改。'
+      },
+      {
+        id: 'S04', role: '解决方案架构', title: '四层架构保护既有投资，并把能力逐步汇聚起来',
+        content: ['运营驾驶舱', '场景应用层', '统一事件中枢', '数据连接层'],
+        notes: '架构不要求一次性替换现有系统。', source: '《客户现状》· 既有系统清单',
+        layout: '采用纵向四层主结构，以“统一事件中枢”为深色核心层；右侧用细线说明每层业务结果，不使用密集图标墙。',
+        hierarchy: '标题 → 四层关系 → 中枢强调 → 既有系统边界。', media: '架构、图标、文字和关系必须原生编辑；禁止将架构图整体转为图片。',
+        editable: '层级块、说明、接口关系与系统标签均为 PowerPoint 原生对象。'
+      },
+      {
+        id: 'S05', role: '场景证明', title: '先用一个高频事件闭环，证明协同效率可以被改变',
+        content: ['现状流程', '目标流程', '模拟验证：平均流转环节由 6 个减少到 3 个'],
+        notes: '模拟数据仅用于说明验证方法，不代表客户真实成果。', source: '《会议背景》· 验证场景',
+        layout: '上下两条流程形成直接对照；模拟结论位于右侧独立证据区，并紧邻“模拟数据”身份标签。',
+        hierarchy: '流程差异 → 环节变化 → 数据身份与验证方法。', media: '流程、节点和数字全部原生；不用生成式图片表现业务过程。',
+        editable: '所有流程节点、连接关系、数字和标签均可编辑；模拟身份不可删除。'
+      },
+      {
+        id: 'S06', role: '路线图与决策页', title: '六个月不是建完所有能力，而是完成三次可验收的价值递进',
+        content: ['0–2 月：建立事件底座', '3–4 月：上线首批闭环场景', '5–6 月：扩展驾驶舱与运营分析', '建议决策：确认一期范围与联合工作组'],
+        notes: '一期不追求覆盖所有场景。', source: '《一期目标》· 时间与验收节奏',
+        layout: '三阶段路线图横向推进，每阶段用“成果 + 验收证据”双层表达；最终决策在右下形成明确收束。',
+        hierarchy: '六个月边界 → 三次价值递进 → 会后决策。', media: '时间轴、阶段块、里程碑和决策文字全部原生；避免装饰性人物插画。',
+        editable: '阶段时间、成果、验收证据和决策动作均为独立对象。'
+      }
+    ];
+
+    const visualContractList = document.getElementById('visualContractList');
+    visualContractList.innerHTML = visualContracts.map((item) => `
+      <article class="review-sheet visual-contract-sheet" id="visual-${item.id.toLowerCase()}" data-page="${item.id}">
+        <div class="sheet-index"><div><b>${item.id}</b><span>${item.role}</span></div><span class="sheet-state">合同通过</span></div>
+        <h3>${item.title}</h3>
+        <div class="contract-two-column">
+          <section class="contract-column">
+            <h4>冻结内容</h4>
+            <div class="contract-field" data-target="${item.id} · 冻结内容"><span>页面完整文字</span><ul>${item.content.map(text => `<li>${text}</li>`).join('')}</ul><button class="comment-action" aria-label="标记 ${item.id} 冻结内容">${iconMarkup}</button></div>
+            <div class="contract-field" data-target="${item.id} · 讲解稿"><span>完整讲解稿</span><p>${item.notes}</p><button class="comment-action" aria-label="标记 ${item.id} 讲解稿">${iconMarkup}</button></div>
+            <div class="contract-field" data-target="${item.id} · 来源"><span>来源与素材</span><p>${item.source}</p><button class="comment-action" aria-label="标记 ${item.id} 来源">${iconMarkup}</button></div>
+          </section>
+          <section class="contract-column">
+            <h4>视觉实现合同</h4>
+            <div class="contract-field" data-target="${item.id} · 构图"><span>信息层级与构图</span><p>${item.layout}</p><button class="comment-action" aria-label="标记 ${item.id} 构图">${iconMarkup}</button></div>
+            <div class="contract-field" data-target="${item.id} · 阅读顺序"><span>阅读顺序</span><p>${item.hierarchy}</p><button class="comment-action" aria-label="标记 ${item.id} 阅读顺序">${iconMarkup}</button></div>
+            <div class="contract-field" data-target="${item.id} · 介质边界"><span>图片与介质边界</span><p>${item.media}</p><button class="comment-action" aria-label="标记 ${item.id} 介质边界">${iconMarkup}</button></div>
+            <div class="contract-field" data-target="${item.id} · 可编辑性"><span>可编辑要求</span><p>${item.editable}</p><button class="comment-action" aria-label="标记 ${item.id} 可编辑性">${iconMarkup}</button></div>
+          </section>
+        </div>
+        <div class="contract-state"><span>业务语义、视觉完成度、排版工程、目标 PowerPoint 渲染：全部通过</span><span>当前平台：macOS · PowerPoint 桌面版</span></div>
+      </article>`).join('');
+
+    const state = {
+      view: 'content',
+      target: '',
+      quote: '',
+      draft: '',
+      comments: JSON.parse(localStorage.getItem('aiPptReviewComments') || '[]'),
+    };
+    const seedComment = { id: 'seed-comment', target: 'S05 · 页面文字', quote: '模拟验证：平均流转环节由 6 个减少到 3 个', text: '建议把“6 个减少到 3 个”进一步突出为模拟数据，避免领导误认为这是客户真实成效。', view: 'content', seed: true };
+
+    const contentView = document.getElementById('contentView');
+    const visualView = document.getElementById('visualView');
+    const contentOutline = document.getElementById('contentOutline');
+    const visualOutline = document.getElementById('visualOutline');
+    const documentOutline = document.getElementById('documentOutline');
+    const outlineToggle = document.getElementById('outlineToggle');
+    const outlineToggleLabel = document.getElementById('outlineToggleLabel');
+    const outlineBackdrop = document.getElementById('outlineBackdrop');
+    const closeOutlineButton = document.getElementById('closeOutline');
+    const commentDrawer = document.getElementById('commentDrawer');
+    const drawerBackdrop = document.getElementById('drawerBackdrop');
+    const commentText = document.getElementById('commentText');
+    const drawerTarget = document.getElementById('drawerTarget');
+    const quoteBox = document.getElementById('quoteBox');
+    const saveState = document.getElementById('saveState');
+    const commentCountButton = document.getElementById('commentCountButton');
+    const headerSaveButton = document.getElementById('headerSaveButton');
+    const savedCommentList = document.getElementById('savedCommentList');
+    const selectionToolbar = document.getElementById('selectionToolbar');
+    const toast = document.getElementById('toast');
+    const toastText = document.getElementById('toastText');
+
+    function allComments() { return [seedComment, ...state.comments]; }
+    function currentViewComments() { return allComments().filter(comment => comment.view === state.view); }
+
+    function setOutlineState(open, restoreFocus = false) {
+      documentOutline.classList.toggle('open', open);
+      outlineBackdrop.classList.toggle('open', open);
+      outlineToggle.setAttribute('aria-expanded', String(open));
+      documentOutline.setAttribute('aria-hidden', String(!open));
+      if (!open && restoreFocus) outlineToggle.focus();
+    }
+
+    function openOutline() {
+      if (commentDrawer.classList.contains('open')) return;
+      setOutlineState(true);
+      window.setTimeout(() => documentOutline.querySelector('.outline-link:not([hidden])')?.focus(), 120);
+    }
+
+    function closeOutline(restoreFocus = false) { setOutlineState(false, restoreFocus); }
+
+    function updateStatus() {
+      const hasDraft = Boolean(commentText.value.trim());
+      saveState.classList.toggle('unsaved', hasDraft);
+      saveState.querySelector('span').textContent = hasDraft ? '有标记尚未保存' : '所有标记已保存';
+      const currentCount = currentViewComments().length;
+      commentCountButton.textContent = `${currentCount} 条标记`;
+      headerSaveButton.textContent = hasDraft ? '保存当前标记' : '保存标记';
+    }
+
+    function renderComments() {
+      const comments = currentViewComments();
+      savedCommentList.innerHTML = comments.length ? comments.map(comment => `<article class="saved-comment-item"><span>${comment.target} · 已保存</span><p>${comment.text}</p></article>`).join('') : '<p class="drawer-note">当前文档还没有保存的标记。</p>';
+      updateStatus();
+    }
+
+    function openDrawer(target = '', quote = '') {
+      closeOutline();
+      state.target = target;
+      state.quote = quote;
+      drawerTarget.textContent = target || '查看全部标记';
+      quoteBox.textContent = quote || (target ? '标记将绑定这个区块和当前版本。' : '从列表查看已保存标记，或关闭后在正文中选择目标。');
+      document.getElementById('commentForm').hidden = !target;
+      commentDrawer.classList.add('open');
+      drawerBackdrop.classList.add('open');
+      commentDrawer.setAttribute('aria-hidden', 'false');
+      renderComments();
+      if (target) setTimeout(() => commentText.focus(), 180);
+    }
+
+    function closeDrawer() {
+      if (commentText.value.trim() && !confirm('当前标记尚未保存，确定放弃吗？')) return;
+      commentText.value = '';
+      state.draft = '';
+      commentDrawer.classList.remove('open');
+      drawerBackdrop.classList.remove('open');
+      commentDrawer.setAttribute('aria-hidden', 'true');
+      updateStatus();
+    }
+
+    function showToast(message) {
+      toastText.textContent = message;
+      toast.classList.add('show');
+      window.clearTimeout(showToast.timer);
+      showToast.timer = window.setTimeout(() => toast.classList.remove('show'), 2400);
+    }
+
+    function markSheet(target) {
+      const page = target.split(' · ')[0].toLowerCase();
+      const id = `${state.view}-${page}`;
+      const sheet = document.getElementById(id);
+      if (sheet) sheet.classList.add('has-comments');
+    }
+
+    function saveCurrentComment() {
+      const text = commentText.value.trim();
+      if (!text || !state.target) return;
+      const comment = { id: `comment-${Date.now()}`, target: state.target, quote: state.quote, text, view: state.view };
+      state.comments.push(comment);
+      localStorage.setItem('aiPptReviewComments', JSON.stringify(state.comments));
+      markSheet(state.target);
+      commentText.value = '';
+      state.draft = '';
+      renderComments();
+      showToast('标记已保存，并绑定当前版本');
+      closeDrawer();
+    }
+
+    document.querySelectorAll('.document-switch button').forEach(button => {
+      button.addEventListener('click', () => {
+        if (commentText.value.trim() && !confirm('当前标记尚未保存，切换文档会放弃输入。是否继续？')) return;
+        commentText.value = '';
+        state.view = button.dataset.view;
+        document.querySelectorAll('.document-switch button').forEach(item => item.classList.toggle('active', item === button));
+        contentView.hidden = state.view !== 'content';
+        visualView.hidden = state.view !== 'visual';
+        contentOutline.hidden = state.view !== 'content';
+        visualOutline.hidden = state.view !== 'visual';
+        document.getElementById('outlineTitle').textContent = state.view === 'content' ? '内容目录' : '视觉合同目录';
+        outlineToggleLabel.textContent = state.view === 'content' ? '内容' : '视觉合同';
+        closeOutline();
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        renderComments();
+      });
+    });
+
+    document.addEventListener('click', (event) => {
+      const commentButton = event.target.closest('.comment-action');
+      if (commentButton) {
+        const field = commentButton.closest('[data-target]');
+        const quote = field ? field.innerText.replace('标记', '').trim().slice(0, 180) : '';
+        openDrawer(field?.dataset.target || '', quote);
+        return;
+      }
+      const outlineLink = event.target.closest('.outline-link');
+      if (outlineLink) {
+        const target = document.getElementById(outlineLink.dataset.target);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          target.setAttribute('tabindex', '-1');
+          target.focus({ preventScroll: true });
+        }
+        outlineLink.parentElement.parentElement.querySelectorAll('.outline-link').forEach(link => link.classList.toggle('active', link === outlineLink));
+        closeOutline();
+      }
+    });
+
+    document.addEventListener('mouseup', (event) => {
+      if (commentDrawer.contains(event.target) || event.target.closest('button')) return;
+      const selection = window.getSelection();
+      const text = selection?.toString().trim();
+      const anchor = selection?.anchorNode?.parentElement?.closest('[data-target], .review-sheet');
+      if (!text || text.length < 4 || !anchor) { selectionToolbar.classList.remove('visible'); return; }
+      const range = selection.getRangeAt(0).getBoundingClientRect();
+      state.quote = text.slice(0, 220);
+      state.target = anchor.dataset.target || `${anchor.dataset.page} · 页面整体`;
+      selectionToolbar.style.left = `${Math.min(window.innerWidth - 150, Math.max(12, range.left + range.width / 2 - 58))}px`;
+      selectionToolbar.style.top = `${Math.max(74, range.top - 44)}px`;
+      selectionToolbar.classList.add('visible');
+    });
+
+    document.getElementById('markSelection').addEventListener('click', () => {
+      selectionToolbar.classList.remove('visible');
+      openDrawer(state.target, state.quote);
+      window.getSelection()?.removeAllRanges();
+    });
+    document.getElementById('commentForm').addEventListener('submit', (event) => { event.preventDefault(); saveCurrentComment(); });
+    commentText.addEventListener('input', updateStatus);
+    document.getElementById('closeDrawer').addEventListener('click', closeDrawer);
+    document.getElementById('cancelComment').addEventListener('click', closeDrawer);
+    drawerBackdrop.addEventListener('click', closeDrawer);
+    commentCountButton.addEventListener('click', () => openDrawer());
+    outlineToggle.addEventListener('click', () => documentOutline.classList.contains('open') ? closeOutline(true) : openOutline());
+    closeOutlineButton.addEventListener('click', () => closeOutline(true));
+    outlineBackdrop.addEventListener('click', () => closeOutline(true));
+
+    headerSaveButton.addEventListener('click', () => {
+      if (commentText.value.trim()) { saveCurrentComment(); return; }
+      localStorage.setItem('aiPptReviewComments', JSON.stringify(state.comments));
+      updateStatus();
+      const count = currentViewComments().length;
+      showToast(count ? `${count} 条标记已保存` : '当前没有需要保存的标记');
+    });
+
+    window.addEventListener('beforeunload', (event) => {
+      if (commentText.value.trim()) { event.preventDefault(); event.returnValue = ''; }
+    });
+    document.addEventListener('keydown', (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's' && commentText.value.trim()) { event.preventDefault(); saveCurrentComment(); }
+      if (event.key === 'Escape') {
+        if (commentDrawer.classList.contains('open')) closeDrawer();
+        else if (documentOutline.classList.contains('open')) closeOutline(true);
+      }
+    });
+
+    setOutlineState(false);
+    renderComments();
+  </script>
+</body>
+</html>
