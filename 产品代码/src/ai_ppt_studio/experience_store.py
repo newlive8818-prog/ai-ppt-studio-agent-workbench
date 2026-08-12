@@ -8,7 +8,7 @@ import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Protocol
 
 from .config import RuntimeConfig
 from .errors import ExperienceValidationError
@@ -20,7 +20,6 @@ from .experience_models import (
     ExperienceLevel,
 )
 from .json_io import append_jsonl, atomic_write_json
-from .models import ProjectManifest
 from .paths import PathPolicy
 
 
@@ -32,6 +31,13 @@ CONTEXT_TO_SCOPE = {
     "conditions": "conditions",
 }
 MATCH_WEIGHTS = {"scene": 4, "audience": 3, "slide_task": 3, "conditions": 1}
+
+
+class ProjectIdentity(Protocol):
+    """Minimal schema-independent identity accepted by personal experience memory."""
+
+    project_id: str
+    project_root: Path
 
 
 def _now() -> str:
@@ -125,7 +131,7 @@ class ExperienceStore:
         }
 
     def create_candidate(
-        self, project: ProjectManifest, payload: dict[str, object]
+        self, project: ProjectIdentity, payload: dict[str, object]
     ) -> CandidateExperience:
         self.initialize()
         validated = self._validate_candidate_payload(payload)
@@ -244,7 +250,7 @@ class ExperienceStore:
 
     def record_application(
         self,
-        project: ProjectManifest,
+        project: ProjectIdentity,
         experience_id: str,
         context: dict[str, object],
     ) -> ExperienceApplication:
@@ -261,7 +267,7 @@ class ExperienceStore:
             experience_id=experience.experience_id,
             experience_version=experience.version,
             project_id=project.project_id,
-            project_root=project.project_root,
+            project_root=str(project.project_root),
             context={
                 "scene": normalized["scene"][0],
                 "audience": normalized["audience"][0],

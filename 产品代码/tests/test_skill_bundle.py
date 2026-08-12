@@ -66,7 +66,7 @@ class SkillBundleTests(unittest.TestCase):
             self.assertFalse(evolution["stable_kernel_auto_mutation"])
             self.assertEqual(
                 (bundle / "runtime" / "VERSION").read_text(encoding="utf-8").strip(),
-                "0.2.0",
+                "0.4.0",
             )
 
 

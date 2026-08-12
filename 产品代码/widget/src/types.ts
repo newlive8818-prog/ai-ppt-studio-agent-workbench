@@ -1,155 +1,133 @@
 export type SpaceId = "overview" | "materials" | "blueprint" | "visual" | "delivery";
 
-export interface AgentTaskSummary {
-  task_id: string;
-  action_type: string;
-  status: string;
-  updated_at?: string;
+export type GateStatus = "locked" | "open" | "user-reviewable" | "passed" | "failed";
+export type WorkspaceStatus = GateStatus | "ready" | "needs-input" | "pending";
+
+export type WorkspaceActionKind =
+  | "continue-chat"
+  | "confirm-mission"
+  | "open-content-review"
+  | "open-visual-review"
+  | "none";
+
+export interface WorkspacePrimaryAction {
+  kind: WorkspaceActionKind;
+  label: string;
+  enabled: boolean;
 }
 
-export interface MaterialsProjection {
-  status: string;
-  source_count: number;
-  summary: string;
-  sources: Array<{
-    source_id: string;
-    source_ref: string;
-    name: string;
-    kind: string;
-    mode: string;
-    size_bytes: number | null;
-    classification: string;
-    purposes: string[];
-    status: string;
-  }>;
-  findings: Array<{
-    finding_id: string;
-    finding_type: string;
-    content: string;
-    source_ref: string;
-    locator: string;
-    fact_status: string;
-    purposes: string[];
-  }>;
-  conflicts: string[];
-  gaps: string[];
-  active_task: AgentTaskSummary | null;
-}
-
-export interface BlueprintSlide {
-  slide_id: string;
-  title: string;
-  role: string;
-  purpose: string;
-  claim: string;
-  visible_content: string[];
-  speaker_notes: string;
-  source_refs: string[];
-  material_refs: string[];
-  fact_status: string;
-}
-
-export interface BlueprintProjection {
-  status: string;
-  title: string;
-  audience: string;
-  goal: string;
-  context: string;
-  narrative_thesis: string;
-  chapters: Array<{ title: string; slide_ids: string[] }>;
-  slides: BlueprintSlide[];
-  slide_count: number;
-  source_coverage: { available: number; referenced: number; unreferenced: number };
-  active_task: AgentTaskSummary | null;
-}
-
-export interface VisualDirection {
-  id: string;
-  name: string;
-  thesis: string;
-  composition: string;
-  density: string;
-  image_language: string;
+export interface CognitionSpaceProjection {
+  status: WorkspaceStatus;
+  conclusion: string;
+  focus: string;
   risk: string;
-  sample_asset_ref: string;
-  sample_exists: boolean;
+  affected_artifacts: string[];
+  high_impact_count: number;
+  primary_action: WorkspacePrimaryAction;
 }
 
-export interface EngineeringSample {
-  sample_id: string;
-  slide_refs: string[];
-  render_ref: string;
-  render_exists: boolean;
-  native_element_ratio: number;
-  editable: boolean;
-  notes: string;
-}
-
-export interface VisualProjection {
-  status: string;
-  visual_brief: {
-    design_challenge: string;
-    audience: string;
-    desired_response: string;
-    design_posture: string;
+export interface OverviewWorkspaceProjection extends CognitionSpaceProjection {
+  delivery_goal: string;
+  audiences: string[];
+  topic: string;
+  mission_status?: "draft" | "confirmable" | "reopened" | "superseded";
+  mission_draft_ref?: string;
+  mission_confirmation_ref?: string;
+  material_mode?: "materials-provided" | "no-materials-confirmed" | "unconfirmed";
+  content_identity_mode?: "material-backed" | "proposal-only" | "blocked";
+  mission_card?: {
+    topic: string;
+    primary_audience: string;
+    desired_judgment_or_action: string;
+    material_state: "materials-provided" | "no-materials";
+    material_inventory_ref: string;
+    materials: string[];
+    background: string[];
     constraints: string[];
-    visual_prohibitions: string[];
+    red_lines: string[];
+    unknowns: string[];
   };
-  directions: VisualDirection[];
-  direction_count: number;
-  recommended_direction: string;
-  selected_direction: string;
-  engineering_samples: EngineeringSample[];
-  engineering_summary: string;
-  native_coverage: Record<string, boolean>;
-  engineering_qa_status: string;
-  visual_contract: {
-    design_thesis: string;
-    palette: Record<string, string>;
-    typography: Record<string, string>;
-    layout_rules: string[];
-    image_language: string[];
-    editability_rules: string[];
-    page_families: string[];
-  };
-  scene_graph_coverage: number;
-  active_task: AgentTaskSummary | null;
 }
 
-export interface DeliveryProjection {
-  status: string;
-  gate_state: {
-    current_gate: string;
-    gates: Record<string, string>;
-  };
-  pptx_ref: string;
-  pptx_exists: boolean;
-  slide_count: number;
-  renders: Array<{ asset_ref: string; exists: boolean }>;
-  render_count: number;
-  qa_status: string;
-  editable: boolean;
-  whole_slide_bitmap: boolean;
-  validation_ref: string;
-  qa_checks: Record<string, unknown>;
-  qa_notes: string[];
-  qa_issues: string[];
+export interface MaterialsWorkspaceProjection extends CognitionSpaceProjection {
   source_count: number;
-  active_task: AgentTaskSummary | null;
+  parsed_count: number;
+  failed_count: number;
+  authorization_count: number;
+  external_search: boolean;
 }
 
-export interface SpaceProjections {
-  materials: MaterialsProjection;
-  blueprint: BlueprintProjection;
-  visual: VisualProjection;
-  delivery: DeliveryProjection;
+export interface BlueprintWorkspaceProjection extends CognitionSpaceProjection {
+  phase: GateStatus;
+  internal_status: DeliveryStatusProjection;
+  slide_count: number;
+  saved_mark_count: number;
+  review_available: boolean;
+  source_version: string;
+}
+
+export interface VisualWorkspaceProjection extends CognitionSpaceProjection {
+  g1_status: GateStatus;
+  g2_status: GateStatus;
+  g3_status: GateStatus;
+  saved_mark_count: number;
+  review_available: boolean;
+  source_version: string;
+  production_route: string;
+}
+
+export type DeliveryStatusProjection = "passed" | "failed" | "pending" | "locked";
+
+export type DeliveryTargetId =
+  | "macos-powerpoint"
+  | "macos-wps"
+  | "windows-powerpoint"
+  | "windows-wps";
+
+export interface TargetStatusProjection {
+  target_id: DeliveryTargetId;
+  status: DeliveryStatusProjection;
+  pptx_sha256: string;
+  [key: string]: unknown;
+}
+
+export interface DeliveryWorkspaceProjection extends CognitionSpaceProjection {
+  phase: GateStatus;
+  slides: { completed: number; total: number };
+  quality_gates: {
+    semantic: DeliveryStatusProjection;
+    aesthetic: DeliveryStatusProjection;
+    engineering: DeliveryStatusProjection;
+    target_render: DeliveryStatusProjection;
+  };
+  highest_blocker: string | null;
+  targets: TargetStatusProjection[];
+  hash_identity: string;
+  chat_send: {
+    status: "pending" | "sent" | "failed";
+    message_ref?: string;
+    sent_at?: string;
+  };
+}
+
+export interface WorkspaceProjection {
+  active_space: SpaceId;
+  navigation: Array<{
+    space_id: SpaceId;
+    label: string;
+    status: WorkspaceStatus;
+    high_impact_count: number;
+  }>;
+  overview: OverviewWorkspaceProjection;
+  materials: MaterialsWorkspaceProjection;
+  blueprint: BlueprintWorkspaceProjection;
+  visual: VisualWorkspaceProjection;
+  delivery: DeliveryWorkspaceProjection;
 }
 
 export interface ProjectSnapshot {
-  schema_version: string;
+  schema_version: "3.0";
   revision: number;
-  updated_at: string;
-  active_space: SpaceId;
   project: {
     project_id: string;
     name: string;
@@ -157,46 +135,93 @@ export interface ProjectSnapshot {
   };
   gate_state: {
     current_gate: string;
-    gates: Record<string, string>;
+    gates: Record<string, GateStatus>;
   };
-  cognition_map: {
-    delivery_goal: string;
-    audiences: string[];
-    problem: string;
-    ai_judgment: string;
-    facts: Array<Record<string, unknown>>;
-    confirmed_decisions: Array<Record<string, unknown>>;
-    uncertainty: string;
-    affected_artifacts: string[];
-    outcome_status: string;
-    dialogue_focus: string;
-  };
-  artifacts: Record<string, {
-    kind: string;
-    version: number;
-    path: string;
-    sha256: string;
-    created_at: string;
-  }>;
-  space_projections?: SpaceProjections;
-  current_decision: {
-    target_ref: string;
-    status: string;
-    question: string;
-    why_now?: string;
-    options?: string[];
-    recommended_choice?: string;
-    reversible?: boolean;
-  };
-  last_human_decision_id: string | null;
+  artifacts: Record<string, string>;
+  missionDraftRef?: string;
+  missionConfirmationRef?: string;
+  materialMode?: "materials-provided" | "no-materials-confirmed" | "unconfirmed";
+  contentIdentityMode?: "material-backed" | "proposal-only" | "blocked";
+  workspace: WorkspaceProjection;
+  experience: Record<string, unknown>;
   allowed_next_actions: string[];
 }
 
 export interface WidgetData {
+  surface?: "workbench";
   snapshot: ProjectSnapshot;
   selectedProjectRoot?: string;
   initialSpace?: SpaceId;
-  requestedDisplayMode?: "inline" | "fullscreen";
+  previewEvidence?: PreviewEvidence;
+}
+
+export interface PreviewEvidence {
+  evidenceScope: "local-development-preview";
+  proofEligible: false;
+  realHostEvidence: false;
+}
+
+export interface ReviewMark {
+  mark_id: string;
+  field_anchor: string;
+  exact_text: string;
+  prefix: string;
+  suffix: string;
+  comment: string;
+}
+
+export interface ReviewField {
+  anchor: string;
+  label: string;
+  value: unknown;
+}
+
+export interface ReviewSection {
+  anchor: string;
+  title: string;
+  fields: ReviewField[];
+}
+
+export interface ReviewProjection {
+  review_type: "content" | "visual";
+  display_policy: "professional-review";
+  project_id: string;
+  project_name: string;
+  title: string;
+  revision: number;
+  status: string;
+  gate_status: Partial<Record<"G0" | "G1" | "G2" | "G3" | "G4", GateStatus>>;
+  source_version: string;
+  source_refs: string[];
+  generated_at?: string;
+  sections: ReviewSection[];
+  outline: Array<{ anchor: string; title: string }>;
+  mark_set: {
+    mark_set_id?: string;
+    project_id?: string;
+    review_type?: string;
+    source_version?: string;
+    revision?: number;
+    status?: string;
+    saved_at?: string;
+    marks: ReviewMark[];
+  };
+}
+
+export interface ReviewWidgetData {
+  surface: "review";
+  selectedProjectRoot: string;
+  snapshotRevision: number;
+  previewEvidence?: PreviewEvidence;
+  review: ReviewProjection;
+}
+
+export type SurfaceData = WidgetData | ReviewWidgetData;
+
+export interface HostEnvironment {
+  containerWidth: number | null;
+  canSendMessage: boolean;
+  canUpdateModelContext: boolean;
 }
 
 export interface DecisionResult {
@@ -207,18 +232,33 @@ export interface DecisionResult {
   affected_artifacts: string[];
 }
 
+export interface MissionConfirmationRequest {
+  projectRoot: string;
+  expectedRevision: number;
+  missionDraftRef: string;
+  materialMode: "materials-provided" | "no-materials-confirmed";
+  materialInventoryRef: string;
+}
+
+export interface MissionConfirmationResult {
+  artifact_ref: string;
+  snapshot: ProjectSnapshot;
+}
+
 export interface HostBridge {
-  connect(onData?: (data: WidgetData) => void): Promise<void>;
+  connect(onData?: (data: SurfaceData) => void): Promise<void>;
   callTool<T = DecisionResult>(name: string, args: Record<string, unknown>): Promise<T>;
+  switchReview?(reviewType: "content" | "visual"): Promise<void>;
   updateModelContext(context: Record<string, unknown>): Promise<void>;
   sendFollowUp(message: string): Promise<void>;
-  requestDisplayMode(mode: "inline" | "fullscreen"): Promise<void>;
+  confirmMission(args: MissionConfirmationRequest): Promise<MissionConfirmationResult>;
+  getHostEnvironment(): HostEnvironment | undefined;
   notifySize(): void;
 }
 
 declare global {
   interface Window {
-    __AI_PPT_PREVIEW__?: WidgetData;
+    __AI_PPT_PREVIEW__?: SurfaceData;
     __AI_PPT_PREVIEW_ASSETS__?: Record<string, {
       assetRef: string;
       mimeType: string;
@@ -226,5 +266,16 @@ declare global {
       dataBase64: string;
     }>;
     openai?: Record<string, unknown>;
+    __AI_PPT_SIDEBAR_HOST__?: {
+      connect(onData?: (data: SurfaceData) => void): Promise<void>;
+      callTool<T>(name: string, args: Record<string, unknown>): Promise<T>;
+      updateModelContext?(context: Record<string, unknown>): Promise<void>;
+      sendFollowUp?(message: string): Promise<void>;
+      confirmMission?<T = MissionConfirmationResult>(
+        args: MissionConfirmationRequest,
+      ): Promise<T>;
+      getHostEnvironment?(): HostEnvironment | undefined;
+      notifySize?(): void;
+    };
   }
 }

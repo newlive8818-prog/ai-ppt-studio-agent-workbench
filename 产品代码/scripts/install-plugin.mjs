@@ -1,96 +1,66 @@
-import { spawn } from "node:child_process";
-import { cp, mkdir, rename, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { cp, mkdir, rename, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { pathToFileURL } from "node:url";
 
-const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const installParent = path.join(os.homedir(), "plugins");
-const targetRoot = path.join(installParent, "ai-ppt-studio");
-const stagingRoot = path.join(installParent, `.ai-ppt-studio-install-${process.pid}`);
-const backupRoot = path.join(installParent, `.ai-ppt-studio-backup-${Date.now()}`);
-const validator = path.join(
-  os.homedir(),
-  ".codex",
-  "skills",
-  ".system",
-  "plugin-creator",
-  "scripts",
-  "validate_plugin.py",
-);
+import { verifyPluginRelease } from "./verify-plugin-release.mjs";
 
-if (
-  path.dirname(targetRoot) !== installParent ||
-  path.basename(targetRoot) !== "ai-ppt-studio"
-) {
-  throw new Error(`Refusing unexpected plugin target: ${targetRoot}`);
+function assertTarget(targetRoot) {
+  const target = path.resolve(targetRoot);
+  if (path.basename(target) !== "ai-ppt-studio")
+    throw new Error(`Plugin target must end in ai-ppt-studio: ${target}`);
+  if (target === path.parse(target).root || target === os.homedir())
+    throw new Error(`Plugin target is too broad: ${target}`);
+  return target;
 }
 
-function run(command, args, cwd) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: "inherit" });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${command} exited with ${code}`));
-    });
-  });
+export async function installPluginRelease({ releaseRoot, targetRoot }) {
+  if (!releaseRoot || !targetRoot) throw new Error("releaseRoot and targetRoot are required");
+  const source = path.resolve(releaseRoot);
+  const target = assertTarget(targetRoot);
+  await verifyPluginRelease(source, { probe: false });
+  const parent = path.dirname(target);
+  const token = randomUUID();
+  const staging = path.join(parent, `.ai-ppt-studio-stage-${token}`);
+  const backup = path.join(parent, `.ai-ppt-studio-backup-${token}`);
+  await mkdir(parent, { recursive: true });
+  let backedUp = false;
+  try {
+    await cp(source, staging, { recursive: true, errorOnExist: true, force: false });
+    await verifyPluginRelease(staging, { probe: false });
+    try {
+      await rename(target, backup);
+      backedUp = true;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    await rename(staging, target);
+    if (backedUp) await rm(backup, { recursive: true, force: true });
+    return { ok: true, installRoot: target };
+  } catch (error) {
+    if (backedUp) {
+      try {
+        await stat(target);
+      } catch {
+        await rename(backup, target);
+      }
+    }
+    throw error;
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+    if (backedUp) await rm(backup, { recursive: true, force: true });
+  }
 }
 
-const entries = [
-  ".codex-plugin",
-  ".mcp.json",
-  "assets",
-  "skills",
-  "mcp",
-  "src",
-  "package.json",
-  "package-lock.json",
-];
-
-await run("npm", ["run", "build"], sourceRoot);
-await mkdir(installParent, { recursive: true });
-await rm(stagingRoot, { recursive: true, force: true });
-await mkdir(stagingRoot, { recursive: true });
-
-for (const entry of entries) {
-  await cp(path.join(sourceRoot, entry), path.join(stagingRoot, entry), {
-    recursive: true,
-  });
-}
-await mkdir(path.join(stagingRoot, "scripts"), { recursive: true });
-for (const script of ["start-mcp.mjs", "probe-mcp.mjs"]) {
-  await cp(
-    path.join(sourceRoot, "scripts", script),
-    path.join(stagingRoot, "scripts", script),
-  );
-}
-await mkdir(path.join(stagingRoot, "widget", "dist"), { recursive: true });
-await cp(
-  path.join(sourceRoot, "widget", "dist", "index.html"),
-  path.join(stagingRoot, "widget", "dist", "index.html"),
-);
-
-await run("npm", ["ci", "--omit=dev", "--ignore-scripts"], stagingRoot);
-await run("python3", [validator, stagingRoot], sourceRoot);
-
-let hadPreviousInstall = false;
-try {
-  await rename(targetRoot, backupRoot);
-  hadPreviousInstall = true;
-} catch (error) {
-  if (error?.code !== "ENOENT") throw error;
+function argument(name) {
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-try {
-  await rename(stagingRoot, targetRoot);
-} catch (error) {
-  if (hadPreviousInstall) await rename(backupRoot, targetRoot);
-  throw error;
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  const releaseRoot = argument("--release");
+  const targetRoot = argument("--target") || path.join(os.homedir(), "plugins", "ai-ppt-studio");
+  const result = await installPluginRelease({ releaseRoot, targetRoot });
+  process.stdout.write(`${JSON.stringify(result)}\n`);
 }
-
-if (hadPreviousInstall) {
-  await rm(backupRoot, { recursive: true, force: true });
-}
-
-process.stdout.write(`${JSON.stringify({ ok: true, installRoot: targetRoot })}\n`);

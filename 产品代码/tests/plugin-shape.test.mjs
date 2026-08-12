@@ -17,6 +17,15 @@ test("plugin package declares one authoritative skill and an MCP server", () => 
   assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
   assert.equal(manifest.skills, "./skills/");
   assert.equal(manifest.mcpServers, "./.mcp.json");
+  assert.equal(manifest.keywords.includes("native-widget"), false);
+  assert.deepEqual(manifest.interface.capabilities.slice(0, 2), [
+    "Real Codex sidebar workbench",
+    "Codex built-in Browser review",
+  ]);
+  assert.equal(
+    JSON.stringify(manifest.interface).includes("原生工作台"),
+    false,
+  );
   assert.equal(existsSync(path.join(root, "skills", "ai-ppt-studio", "SKILL.md")), true);
   assert.equal(existsSync(path.join(root, "skill", "ai-ppt-studio")), false);
   assert.equal(existsSync(path.join(root, "scripts", "start-mcp.mjs")), true);

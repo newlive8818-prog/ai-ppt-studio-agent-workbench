@@ -1,93 +1,299 @@
-"""Compile bounded, reproducible context packs for Codex follow-up work."""
+"""Compile bounded, reproducible schema 3 Context Packs for Agent tasks."""
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any
 
-from .artifact_store import ArtifactStore
-from .models import ProjectManifest
-from .paths import PathPolicy
-from .state_store import StateStore
+from ai_ppt_studio.errors import ArtifactReferenceError, WorkbenchValidationError
+from ai_ppt_studio.kernel.references import ArtifactReference
+from ai_ppt_studio.kernel.transactions import ProjectKernel
+from ai_ppt_studio.role_registry import RoleRegistry
+from ai_ppt_studio.scenario_packs import ScenarioPackRegistry
+from ai_ppt_studio.application.mission_readiness import MissionReadinessPolicy
+
+
+FOUR_TARGETS = (
+    "macos-powerpoint",
+    "macos-wps",
+    "windows-powerpoint",
+    "windows-wps",
+)
 
 
 class ContextCompiler:
-    """Summarize project state without embedding material bodies or binaries."""
+    """Build the minimum governed context required by one formal role task."""
 
-    def __init__(self, project_root: Path, policy: PathPolicy) -> None:
-        self.project_root = policy.assert_write_allowed(project_root)
-        self.policy = policy
+    def __init__(self, kernel: ProjectKernel) -> None:
+        self.kernel = kernel
 
-    def compile(
+    def compile_role_task(
         self,
         *,
-        action_type: str,
+        role_id: str,
+        task_type: str,
         project_revision: int,
         target_refs: list[str],
         instructions: str,
+        experience_slice_ref: str = "",
+        failure_conditions: list[str] | None = None,
+        preserve_refs: list[str] | None = None,
+        last_valid_result_refs: list[str] | None = None,
     ) -> dict[str, Any]:
-        manifest = ProjectManifest.from_dict(
-            json.loads((self.project_root / "project.json").read_text("utf-8"))
-        )
-        sources = []
-        for path in sorted((self.project_root / "sources").glob("*.json")):
-            try:
-                item = json.loads(path.read_text("utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            sources.append(
-                {
-                    "source_id": item.get("source_id"),
-                    "kind": item.get("kind"),
-                    "mode": item.get("mode"),
-                    "source_ref": f"sources/{path.name}",
-                    "managed_ref": self._project_ref(item.get("managed_ref")),
-                    "sha256": item.get("sha256"),
-                    "size_bytes": item.get("size_bytes"),
-                }
+        state = self.kernel.load()
+        if state.revision != project_revision:
+            raise WorkbenchValidationError(
+                "Context Pack project_revision must equal the current revision"
             )
-        artifacts = {
-            kind: {
-                "kind": artifact.kind,
-                "version": artifact.version,
-                "path": self._project_ref(artifact.path),
-                "sha256": artifact.sha256,
+        role = RoleRegistry.default().get(role_id)
+        pack = ScenarioPackRegistry.default().resolve(
+            scene="presales", task_type="reading-first"
+        )
+        experience_ref = experience_slice_ref.strip() or self._current_slice(
+            role_id, task_type
+        )
+        experience_slice = self._experience_slice(
+            experience_ref, role_id, task_type
+        )
+        project_manifest = self._optional_payload(
+            "project/manifest", "project-manifest"
+        )
+        mission = self._optional_payload("mission/draft", "mission-draft")
+        materials = self._optional_payload("materials", "material-inventory")
+        mission_identity = MissionReadinessPolicy(self.kernel).projection()
+        source_rows = materials.get("sources") if materials else []
+        sources = source_rows if isinstance(source_rows, list) else []
+        production_route = (
+            "strict-B"
+            if role.role_group in {"visual", "delivery"}
+            or "strict-B" in role.tags
+            else "content-first"
+        )
+        if task_type == "generate-image-assets":
+            self._require_frozen_native_first()
+        target_contract: dict[str, Any] = {
+            "required": False,
+            "targets": [],
+            "same_pptx_sha256_required": False,
+        }
+        if task_type in {"verify-target-render", "coordinate-delivery"}:
+            target_contract = {
+                "required": True,
+                "targets": list(FOUR_TARGETS),
+                "same_pptx_sha256_required": True,
+                "desktop_evidence_only": True,
+                "preflight_evidence_forbidden": True,
             }
-            for kind, artifact in ArtifactStore(
-                self.project_root, self.policy
-            ).list_latest().items()
+        repair = task_type in {"repair-content", "govern-feedback"}
+        repair_contract = {
+            "required": repair,
+            "failure_conditions": list(failure_conditions or []),
+            "preserve_refs": list(preserve_refs or []),
+            "last_valid_result_refs": list(last_valid_result_refs or []),
+            "whole_project_rewrite_forbidden": repair,
         }
         return {
-            "schema_version": "1.0",
-            "project": {
-                "project_id": manifest.project_id,
-                "name": manifest.name,
-                "project_root": manifest.project_root,
-            },
+            "schema_version": "3.0",
+            "project_id": state.project_id,
             "project_revision": project_revision,
-            "action_type": action_type.strip(),
-            "target_refs": [str(item) for item in target_refs],
-            "instructions": instructions.strip()[:2000],
-            "source_summary": {"count": len(sources), "sources": sources},
-            "artifact_summary": artifacts,
-            "gate_state": StateStore(self.project_root, self.policy).load().as_dict(),
-            "execution_rules": {
-                "customer_material_policy": "user-provided-only",
-                "visual_concepts": "Image 2 through Codex",
-                "pptx_route": "Codex Presentations only",
-                "writeback": "commit through AI PPT workbench runtime",
+            "artifact_version_refs": list(target_refs),
+            "compiled_at": datetime.now(timezone.utc).isoformat(),
+            "layers": {
+                "governance": {
+                    "stable_governance_version": "ai-ppt-governance/v1.6",
+                    "production_route": production_route,
+                    "content_before_visual": True,
+                    "immutable_references_required": True,
+                    "hidden_reasoning_persistence_forbidden": True,
+                    "gates": {
+                        "G0": "user-chat-confirmed",
+                        "G1": "internal-binary",
+                        "G2": "internal-binary-four-target",
+                        "G3": "user-chat-confirmed",
+                        "G4": "user-chat-confirmed-four-target",
+                    },
+                },
+                "scenario_pack": {
+                    "pack_id": pack.pack_id,
+                    "version": "1.0",
+                    "scene": pack.scene,
+                    "task_type": pack.task_type,
+                    "display_name": pack.display_name,
+                },
+                "role_contract": {
+                    "role_id": role.role_id,
+                    "display_name": role.display_name,
+                    "version": f"role-contract/{role.role_id}/v1",
+                    "authority": role.authority,
+                    "isolation_group": role.isolation_group,
+                    "can_self_approve": role.can_self_approve,
+                    "can_release_gate": role.can_release_gate,
+                },
+                "task_contract": {
+                    "task_type": task_type,
+                    "version": f"task-contract/{task_type}/v1",
+                    "target_refs": list(target_refs),
+                    "instructions": instructions.strip()[:2000],
+                    "expected_deliverable": "governed-content-addressed-artifact",
+                },
+                "current_state": {
+                    "revision": state.revision,
+                    "gate_status": dict(state.gate_status),
+                    "active_head_refs": {
+                        key: value
+                        for key, value in state.artifact_heads.items()
+                        if key
+                        in {
+                            "mission/draft",
+                            "mission/confirmation",
+                            "materials",
+                            "human/decision/latest",
+                        }
+                        or key.startswith("content/")
+                        or key.startswith("visual/")
+                        or key.startswith("delivery/")
+                    },
+                },
+                "project_facts": {
+                    "project_name": str(project_manifest.get("name") or state.project_id),
+                    "scenario_pack": str(
+                        project_manifest.get("scenario_pack")
+                        or "reading-first-presales"
+                    ),
+                    "mission": {
+                        key: mission[key]
+                        for key in (
+                            "topic",
+                            "primary_audience",
+                            "desired_judgment_or_action",
+                        )
+                        if key in mission
+                    },
+                    "mission_identity": mission_identity,
+                    "material_summary": {
+                        "count": len(sources),
+                        "sources": [
+                            {
+                                key: item.get(key)
+                                for key in ("source_id", "kind", "sha256", "locator")
+                                if item.get(key)
+                            }
+                            for item in sources
+                            if isinstance(item, dict)
+                        ],
+                    },
+                },
+                "experience_slice": experience_slice,
+                "repair_contract": repair_contract,
+                "target_render_contract": target_contract,
+                "tool_contract": {
+                    "writeback": "commit through schema 3 MCP/runtime only",
+                    "image_2": (
+                        "nonsemantic-assets-after-frozen-native-first-only"
+                        if task_type == "generate-image-assets"
+                        else "not-authorized-by-this-task"
+                    ),
+                    "pptx": "Codex Presentations only",
+                },
+                "output_contract": {
+                    "format": "governed-artifact",
+                    "reference_format": "artifact://<kind>/<sha256>",
+                    "must_be_immutable": True,
+                    "binary_gate_required": role.authority == "reviewer",
+                    "preserve_unchanged_refs": True,
+                },
+                "exclusions": self._exclusions(role.authority, role.role_group),
             },
         }
 
-    def _project_ref(self, value: Any) -> str | None:
+    def _payload(self, slot: str, kind: str) -> dict[str, Any]:
+        value = self.kernel.load().artifact_heads.get(slot)
         if not value:
-            return None
-        path = Path(str(value))
+            raise ArtifactReferenceError(f"Required artifact head is missing: {slot}")
+        reference = ArtifactReference.parse(value)
+        if reference.kind != kind:
+            raise ArtifactReferenceError(f"Unexpected artifact kind for {slot}")
+        return dict(self.kernel.artifacts.resolve(reference)["payload"])
+
+    def _optional_payload(self, slot: str, kind: str) -> dict[str, Any]:
+        value = self.kernel.load().artifact_heads.get(slot)
+        if not value:
+            return {}
+        reference = ArtifactReference.parse(value)
+        if reference.kind != kind:
+            raise ArtifactReferenceError(f"Unexpected artifact kind for {slot}")
+        return dict(self.kernel.artifacts.resolve(reference)["payload"])
+
+    def _current_slice(self, role_id: str, task_type: str) -> str:
+        state = self.kernel.load()
+        exact = state.artifact_heads.get(
+            f"experience/slice/{role_id}/{task_type}"
+        )
+        return str(exact or "")
+
+    def _experience_slice(
+        self, value: str, role_id: str, task_type: str
+    ) -> dict[str, Any]:
+        if not value:
+            return {
+                "slice_refs": [],
+                "status": "not-available",
+                "target_role_id": role_id,
+                "task_type": task_type,
+            }
+        reference = ArtifactReference.parse(value)
+        if reference.kind != "role-specific-experience-slice":
+            raise ArtifactReferenceError(
+                "experience_slice_ref must identify a role-specific experience slice"
+            )
+        payload = self.kernel.artifacts.resolve(reference)["payload"]
+        if payload.get("target_role_id") != role_id:
+            raise ArtifactReferenceError(
+                "Experience slice target role does not match the Agent task"
+            )
+        return {
+            "slice_refs": [value],
+            "status": "matched",
+            "target_role_id": role_id,
+            "task_type": str(payload.get("task_type") or task_type),
+            "match_reasons": [
+                reason
+                for entry in payload.get("experience_entries", [])
+                if isinstance(entry, dict)
+                for reason in entry.get("match_reasons", [])
+                if isinstance(reason, str)
+            ],
+        }
+
+    def _require_frozen_native_first(self) -> None:
         try:
-            return path.resolve(strict=False).relative_to(self.project_root).as_posix()
-        except ValueError:
-            return str(value)
+            anchor = self._payload("visual/anchors", "anchor-slide-set")
+        except ArtifactReferenceError as exc:
+            raise WorkbenchValidationError(
+                "Image 2 assets require a frozen native-first anchor set"
+            ) from exc
+        if anchor.get("native_first_frozen") is not True:
+            raise WorkbenchValidationError(
+                "Image 2 assets require the current native-first anchor set to be frozen"
+            )
+
+    @staticmethod
+    def _exclusions(authority: str, role_group: str) -> list[str]:
+        exclusions = [
+            "raw_feedback",
+            "hidden_reasoning",
+            "unrelated_project_history",
+            "route-a-c-experiment-artifacts",
+        ]
+        if authority == "producer":
+            exclusions.extend(("review_records", "sibling_reviews"))
+        elif authority == "reviewer":
+            exclusions.extend(
+                ("producer_self_evaluation", "raw_sibling_review_opinions")
+            )
+        if role_group != "experience":
+            exclusions.append("raw_experience_curation_workspace")
+        return exclusions
 
 
-__all__ = ["ContextCompiler"]
+__all__ = ["ContextCompiler", "FOUR_TARGETS"]

@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.acceptance.ledger import (  # noqa: E402
     AcceptanceLedger,
+    EvidenceIndex,
     extract_numbered_requirements,
 )
 
@@ -34,6 +35,9 @@ def build() -> tuple[AcceptanceLedger, Path]:
         )
 
     ledger = AcceptanceLedger(version="1.6", requirements=tuple(requirements))
+    evidence_path = ROOT / "requirements" / "v1.6-evidence.json"
+    if evidence_path.is_file():
+        ledger = ledger.with_evidence(EvidenceIndex.from_path(evidence_path))
     target = ROOT / "requirements" / "v1.6-acceptance-ledger.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(

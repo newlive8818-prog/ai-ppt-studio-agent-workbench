@@ -15,22 +15,61 @@ export class PythonBridgeError extends Error {
   }
 }
 
-function pythonModuleRoot() {
+function pythonModuleRoot(env = process.env) {
   const sourceRoot = path.join(PLUGIN_ROOT, "src");
   const installedRuntime = path.join(PLUGIN_ROOT, "runtime");
-  return process.env.AI_PPT_PYTHONPATH || (existsSync(sourceRoot) ? sourceRoot : installedRuntime);
+  return env.AI_PPT_PYTHONPATH || (existsSync(sourceRoot) ? sourceRoot : installedRuntime);
 }
 
-export function invokePythonBridge(request, options = {}) {
-  const pythonExecutable = options.pythonExecutable || process.env.AI_PPT_PYTHON || "python3";
+function defaultPythonCandidates(env = process.env, platform = process.platform) {
+  if (platform === "win32") {
+    return [
+      env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, "Programs", "Python", "Python314", "python.exe"),
+      env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, "Programs", "Python", "Python313", "python.exe"),
+      env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, "Programs", "Python", "Python312", "python.exe"),
+      env.ProgramFiles && path.join(env.ProgramFiles, "Python314", "python.exe"),
+      env.ProgramFiles && path.join(env.ProgramFiles, "Python313", "python.exe"),
+      env.ProgramFiles && path.join(env.ProgramFiles, "Python312", "python.exe"),
+    ].filter(Boolean);
+  }
+  return [
+    "/usr/local/bin/python3",
+    "/opt/homebrew/bin/python3",
+    "/Library/Frameworks/Python.framework/Versions/Current/bin/python3",
+    "/usr/bin/python3",
+  ];
+}
+
+export function resolvePythonExecutable(options = {}) {
+  return resolvePythonExecutables(options)[0];
+}
+
+function resolvePythonExecutables(options = {}) {
+  if (options.pythonExecutable) return [options.pythonExecutable];
+  const env = options.env || process.env;
+  if (env.AI_PPT_PYTHON) return [env.AI_PPT_PYTHON];
+  const candidates = options.pythonCandidates || defaultPythonCandidates(env, options.platform);
+  const resolved = candidates.filter(
+    (candidate) => path.isAbsolute(candidate) && existsSync(candidate),
+  );
+  return resolved.length > 0
+    ? resolved
+    : [options.platform === "win32" || process.platform === "win32" ? "py" : "python3"];
+}
+
+function invokeWithPython(pythonExecutable, request, options, hostEnv) {
   const bridgeArgs = options.bridgeArgs || ["-m", "ai_ppt_studio.workbench_bridge"];
-  const moduleRoot = options.pythonPath || pythonModuleRoot();
-  const existingPythonPath = process.env.PYTHONPATH || "";
+  const moduleRoot = options.pythonPath || pythonModuleRoot(hostEnv);
+  const existingPythonPath = hostEnv.PYTHONPATH || "";
   const pythonPath = [moduleRoot, existingPythonPath].filter(Boolean).join(path.delimiter);
   return new Promise((resolve, reject) => {
     const child = spawn(pythonExecutable, bridgeArgs, {
       cwd: PLUGIN_ROOT,
-      env: { ...process.env, PYTHONPATH: pythonPath },
+      env: {
+        ...hostEnv,
+        PYTHONPATH: pythonPath,
+        PYTHONDONTWRITEBYTECODE: "1",
+      },
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "";
@@ -56,4 +95,18 @@ export function invokePythonBridge(request, options = {}) {
     });
     child.stdin.end(JSON.stringify(request));
   });
+}
+
+export async function invokePythonBridge(request, options = {}) {
+  const hostEnv = options.env || process.env;
+  const pythonExecutables = resolvePythonExecutables({ ...options, env: hostEnv });
+  for (let index = 0; index < pythonExecutables.length; index += 1) {
+    try {
+      return await invokeWithPython(pythonExecutables[index], request, options, hostEnv);
+    } catch (error) {
+      const canRetry = error?.code === "ENOENT" && index < pythonExecutables.length - 1;
+      if (!canRetry) throw error;
+    }
+  }
+  throw new Error("No Python interpreter candidate could be started");
 }

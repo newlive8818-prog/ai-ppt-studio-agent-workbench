@@ -9,3 +9,5 @@ build/
 node_modules/
 output/
 .playwright-cli/
+产品代码/widget/dist/
+产品代码/widget/.dist-raw-*/

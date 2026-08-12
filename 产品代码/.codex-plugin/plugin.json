@@ -8,7 +8,8 @@
   "keywords": [
     "powerpoint",
     "presentation",
-    "native-widget",
+    "codex-sidebar",
+    "browser-review",
     "presales",
     "agent-workbench"
   ],
@@ -24,14 +25,15 @@
     "logo": "./assets/app-icon.svg",
     "composerIcon": "./assets/app-icon.svg",
     "capabilities": [
-      "Native Codex workbench",
+      "Real Codex sidebar workbench",
+      "Codex built-in Browser review",
       "Project-backed cognitive map",
       "Revision-safe human decisions",
       "Editable PowerPoint delivery",
       "G0-G4 quality governance"
     ],
     "defaultPrompt": [
-      "打开 AI PPT Studio 原生工作台，继续我最近的项目。",
+      "在 Codex 侧边栏打开 AI PPT Studio，继续我最近的项目。",
       "创建一个售前解决方案 PPT 项目，并先澄清汇报对象与目标。",
       "查看当前项目的 AI 认知地图和最需要我判断的问题。"
     ]

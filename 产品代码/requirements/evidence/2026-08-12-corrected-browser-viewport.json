@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "evidence_identity": "v1.6-corrected-automated-browser-viewport-run",
+  "proof_eligible": true,
+  "simulation": false,
+  "uses_deterministic_schema3_project": true,
+  "checked_at": "2026-08-12T17:25:51.555Z",
+  "command": "npm run accept:v16-ui",
+  "result": "passed",
+  "scenario_count": 15,
+  "screenshot_count": 15,
+  "console_error_count": 0,
+  "workbench": {
+    "widths": [360, 420, 480],
+    "primary_action_count_each": 1,
+    "horizontal_overflow": false,
+    "five_space_projection_present": true,
+    "full_contract_contact_sheet_large_qa_and_download_controls_absent": true
+  },
+  "professional_review": {
+    "types": ["content", "visual"],
+    "widths": [760, 1000, 1440],
+    "zoom_percentages": [100, 200],
+    "header_height_px": 64,
+    "content_visual_switch_visible": true,
+    "current_mode_aria_pressed": true,
+    "outline_initially_closed": true,
+    "outline_and_marks_drawers_mutually_exclusive": true,
+    "document_geometry_stable_when_drawer_opens": true,
+    "complete_page_anchors_and_speaker_notes_present": true,
+    "horizontal_overflow": false,
+    "forbidden_gate_download_history_gallery_and_return_controls_absent": true
+  },
+  "long_documents": [
+    {"review_type": "content", "page_count": 60, "complete": true},
+    {"review_type": "visual", "page_count": 120, "complete": true}
+  ],
+  "raw_report": "/Users/defei/Documents/我的空间/workspace/memory/产品研究/PPT大师/PPT-codex-app/产品代码/output/playwright/v16-ui/v16-ui-acceptance.json",
+  "scope": "Real local Chromium execution of deterministic schema 3 sidebar and professional-review projections. It proves responsive layout and interaction contracts only.",
+  "exclusions": [
+    "real Codex sidebar host",
+    "real Codex built-in Browser host",
+    "real host persistence or Gate confirmation",
+    "Codex Presentations or desktop PowerPoint/WPS evidence"
+  ]
+}

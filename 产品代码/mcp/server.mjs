@@ -1,22 +1,22 @@
 import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
 import { invokePythonBridge } from "./runtime-bridge/python-runtime.mjs";
 import { readProjectAsset } from "./project-asset.mjs";
-import { registerWorkbenchResource } from "./widget-resource.mjs";
+import { createReviewBridge } from "./review-bridge.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifest = JSON.parse(
   readFileSync(path.join(ROOT, ".codex-plugin", "plugin.json"), "utf8"),
 );
-
-export const AI_PPT_WIDGET_URI = "ui://ai-ppt-studio/workbench.html";
+const BROWSER_REVIEW_HTML = path.join(ROOT, "widget", "dist", "index.html");
 
 const projectSchema = {
   projectRoot: z.string().trim().optional(),
@@ -28,13 +28,11 @@ function requestForProject(operation, input) {
   return request;
 }
 
-function textResult(message, structuredContent, widgetData) {
-  const result = {
+function textResult(message, structuredContent) {
+  return {
     content: [{ type: "text", text: message }],
     structuredContent,
   };
-  if (widgetData) result._meta = { widgetData };
-  return result;
 }
 
 function toolErrorResult(error) {
@@ -52,6 +50,100 @@ function toolErrorResult(error) {
   };
 }
 
+function nativeMissionConfirmationMessage(input) {
+  const summary = input.missionSummary || {};
+  const fields = [
+    ["汇报主题", summary.topic],
+    ["汇报对象", summary.primaryAudience],
+    ["期望判断或行动", summary.desiredJudgmentOrAction],
+    ["材料状态", summary.materialSummary],
+  ];
+  const missing = fields
+    .filter(([, value]) => typeof value !== "string" || !value.trim())
+    .map(([label]) => label);
+  if (missing.length) {
+    return {
+      ok: false,
+      error: {
+        code: "MISSION_NOT_CONFIRMED",
+        message: `宿主确认前必须展示完整当前任务卡；缺少：${missing.join("、")}。`,
+        details: { missingFields: missing },
+      },
+    };
+  }
+  const proposalNotice =
+    input.materialMode === "no-materials-confirmed"
+      ? "\n内容身份：当前无材料，将以方案建议模式继续；客户现状仅作诊断假设，能力与结果均待联合验证。"
+      : "\n内容身份：仅依据当前已登记材料进入 material-backed 内容链。";
+  return {
+    ok: true,
+    message: [
+      "请确认当前 AI PPT Studio 任务卡：",
+      ...fields.map(([label, value]) => `${label}：${value.trim()}`),
+    ].join("\n") + proposalNotice,
+  };
+}
+
+async function requestHostMissionConfirmation(server, input) {
+  if (!server.server.getClientCapabilities()?.elicitation) {
+    return {
+      ok: false,
+      error: {
+        code: "HOST_CONFIRMATION_UNAVAILABLE",
+        message:
+          "当前宿主未提供原生确认能力；任务卡和材料状态已保留，可在能力可用后重试。",
+        details: {},
+      },
+    };
+  }
+  const prompt = nativeMissionConfirmationMessage(input);
+  if (!prompt.ok) return prompt;
+  let result;
+  try {
+    result = await server.server.elicitInput({
+      mode: "form",
+      message: prompt.message,
+      requestedSchema: {
+        type: "object",
+        properties: {
+          confirmed: {
+            type: "boolean",
+            title: "确认当前任务卡并继续",
+            description:
+              "只有勾选确认并提交，AI PPT Studio 才会生成 MissionConfirmation。",
+            default: false,
+          },
+        },
+        required: ["confirmed"],
+      },
+    });
+  } catch (_error) {
+    return {
+      ok: false,
+      error: {
+        code: "HOST_CONFIRMATION_UNAVAILABLE",
+        message:
+          "宿主原生确认暂时不可用；任务卡和材料状态已保留，可重试确认。",
+        details: {},
+      },
+    };
+  }
+  if (result.action !== "accept" || result.content?.confirmed !== true) {
+    return {
+      ok: false,
+      error: {
+        code: "HOST_CONFIRMATION_DECLINED",
+        message: "任务确认已取消；项目状态未改变，可修改任务卡或再次确认。",
+        details: { action: result.action },
+      },
+    };
+  }
+  return {
+    ok: true,
+    userActionRef: `host-elicitation://${randomUUID()}`,
+  };
+}
+
 async function invokeForTool(invokeBridge, request) {
   try {
     return { ok: true, payload: await invokeBridge(request) };
@@ -63,15 +155,92 @@ async function invokeForTool(invokeBridge, request) {
 export function createAiPptMcpServer(options = {}) {
   const invokeBridge = options.invokeBridge || invokePythonBridge;
   const readProjectAssetFn = options.readProjectAsset || readProjectAsset;
+  const hostSidebarAdapter = options.hostSidebarAdapter || null;
+  const browserSurfaceAdapter = options.browserSurfaceAdapter || null;
+  const reviewBridgeFactory = options.reviewBridgeFactory || createReviewBridge;
+  const confirmationVerifier = options.confirmationVerifier || null;
   const server = new McpServer(
     { name: manifest.name, version: manifest.version },
     {
       instructions:
-        "Use render_ai_ppt_workbench to open the native AI PPT project workbench. Persist material, Agent tasks, immutable artifacts, human decisions, and G0-G4 through the provided revision-safe tools. The managed project directory is the business truth source; never edit its state JSON directly. Image 2 is the visual concept route and Codex Presentations is the only PPTX route.",
+        "Use the revision-safe data tools for the managed AI PPT project. Chat is a text collaboration and delivery channel and must never render the workbench or professional review as an MCP App. A real Codex sidebar host adapter is required for the compact workbench; Browser review uses its dedicated loopback bridge. The managed project directory is the business truth source; never edit state JSON directly. Codex Presentations is the only PPTX route.",
     },
   );
 
-  registerWorkbenchResource(server, AI_PPT_WIDGET_URI);
+  async function startScopedReviewSession({
+    projectRoot,
+    reviewType,
+    sourceVersion,
+    expectedRevision,
+  }) {
+    const bridge = reviewBridgeFactory({
+      projectRoot,
+      reviewType,
+      sourceVersion,
+      expectedRevision,
+      invokeBridge,
+      readReviewHtml: () => readFile(BROWSER_REVIEW_HTML, "utf8"),
+      createReviewSession: createAuthoritativeReviewSession,
+    });
+    const session = await bridge.start();
+    return { bridge, session };
+  }
+
+  async function createAuthoritativeReviewSession({ projectRoot, reviewType }) {
+    const payload = await invokeBridge({
+      operation: "get-review-projection",
+      project_root: projectRoot,
+      review_type: reviewType,
+    });
+    const targetSourceVersion = payload?.review?.source_version;
+    const targetRevision = payload?.snapshot_revision;
+    if (!targetSourceVersion || !Number.isInteger(targetRevision)) {
+      const error = new Error("Target review projection is unavailable");
+      error.code = "REVIEW_SOURCE_UNAVAILABLE";
+      throw error;
+    }
+    const targetProjectRoot = payload.selected_project_root || projectRoot;
+    const { session } = await startScopedReviewSession({
+      projectRoot: targetProjectRoot,
+      reviewType,
+      sourceVersion: targetSourceVersion,
+      expectedRevision: targetRevision,
+    });
+    return session;
+  }
+
+  server.registerTool(
+    "create_ai_ppt_project",
+    {
+      title: "Create AI PPT Project",
+      description:
+        "Create one managed schema 3 reading-first presales project. Project files are written only below the configured AI-PPT-Workspace runtime root.",
+      inputSchema: {
+        name: z.string().trim().min(1),
+        projectId: z.string().trim().min(1).optional(),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (input) => {
+      const outcome = await invokeForTool(invokeBridge, {
+        operation: "create-project",
+        name: input.name,
+        project_id: input.projectId || "",
+      });
+      if (!outcome.ok) return outcome.result;
+      const payload = outcome.payload;
+      return textResult(
+        `已创建 schema 3 项目“${payload.snapshot.project.name}”，revision ${payload.snapshot.revision}。`,
+        { snapshot: payload.snapshot },
+        { snapshot: payload.snapshot },
+      );
+    },
+  );
 
   server.registerTool(
     "get_ai_ppt_project_snapshot",
@@ -99,6 +268,266 @@ export function createAiPptMcpServer(options = {}) {
         `已读取 AI PPT 项目“${snapshot.project.name}”，revision ${snapshot.revision}。`,
         { snapshot },
         { snapshot },
+      );
+    },
+  );
+
+  server.registerTool(
+    "get_ai_ppt_sidebar_projection",
+    {
+      title: "Get AI PPT Sidebar Projection",
+      description:
+        "Read the compact five-space projection for a real Codex sidebar host. This is a pure data tool and never attaches a chat UI template.",
+      inputSchema: {
+        ...projectSchema,
+        initialSpace: z
+          .enum(["overview", "materials", "blueprint", "visual", "delivery"])
+          .optional(),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (input = {}) => {
+      const outcome = await invokeForTool(
+        invokeBridge,
+        requestForProject("get-project-snapshot", input),
+      );
+      if (!outcome.ok) return outcome.result;
+      const projection = {
+        project: outcome.payload.snapshot.project,
+        revision: outcome.payload.snapshot.revision,
+        initialSpace: input.initialSpace || "overview",
+        workspace: outcome.payload.snapshot.workspace,
+        missionDraftRef: outcome.payload.snapshot.missionDraftRef || "",
+        missionConfirmationRef:
+          outcome.payload.snapshot.missionConfirmationRef || "",
+        materialMode: outcome.payload.snapshot.materialMode || "unconfirmed",
+        contentIdentityMode:
+          outcome.payload.snapshot.contentIdentityMode || "blocked",
+      };
+      if (!hostSidebarAdapter) {
+        return toolErrorResult({
+          code: "HOST_SIDEBAR_UNAVAILABLE",
+          message:
+            "当前 Codex 宿主未提供可验证的持久侧边栏入口；聊天不会渲染替代 Widget。",
+          details: { projection },
+        });
+      }
+      return textResult(
+        `已读取“${projection.project.name}”的侧边栏投影，revision ${projection.revision}。`,
+        { projection },
+      );
+    },
+  );
+
+  server.registerTool(
+    "open_ai_ppt_browser_review",
+    {
+      title: "Open AI PPT Browser Review",
+      description:
+        "Open the fixed content or visual review source in the Codex built-in Browser through a short-lived loopback Review Bridge. This tool never returns an MCP UI template.",
+      inputSchema: {
+        projectRoot: z.string().trim().min(1),
+        reviewType: z.enum(["content", "visual"]),
+        sourceVersion: z.string().trim().min(1),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (input) => {
+      if (!browserSurfaceAdapter?.canOpen) {
+        return toolErrorResult({
+          code: "BROWSER_REVIEW_UNAVAILABLE",
+          message:
+            "当前 Codex 宿主未提供可验证的内置 Browser 打开能力；不会回退为聊天 Widget。",
+          details: {
+            reviewType: input.reviewType,
+            sourceVersion: input.sourceVersion,
+          },
+        });
+      }
+      if (!browserSurfaceAdapter.canSave) {
+        return toolErrorResult({
+          code: "BROWSER_REVIEW_SAVE_UNAVAILABLE",
+          message:
+            "当前 Browser 链路不能可靠保存标记，因此不打开并且不宣称审阅闭环可用。",
+          details: {
+            reviewType: input.reviewType,
+            sourceVersion: input.sourceVersion,
+          },
+        });
+      }
+      const projection = await invokeForTool(invokeBridge, {
+        ...requestForProject("get-review-projection", input),
+        review_type: input.reviewType,
+      });
+      if (!projection.ok) return projection.result;
+      const payload = projection.payload;
+      if (payload.review?.source_version !== input.sourceVersion) {
+        return toolErrorResult({
+          code: "REVIEW_SOURCE_STALE",
+          message: "请求的专业审阅版本已经变化，请刷新后重试。",
+          details: {
+            expected_source: input.sourceVersion,
+            actual_source: payload.review?.source_version || "",
+          },
+        });
+      }
+      let bridge;
+      let session;
+      try {
+        ({ bridge, session } = await startScopedReviewSession({
+          projectRoot: payload.selected_project_root || input.projectRoot,
+          reviewType: input.reviewType,
+          sourceVersion: input.sourceVersion,
+          expectedRevision: payload.snapshot_revision,
+        }));
+        const opened = await browserSurfaceAdapter.openUrl(session.url);
+        if (!opened?.opened) {
+          await bridge.stop();
+          return toolErrorResult({
+            code: "BROWSER_REVIEW_UNAVAILABLE",
+            message: "Codex 内置 Browser 未能打开专业审阅资源。",
+            details: {},
+          });
+        }
+      } catch (_error) {
+        if (session) await bridge.stop();
+        return toolErrorResult({
+          code: "BROWSER_REVIEW_UNAVAILABLE",
+          message: "Codex 内置 Browser 专业审阅暂时不可用。",
+          details: {},
+        });
+      }
+      return textResult(
+        `已在 Codex 内置 Browser 打开“${payload.review.project_name}”的专业审阅。`,
+        {
+          opened: true,
+          projectRoot: payload.selected_project_root || input.projectRoot,
+          reviewType: input.reviewType,
+          sourceVersion: input.sourceVersion,
+          revision: payload.snapshot_revision,
+          expiresAt: session.expiresAt,
+        },
+      );
+    },
+  );
+
+  server.registerTool(
+    "save_ai_ppt_mission_draft",
+    {
+      title: "Save AI PPT Mission Draft",
+      description:
+        "Save an AI-authored MissionDraft. Complete required fields become confirmable but this tool never confirms the mission.",
+      inputSchema: {
+        ...projectSchema,
+        expectedRevision: z.number().int().nonnegative(),
+        missionDraft: z.record(z.string(), z.unknown()),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (input) => {
+      const outcome = await invokeForTool(invokeBridge, {
+        ...requestForProject("save-mission-draft", input),
+        expected_revision: input.expectedRevision,
+        payload: input.missionDraft,
+      });
+      if (!outcome.ok) return outcome.result;
+      return textResult(
+        `任务草稿已保存，项目进入 revision ${outcome.payload.result.snapshot.revision}；尚未生成用户确认。`,
+        outcome.payload.result,
+      );
+    },
+  );
+
+  server.registerTool(
+    "confirm_ai_ppt_mission",
+    {
+      title: "Confirm AI PPT Mission",
+      description:
+        "Create one immutable MissionConfirmation bound to the current draft, material identity, revision, and a real user action or host message reference.",
+      inputSchema: {
+        ...projectSchema,
+        expectedRevision: z.number().int().nonnegative(),
+        missionDraftRef: z.string().trim().min(1),
+        materialMode: z.enum([
+          "materials-provided",
+          "no-materials-confirmed",
+        ]),
+        materialInventoryRef: z.string().trim().optional(),
+        userActionRef: z.string().trim().optional(),
+        userMessageRef: z.string().trim().optional(),
+        missionSummary: z
+          .object({
+            topic: z.string().trim().min(1),
+            primaryAudience: z.string().trim().min(1),
+            desiredJudgmentOrAction: z.string().trim().min(1),
+            materialSummary: z.string().trim().min(1),
+          })
+          .optional(),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (input) => {
+      let userActionRef = input.userActionRef || "";
+      const userMessageRef = input.userMessageRef || "";
+      if (userActionRef || userMessageRef) {
+        if (!confirmationVerifier) {
+          const native = await requestHostMissionConfirmation(server, input);
+          if (!native.ok) return toolErrorResult(native.error);
+          userActionRef = native.userActionRef;
+        } else {
+          const verified = await confirmationVerifier.verify({
+            projectRoot: input.projectRoot || "",
+            missionDraftRef: input.missionDraftRef,
+            materialMode: input.materialMode,
+            userActionRef,
+            userMessageRef,
+          });
+          if (!verified) {
+            return toolErrorResult({
+              code: "MISSION_NOT_CONFIRMED",
+              message: "用户确认凭据未通过宿主验证。",
+              details: {},
+            });
+          }
+        }
+      } else {
+        const native = await requestHostMissionConfirmation(server, input);
+        if (!native.ok) return toolErrorResult(native.error);
+        userActionRef = native.userActionRef;
+      }
+      const outcome = await invokeForTool(invokeBridge, {
+        ...requestForProject("confirm-mission", input),
+        expected_revision: input.expectedRevision,
+        mission_draft_ref: input.missionDraftRef,
+        material_mode: input.materialMode,
+        material_inventory_ref: input.materialInventoryRef || "",
+        user_action_ref: userActionRef,
+        user_message_ref: confirmationVerifier ? userMessageRef : "",
+      });
+      if (!outcome.ok) return outcome.result;
+      return textResult(
+        `任务已由用户显式确认，项目进入 revision ${outcome.payload.result.snapshot.revision}。`,
+        outcome.payload.result,
       );
     },
   );
@@ -196,15 +625,28 @@ export function createAiPptMcpServer(options = {}) {
         ...projectSchema,
         expectedRevision: z.number().int().nonnegative(),
         actionType: z.enum([
-          "classify-materials",
-          "generate-blueprint",
-          "revise-blueprint",
-          "explore-concepts",
-          "build-engineering-samples",
-          "freeze-visual-contract",
-          "build-pptx",
-          "qa-render",
-          "repair-pptx",
+          "build-presales-strategy",
+          "build-claim-evidence-map",
+          "build-deck-argument-map",
+          "build-slide-draft-set",
+          "repair-content",
+          "review-content-presales",
+          "review-content-decision-maker",
+          "review-content-evidence",
+          "review-content-narrative",
+          "review-content-editorial",
+          "aggregate-content-reviews",
+          "design-deck-system",
+          "design-slide-visuals",
+          "build-native-first",
+          "generate-image-assets",
+          "review-visual-aesthetic",
+          "review-visual-engineering",
+          "verify-target-render",
+          "govern-feedback",
+          "curate-experience",
+          "evaluate-experience",
+          "coordinate-delivery",
         ]),
         targetRefs: z.array(z.string().trim().min(1)).min(1),
         instructions: z.string().optional(),
@@ -243,17 +685,17 @@ export function createAiPptMcpServer(options = {}) {
         ...projectSchema,
         expectedRevision: z.number().int().nonnegative(),
         kind: z.enum([
-          "material-findings",
           "mission",
           "content-blueprint",
+          "content-acceptance",
           "visual-brief",
           "concept-set",
-          "engineering-samples",
           "visual-contract",
-          "slide-scene-graph",
+          "native-anchor-set",
           "feedback",
-          "presentation-handoff",
           "delivery",
+          "experience",
+          "target-render-evidence",
         ]),
         payload: z.record(z.string(), z.unknown()),
         taskId: z.string().trim().optional(),
@@ -287,11 +729,12 @@ export function createAiPptMcpServer(options = {}) {
     {
       title: "Confirm AI PPT Quality Gate",
       description:
-        "Pass one open G0-G4 gate after runtime evidence checks. This tool represents an explicit human confirmation.",
+        "Record an explicit user confirmation from a referenced Codex chat message. Only G0, G3, and G4 are user checkpoints.",
       inputSchema: {
         ...projectSchema,
         expectedRevision: z.number().int().nonnegative(),
-        gate: z.enum(["G0", "G1", "G2", "G3", "G4"]),
+        gate: z.enum(["G0", "G3", "G4"]),
+        userMessageRef: z.string().trim().min(1),
       },
       annotations: {
         readOnlyHint: false,
@@ -305,10 +748,176 @@ export function createAiPptMcpServer(options = {}) {
         ...requestForProject("confirm-gate", input),
         expected_revision: input.expectedRevision,
         gate: input.gate,
+        user_message_ref: input.userMessageRef,
       });
       if (!outcome.ok) return outcome.result;
       return textResult(
         `${input.gate} 已确认，项目进入 revision ${outcome.payload.result.snapshot.revision}。`,
+        outcome.payload.result,
+        outcome.payload.result,
+      );
+    },
+  );
+
+  server.registerTool(
+    "get_delivery_status_projection",
+    {
+      title: "Get AI PPT Delivery Status",
+      description:
+        "Read the lightweight production and delivery projection, including gates, blocker, target PowerPoint evidence, and chat-send status.",
+      inputSchema: projectSchema,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (input = {}) => {
+      const outcome = await invokeForTool(
+        invokeBridge,
+        requestForProject("get-delivery-status-projection", input),
+      );
+      if (!outcome.ok) return outcome.result;
+      const payload = outcome.payload;
+      const projection = {
+        surface: "workbench",
+        selectedProjectRoot: payload.selected_project_root,
+        snapshotRevision: payload.snapshot_revision,
+        delivery: payload.delivery,
+      };
+      return textResult(
+        `已读取制作与交付状态，revision ${payload.snapshot_revision}。`,
+        projection,
+        projection,
+      );
+    },
+  );
+
+  server.registerTool(
+    "record_internal_gate",
+    {
+      title: "Record AI PPT Internal Gate",
+      description:
+        "Record an authorized binary internal review for G1 or G2. G2 passes only after independent aesthetic and PPT engineering reviews plus target PowerPoint evidence.",
+      inputSchema: {
+        ...projectSchema,
+        expectedRevision: z.number().int().nonnegative(),
+        gate: z.enum(["G1", "G2"]),
+        reviewerRole: z.enum(["独立审美审查智能体", "PPT 工程审查智能体"]),
+        acceptanceRecordRefs: z.array(z.string().trim().min(1)).min(1),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (input) => {
+      const outcome = await invokeForTool(invokeBridge, {
+        ...requestForProject("record-internal-gate", input),
+        expected_revision: input.expectedRevision,
+        gate: input.gate,
+        reviewer_role: input.reviewerRole,
+        acceptance_record_refs: input.acceptanceRecordRefs,
+      });
+      if (!outcome.ok) return outcome.result;
+      return textResult(
+        `${input.gate} 内部审查已记录，项目进入 revision ${outcome.payload.result.snapshot.revision}。`,
+        outcome.payload.result,
+        outcome.payload.result,
+      );
+    },
+  );
+
+  server.registerTool(
+    "record_chat_delivery",
+    {
+      title: "Record AI PPT Chat Delivery",
+      description:
+        "Persist a Codex chat message receipt for a visual sample, comparison, PPTX, preview, or delivery note without rebuilding the referenced artifact.",
+      inputSchema: {
+        ...projectSchema,
+        expectedRevision: z.number().int().nonnegative(),
+        deliveryType: z.enum([
+          "visual-sample",
+          "comparison",
+          "pptx",
+          "preview",
+          "delivery-note",
+        ]),
+        artifactRefs: z.array(z.string().trim().min(1)).min(1),
+        messageRef: z.string().trim().min(1),
+        sendStatus: z.enum(["sent", "failed"]),
+        retryOf: z.string().trim().optional(),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (input) => {
+      const outcome = await invokeForTool(invokeBridge, {
+        ...requestForProject("record-chat-delivery", input),
+        expected_revision: input.expectedRevision,
+        delivery_type: input.deliveryType,
+        artifact_refs: input.artifactRefs,
+        message_ref: input.messageRef,
+        send_status: input.sendStatus,
+        retry_of: input.retryOf || "",
+      });
+      if (!outcome.ok) return outcome.result;
+      return textResult(
+        `聊天交付回执已记录，revision ${outcome.payload.result.snapshot.revision}。`,
+        outcome.payload.result,
+        outcome.payload.result,
+      );
+    },
+  );
+
+  server.registerTool(
+    "save_review_marks",
+    {
+      title: "Save AI PPT Review Marks",
+      description:
+        "Save content or visual review marks against one exact source version. This never confirms G0 or G3.",
+      inputSchema: {
+        projectRoot: z.string().trim().min(1),
+        expectedRevision: z.number().int().nonnegative(),
+        reviewType: z.enum(["content", "visual"]),
+        sourceVersion: z.string().trim().min(1),
+        marks: z.array(
+          z.object({
+            mark_id: z.string().trim().min(1),
+            field_anchor: z.string().trim().min(1),
+            exact_text: z.string(),
+            prefix: z.string(),
+            suffix: z.string(),
+            comment: z.string().trim().min(1),
+          }).strict(),
+        ).min(1),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (input) => {
+      const outcome = await invokeForTool(invokeBridge, {
+        ...requestForProject("save-review-marks", input),
+        expected_revision: input.expectedRevision,
+        review_type: input.reviewType,
+        source_version: input.sourceVersion,
+        marks: input.marks,
+      });
+      if (!outcome.ok) return outcome.result;
+      return textResult(
+        `标记已保存，revision ${outcome.payload.result.snapshot.revision}；保存不等于 Gate 确认。`,
         outcome.payload.result,
         outcome.payload.result,
       );
@@ -350,13 +959,12 @@ export function createAiPptMcpServer(options = {}) {
     },
   );
 
-  registerAppTool(
-    server,
+  server.registerTool(
     "read_ai_ppt_project_asset",
     {
       title: "Read AI PPT Project Asset",
       description:
-        "Read one bounded image or text preview from inside the selected managed project. Available to the workbench app only.",
+        "Read one bounded image or text preview from inside the selected managed project.",
       inputSchema: {
         projectRoot: z.string().trim().min(1),
         assetRef: z.string().trim().min(1),
@@ -367,9 +975,6 @@ export function createAiPptMcpServer(options = {}) {
         idempotentHint: true,
         openWorldHint: false,
       },
-      _meta: {
-        ui: { visibility: ["app"] },
-      },
     },
     async (input) => {
       try {
@@ -377,7 +982,7 @@ export function createAiPptMcpServer(options = {}) {
           projectRoot: input.projectRoot,
           assetRef: input.assetRef,
         });
-        return textResult(`已读取项目资源 ${asset.assetRef}。`, { asset }, { asset });
+        return textResult(`已读取项目资源 ${asset.assetRef}。`, { asset });
       } catch (error) {
         return toolErrorResult({
           code: "SOURCE_UNREADABLE",
@@ -385,62 +990,6 @@ export function createAiPptMcpServer(options = {}) {
           details: { assetRef: input.assetRef },
         });
       }
-    },
-  );
-
-  registerAppTool(
-    server,
-    "render_ai_ppt_workbench",
-    {
-      title: "Render AI PPT Studio Workbench",
-      description:
-        "Open the native AI PPT Studio project workbench in Codex. It shows the Agent cognition map in compact inline mode and can expand to fullscreen when the host supports it.",
-      inputSchema: {
-        ...projectSchema,
-        initialSpace: z.enum(["overview", "materials", "blueprint", "visual", "delivery"]).optional(),
-        requestedDisplayMode: z.enum(["inline", "fullscreen"]).optional(),
-      },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-      _meta: {
-        ui: { resourceUri: AI_PPT_WIDGET_URI, visibility: ["model", "app"] },
-        "ui/resourceUri": AI_PPT_WIDGET_URI,
-        "openai/outputTemplate": AI_PPT_WIDGET_URI,
-        "openai/widgetAccessible": true,
-        "openai/toolInvocation/invoking": "正在打开 AI PPT Studio 工作台…",
-        "openai/toolInvocation/invoked": "AI PPT Studio 工作台已就绪",
-      },
-    },
-    async (input = {}) => {
-      const outcome = await invokeForTool(
-        invokeBridge,
-        requestForProject("get-project-snapshot", input),
-      );
-      if (!outcome.ok) return outcome.result;
-      const payload = outcome.payload;
-      const widgetData = {
-        snapshot: payload.snapshot,
-        selectedProjectRoot: payload.selected_project_root || payload.snapshot.project.project_root,
-        initialSpace: input.initialSpace || "overview",
-        requestedDisplayMode: input.requestedDisplayMode || "inline",
-      };
-      return {
-        content: [
-          {
-            type: "text",
-            text: `已打开“${payload.snapshot.project.name}”的 AI PPT Studio 原生工作台。`,
-          },
-        ],
-        structuredContent: widgetData,
-        _meta: {
-          "openai/outputTemplate": AI_PPT_WIDGET_URI,
-          widgetData,
-        },
-      };
     },
   );
 

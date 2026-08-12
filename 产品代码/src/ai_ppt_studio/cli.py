@@ -1,8 +1,9 @@
-"""Machine-readable command line interface for the Skill runtime."""
+"""Machine-readable schema 3 command line interface for the Skill runtime."""
 
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import platform
@@ -10,26 +11,24 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .artifact_store import ArtifactStore
-from .config import RuntimeConfig
-from .errors import (
+from ai_ppt_studio.application.project_service import (
+    ProjectCommandService,
+    ProjectService,
+)
+from ai_ppt_studio.application.v16_bridge import dispatch_v16
+from ai_ppt_studio.config import RuntimeConfig
+from ai_ppt_studio.errors import (
     AiPptError,
-    ArtifactValidationError,
     ConfigurationError,
     ExperienceValidationError,
-    InvalidTransitionError,
     MaterialImportError,
     ProjectNotFoundError,
     ProtectedPathError,
 )
-from .experience_models import ExperienceLevel
-from .experience_store import ExperienceStore
-from .materials import ImportMode, MaterialIntake
-from .models import ArtifactKind, Gate
-from .paths import PathPolicy
-from .project_store import ProjectStore
-from .review_html import ReviewHtml, ReviewKind
-from .state_store import StateStore
+from ai_ppt_studio.experience_models import ExperienceLevel
+from ai_ppt_studio.experience_store import ExperienceStore
+from ai_ppt_studio.kernel.transactions import ProjectKernel
+from ai_ppt_studio.paths import PathPolicy
 
 
 class CliUsageError(ConfigurationError):
@@ -62,7 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     initialize = commands.add_parser("init")
     initialize.add_argument("--name", required=True)
-    initialize.add_argument("--source-context", type=Path)
+    initialize.add_argument("--project-id", default="")
 
     intake = commands.add_parser("import")
     intake.add_argument("--project", type=Path, required=True)
@@ -71,46 +70,10 @@ def build_parser() -> argparse.ArgumentParser:
     inputs.add_argument("--url")
     inputs.add_argument("--text")
     intake.add_argument("--label", default="用户输入")
-    intake.add_argument(
-        "--mode",
-        choices=[mode.value for mode in ImportMode],
-        default=ImportMode.COPY.value,
-    )
+    intake.add_argument("--mode", choices=("copy",), default="copy")
 
     status = commands.add_parser("status")
     status.add_argument("--project", type=Path, required=True)
-
-    pass_gate = commands.add_parser("pass-gate")
-    pass_gate.add_argument("--project", type=Path, required=True)
-    pass_gate.add_argument("--gate", choices=[gate.value for gate in Gate], required=True)
-    pass_gate.add_argument("--evidence", action="append", required=True)
-
-    reopen = commands.add_parser("reopen-gate")
-    reopen.add_argument("--project", type=Path, required=True)
-    reopen.add_argument("--gate", choices=[gate.value for gate in Gate], required=True)
-    reopen.add_argument("--reason", required=True)
-
-    save_artifact = commands.add_parser("save-artifact")
-    save_artifact.add_argument("--project", type=Path, required=True)
-    save_artifact.add_argument(
-        "--kind", choices=[kind.value for kind in ArtifactKind], required=True
-    )
-    save_artifact.add_argument("--input", type=Path, required=True)
-
-    show_artifact = commands.add_parser("show-artifact")
-    show_artifact.add_argument("--project", type=Path, required=True)
-    show_artifact.add_argument(
-        "--kind", choices=[kind.value for kind in ArtifactKind], required=True
-    )
-
-    list_artifacts = commands.add_parser("list-artifacts")
-    list_artifacts.add_argument("--project", type=Path, required=True)
-
-    review = commands.add_parser("review")
-    review.add_argument("--project", type=Path, required=True)
-    review.add_argument(
-        "--kind", choices=[kind.value for kind in ReviewKind], required=True
-    )
 
     experience_create = commands.add_parser("experience-create")
     experience_create.add_argument("--project", type=Path, required=True)
@@ -172,10 +135,10 @@ def build_config(args: argparse.Namespace) -> RuntimeConfig:
         )
     profile = args.workspace_config
     if profile is None:
-        environment_profile = os.environ.get("AI_PPT_WORKSPACE_CONFIG")
+        configured = os.environ.get("AI_PPT_WORKSPACE_CONFIG")
         profile = (
-            Path(environment_profile)
-            if environment_profile
+            Path(configured)
+            if configured
             else Path.home() / "Documents" / "AI-PPT-Workspace" / "workspace.json"
         )
     config = RuntimeConfig.from_workspace_file(profile)
@@ -193,10 +156,98 @@ def build_config(args: argparse.Namespace) -> RuntimeConfig:
     )
 
 
+def _project_kernel(projects: ProjectService, project: Path) -> ProjectKernel:
+    root = projects.resolve_project(project)
+    try:
+        payload = json.loads(
+            (root / "kernel" / "state.json").read_text(encoding="utf-8")
+        )
+        project_id = str(payload["project_id"])
+    except (OSError, json.JSONDecodeError, KeyError) as exc:
+        raise ProjectNotFoundError(f"Schema 3 project state is invalid: {root}") from exc
+    return ProjectKernel(root, project_id=project_id)
+
+
+def _project_payload(kernel: ProjectKernel, name: str) -> dict[str, object]:
+    state = kernel.load()
+    return {
+        "project_id": state.project_id,
+        "name": name,
+        "project_root": str(kernel.project_root),
+        "schema_version": state.schema_version,
+        "revision": state.revision,
+    }
+
+
+def _add_materials(
+    args: argparse.Namespace,
+    policy: PathPolicy,
+    kernel: ProjectKernel,
+) -> list[dict[str, object]]:
+    service = ProjectCommandService(kernel)
+    revision = kernel.load().revision
+    requests: list[dict[str, str]] = []
+    if args.source is not None:
+        source = policy.assert_source_readable(args.source)
+        candidates = [source] if source.is_file() else sorted(source.rglob("*"))
+        for candidate in candidates:
+            if candidate.is_symlink():
+                raise MaterialImportError(
+                    f"Source directory contains a symlink: {candidate}"
+                )
+            if candidate.is_file():
+                requests.append(
+                    {
+                        "material_type": "bytes",
+                        "data_base64": base64.b64encode(candidate.read_bytes()).decode(
+                            "ascii"
+                        ),
+                        "filename": candidate.name,
+                        "mime_type": "application/octet-stream",
+                        "label": candidate.name,
+                        "value": "",
+                    }
+                )
+    elif args.url is not None:
+        requests.append(
+            {
+                "material_type": "url",
+                "value": args.url,
+                "data_base64": "",
+                "filename": "",
+                "mime_type": "text/uri-list",
+                "label": args.label,
+            }
+        )
+    else:
+        requests.append(
+            {
+                "material_type": "text",
+                "value": args.text,
+                "data_base64": "",
+                "filename": "",
+                "mime_type": "text/plain",
+                "label": args.label,
+            }
+        )
+    if not requests:
+        raise MaterialImportError("Source directory does not contain readable files")
+    committed: list[dict[str, object]] = []
+    for index, request in enumerate(requests):
+        reference, state = service.add_material(
+            f"cli:import:{revision}:{index}",
+            revision,
+            **request,
+        )
+        revision = state.revision
+        committed.append({"artifact_ref": reference, "revision": revision})
+    return committed
+
+
 def dispatch(args: argparse.Namespace) -> dict[str, object]:
     config = build_config(args)
     policy = PathPolicy(config)
-    projects = ProjectStore(config, policy)
+    projects = ProjectService(config)
     experiences = ExperienceStore(config, policy)
     command = args.command
     if command == "preflight":
@@ -208,6 +259,11 @@ def dispatch(args: argparse.Namespace) -> dict[str, object]:
             "roots": config.as_dict(),
             "python": platform.python_version(),
             "write_policy": {"ok": True, "probe": str(probe)},
+            "runtime_contract": {
+                "project_schema": "3.0",
+                "artifact_reference": "artifact://<kind>/<sha256>",
+                "managed_projects": len(projects.list_projects()),
+            },
             "capabilities": {
                 "runtime_foundation": True,
                 "content_blueprint": True,
@@ -218,116 +274,41 @@ def dispatch(args: argparse.Namespace) -> dict[str, object]:
                 "delivery_validation": True,
                 "experience_evolution": bool(experience_status["ready"]),
             },
-            "capability_evidence": {
-                "experience_evolution": experience_status,
-            },
+            "capability_evidence": {"experience_evolution": experience_status},
         }
     if command == "init":
-        manifest = projects.create(args.name, source_context=args.source_context)
-        state = StateStore(Path(manifest.project_root), policy).initialize()
+        kernel = projects.create_project(args.name, project_id=args.project_id)
         return {
             "ok": True,
             "command": command,
-            "project": manifest.as_dict(),
-            "state": state.as_dict(),
+            "project": _project_payload(kernel, args.name.strip()),
         }
     if command == "import":
-        manifest = projects.load(args.project)
-        intake = MaterialIntake(policy)
-        project_root = Path(manifest.project_root)
-        if args.source is not None:
-            records = intake.add_local(
-                project_root, args.source, ImportMode(args.mode)
-            )
-        elif args.url is not None:
-            records = (intake.add_url(project_root, args.url),)
-        else:
-            records = (intake.add_text(project_root, args.text, args.label),)
+        kernel = _project_kernel(projects, args.project)
         return {
             "ok": True,
             "command": command,
-            "materials": [record.as_dict() for record in records],
+            "materials": _add_materials(args, policy, kernel),
+            "snapshot": dispatch_v16(
+                {
+                    "operation": "get-project-snapshot",
+                    "project_root": str(kernel.project_root),
+                }
+            )["snapshot"],
         }
     if command == "status":
-        manifest = projects.load(args.project)
-        state = StateStore(Path(manifest.project_root), policy).load()
-        return {
-            "ok": True,
-            "command": command,
-            "project": manifest.as_dict(),
-            "state": state.as_dict(),
-        }
-    if command == "pass-gate":
-        manifest = projects.load(args.project)
-        state = StateStore(Path(manifest.project_root), policy).pass_gate(
-            Gate(args.gate), tuple(args.evidence)
+        kernel = _project_kernel(projects, args.project)
+        result = dispatch_v16(
+            {
+                "operation": "get-project-snapshot",
+                "project_root": str(kernel.project_root),
+            }
         )
-        return {"ok": True, "command": command, "state": state.as_dict()}
-    if command == "reopen-gate":
-        manifest = projects.load(args.project)
-        state = StateStore(Path(manifest.project_root), policy).reopen_from(
-            Gate(args.gate), args.reason
-        )
-        return {"ok": True, "command": command, "state": state.as_dict()}
-    if command == "save-artifact":
-        manifest = projects.load(args.project)
-        input_path = policy.assert_source_readable(args.input)
-        if not input_path.is_file():
-            raise ArtifactValidationError(
-                f"Artifact input must be a JSON file: {input_path}"
-            )
-        try:
-            payload = json.loads(input_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ArtifactValidationError(
-                f"Artifact input is not valid JSON: {input_path}"
-            ) from exc
-        if not isinstance(payload, dict):
-            raise ArtifactValidationError("Artifact input must contain a JSON object")
-        artifact = ArtifactStore(
-            Path(manifest.project_root), policy
-        ).save(ArtifactKind(args.kind), payload)
-        return {
-            "ok": True,
-            "command": command,
-            "artifact": artifact.as_dict(),
-        }
-    if command == "show-artifact":
-        manifest = projects.load(args.project)
-        artifact = ArtifactStore(
-            Path(manifest.project_root), policy
-        ).latest(ArtifactKind(args.kind))
-        return {
-            "ok": True,
-            "command": command,
-            "artifact": artifact.as_dict(),
-        }
-    if command == "list-artifacts":
-        manifest = projects.load(args.project)
-        artifacts = ArtifactStore(
-            Path(manifest.project_root), policy
-        ).list_latest()
-        return {
-            "ok": True,
-            "command": command,
-            "artifacts": {
-                kind: artifact.as_dict() for kind, artifact in artifacts.items()
-            },
-        }
-    if command == "review":
-        manifest = projects.load(args.project)
-        review_path = ReviewHtml(
-            Path(manifest.project_root), policy
-        ).generate(ReviewKind(args.kind))
-        return {
-            "ok": True,
-            "command": command,
-            "review_path": str(review_path),
-        }
+        return {**result, "command": command}
     if command == "experience-create":
-        manifest = projects.load(args.project)
+        kernel = _project_kernel(projects, args.project)
         payload = _load_json_object(args.input, policy, "Experience input")
-        experience = experiences.create_candidate(manifest, payload)
+        experience = experiences.create_candidate(kernel, payload)
         return {
             "ok": True,
             "command": command,
@@ -335,32 +316,29 @@ def dispatch(args: argparse.Namespace) -> dict[str, object]:
         }
     if command == "experience-list":
         level = ExperienceLevel(args.level) if args.level else None
-        items = experiences.list(level)
         return {
             "ok": True,
             "command": command,
-            "experiences": [item.as_dict() for item in items],
+            "experiences": [item.as_dict() for item in experiences.list(level)],
         }
     if command == "experience-show":
-        experience = experiences.get(args.experience)
         return {
             "ok": True,
             "command": command,
-            "experience": experience.as_dict(),
+            "experience": experiences.get(args.experience).as_dict(),
         }
     if command == "experience-recommend":
         payload = _load_json_object(args.input, policy, "Experience context")
-        recommendations = experiences.recommend(payload, limit=args.limit)
         return {
             "ok": True,
             "command": command,
-            "recommendations": recommendations,
+            "recommendations": experiences.recommend(payload, limit=args.limit),
         }
     if command == "experience-apply":
-        manifest = projects.load(args.project)
+        kernel = _project_kernel(projects, args.project)
         payload = _load_json_object(args.input, policy, "Experience context")
         application = experiences.record_application(
-            manifest, args.experience, payload
+            kernel, args.experience, payload
         )
         return {
             "ok": True,
@@ -426,13 +404,10 @@ def _exit_code(error: Exception) -> int:
         (
             ProjectNotFoundError,
             MaterialImportError,
-            ArtifactValidationError,
             ExperienceValidationError,
         ),
     ):
         return 4
-    if isinstance(error, InvalidTransitionError):
-        return 5
     if isinstance(error, ConfigurationError):
         return 2
     return 10
@@ -446,19 +421,13 @@ def main(argv: list[str] | None = None) -> int:
     except (AiPptError, OSError, ValueError) as exc:
         code = _exit_code(exc)
         _print_json(
-            {
-                "ok": False,
-                "error": {"type": type(exc).__name__, "message": str(exc)},
-            },
+            {"ok": False, "error": {"type": type(exc).__name__, "message": str(exc)}},
             sys.stderr,
         )
         return code
     except Exception as exc:  # pragma: no cover - last-resort structured boundary
         _print_json(
-            {
-                "ok": False,
-                "error": {"type": type(exc).__name__, "message": str(exc)},
-            },
+            {"ok": False, "error": {"type": type(exc).__name__, "message": str(exc)}},
             sys.stderr,
         )
         return 10

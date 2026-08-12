@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
+sys.dont_write_bytecode = True
 PLUGIN_SOURCE = Path(__file__).resolve().parents[3] / "src"
 RUNTIME = SKILL_ROOT / "runtime"
 if not RUNTIME.exists() and PLUGIN_SOURCE.exists():

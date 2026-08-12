@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -10,6 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.acceptance.ledger import (
     AcceptanceLedger,
+    EvidenceIndex,
     extract_numbered_requirements,
 )
 
@@ -58,11 +61,136 @@ class AcceptanceLedgerTests(unittest.TestCase):
             )
         )
         ledger = AcceptanceLedger.from_dict(payload)
-        self.assertGreaterEqual(len(ledger.requirements), 60)
-        self.assertEqual(len(ledger.requirements), len(set(ledger.ids)))
-        self.assertTrue(
-            all(item.status == "unproven" for item in ledger.requirements)
+        requirements = []
+        for path, prefix, section in (
+            (ROOT.parent / "01-产品需求基线-v1.0.md", "PRD", "17"),
+            (ROOT.parent / "02-系统详细设计-v1.0.md", "SDD", "21"),
+            (ROOT.parent / "03-UI设计与交互规范-v1.0.md", "UI", "23"),
+        ):
+            requirements.extend(
+                extract_numbered_requirements(
+                    path.read_text(encoding="utf-8"),
+                    source_prefix=prefix,
+                    section_prefix=section,
+                )
+            )
+        expected = AcceptanceLedger(
+            version="1.6", requirements=tuple(requirements)
+        ).with_evidence(
+            EvidenceIndex.from_path(ROOT / "requirements" / "v1.6-evidence.json")
         )
+        self.assertEqual(len(ledger.requirements), 104)
+        self.assertEqual(len(ledger.requirements), len(set(ledger.ids)))
+        self.assertEqual(ledger.as_dict(), expected.as_dict())
+        self.assertGreater(
+            sum(item.status == "passed" for item in ledger.requirements), 0
+        )
+        self.assertLess(
+            sum(item.status == "passed" for item in ledger.requirements), 104
+        )
+        self.assertTrue(
+            all(
+                item.status == "unproven"
+                for item in ledger.requirements
+                if "target-evidence" in item.required_evidence
+            )
+        )
+        by_id = {item.requirement_id: item for item in ledger.requirements}
+        for requirement_id in (
+            "PRD-17.1-01",
+            "PRD-17.1-03",
+            "SDD-21.3-01",
+            "SDD-21.3-02",
+            "UI-23.2-01",
+            "UI-23.2-04",
+            "UI-23.2-25",
+        ):
+            self.assertEqual(by_id[requirement_id].status, "unproven")
+
+    def test_requirement_passes_only_when_every_proof_kind_resolves(self) -> None:
+        markdown = "## 17. 标准\n### 17.1 闭环\n1. 恢复项目。\n"
+        requirement = extract_numbered_requirements(
+            markdown, source_prefix="PRD", section_prefix="17"
+        )[0]
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            automated = base / "automated.json"
+            runtime = base / "runtime.json"
+            automated.write_text('{"passed":true}', encoding="utf-8")
+            runtime.write_text('{"passed":true}', encoding="utf-8")
+            automated_sha = hashlib.sha256(automated.read_bytes()).hexdigest()
+            runtime_sha = hashlib.sha256(runtime.read_bytes()).hexdigest()
+            index = EvidenceIndex.from_dict(
+                {
+                    "schema_version": "1.0",
+                    "proofs": [
+                        {
+                            "proof_ref": f"proof://automated-test/{automated_sha}",
+                            "kind": "automated-test",
+                            "path": str(automated),
+                            "sha256": automated_sha,
+                            "requirement_ids": [requirement.requirement_id],
+                        },
+                        {
+                            "proof_ref": f"proof://runtime-evidence/{runtime_sha}",
+                            "kind": "runtime-evidence",
+                            "path": str(runtime),
+                            "sha256": runtime_sha,
+                            "requirement_ids": [requirement.requirement_id],
+                        },
+                    ],
+                }
+            )
+            resolved = AcceptanceLedger(
+                version="1.6", requirements=(requirement,)
+            ).with_evidence(index)
+            self.assertEqual(resolved.requirements[0].status, "passed")
+            self.assertEqual(len(resolved.requirements[0].proof_refs), 2)
+
+            missing = EvidenceIndex.from_dict(
+                {"schema_version": "1.0", "proofs": [index.proofs[0].as_dict()]}
+            )
+            unresolved = AcceptanceLedger(
+                version="1.6", requirements=(requirement,)
+            ).with_evidence(missing)
+            self.assertEqual(unresolved.requirements[0].status, "unproven")
+
+    def test_evidence_index_rejects_hash_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "proof.json"
+            path.write_text("{}", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                EvidenceIndex.from_dict(
+                    {
+                        "schema_version": "1.0",
+                        "proofs": [
+                            {
+                                "proof_ref": "proof://bad/hash",
+                                "kind": "automated-test",
+                                "path": str(path),
+                                "sha256": "0" * 64,
+                                "requirement_ids": ["PRD-17.1-01"],
+                            }
+                        ],
+                    }
+                )
+
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            with self.assertRaises(ValueError):
+                EvidenceIndex.from_dict(
+                    {
+                        "schema_version": "1.0",
+                        "proofs": [
+                            {
+                                "proof_ref": "proof://automated-test/not-content-addressed",
+                                "kind": "automated-test",
+                                "path": str(path),
+                                "sha256": digest,
+                                "requirement_ids": ["PRD-17.1-01"],
+                            }
+                        ],
+                    }
+                )
 
 
 if __name__ == "__main__":

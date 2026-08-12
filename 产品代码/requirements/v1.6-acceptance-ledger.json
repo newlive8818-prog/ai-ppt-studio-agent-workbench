@@ -1,6 +1,12 @@
 {
   "requirements": [
     {
+      "missing_evidence": [
+        "runtime-evidence"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
@@ -8,9 +14,15 @@
       "requirement_id": "PRD-17.1-01",
       "source_section": "17.1",
       "status": "unproven",
-      "text": "用户可在 Codex 中打开 Widget，不需要启动独立网页；"
+      "text": "用户可在真实 Codex 侧边栏打开轻量工作台；普通工具调用不会在聊天消息中渲染 AI PPT Studio Widget；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
@@ -18,9 +30,15 @@
       "requirement_id": "PRD-17.1-02",
       "source_section": "17.1",
       "status": "unproven",
-      "text": "同一项目在聊天、轻量 Widget 和专业审阅页中的状态、版本和 revision 一致；"
+      "text": "同一项目在聊天文字状态、侧边栏工作台和浏览器专业审阅中的状态、版本和 revision 一致；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
@@ -28,19 +46,30 @@
       "requirement_id": "PRD-17.1-03",
       "source_section": "17.1",
       "status": "unproven",
-      "text": "Widget 可打开内容/视觉专业审阅，优先使用右侧宿主浏览区，宿主不支持时同页独立打开；"
+      "text": "侧边栏工作台只在 Codex 内置浏览器打开内容/视觉专业审阅；宿主能力失败时明确提示并允许重试，不回退为聊天 UI；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.1-04",
       "source_section": "17.1",
-      "status": "unproven",
+      "status": "passed",
       "text": "页面标记可绑定版本持久化，保存失败、刷新或 revision 冲突不丢输入；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
@@ -48,9 +77,15 @@
       "requirement_id": "PRD-17.1-05",
       "source_section": "17.1",
       "status": "unproven",
-      "text": "Codex 完成工作后，Widget/审阅页能读取新版本和影响范围；"
+      "text": "Codex 完成工作后，侧边栏/浏览器审阅能读取新版本和影响范围；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
@@ -58,9 +93,15 @@
       "requirement_id": "PRD-17.1-06",
       "source_section": "17.1",
       "status": "unproven",
-      "text": "关闭/重开 Widget、审阅页或新任务恢复项目时不丢状态；"
+      "text": "关闭/重开侧边栏工作台、浏览器审阅或新任务恢复项目时不丢状态；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
@@ -68,109 +109,167 @@
       "requirement_id": "PRD-17.1-07",
       "source_section": "17.1",
       "status": "unproven",
-      "text": "一个真实项目从任务书走到聊天中的可下载 PPTX、用户 G4 结果和完整交付包。"
+      "text": "一个真实项目从用户确认的任务卡走到聊天中的可下载 PPTX、用户 G4 结果和完整交付包；当前无材料时必须完整证明 proposal-only 身份治理。"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.2-01",
       "source_section": "17.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "AI 不主动外部搜索项目材料；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.2-02",
       "source_section": "17.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "每个正式事实和素材可追溯；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.2-03",
       "source_section": "17.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "内容蓝图先于视觉设计，场景专家能力包不强制固定章节模板；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.2-04",
       "source_section": "17.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "用户首次看到的内容蓝图已经过售前、决策者、证据、叙事和表达角色的隔离审查；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.2-05",
       "source_section": "17.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "每个关键主张可定位到证据、推断身份或明确缺口；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.2-06",
       "source_section": "17.2",
-      "status": "unproven",
-      "text": "逐页目标、主张、完整文案、讲解稿、案例/截图和来源齐全；"
+      "status": "passed",
+      "text": "逐页目标、主张、完整文案、讲解稿、案例/截图和来源齐全；无材料模式下，诊断假设、方案建议和待联合验证身份贯穿策略、主张—证据、逐页文案、讲解稿和审阅投影，虚构数字、案例、客户事实或承诺必须触发硬失败；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.2-07",
       "source_section": "17.2",
-      "status": "unproven",
-      "text": "AI 补充内容不伪装成来源事实，关键证据缺失时不能内部放行；"
+      "status": "passed",
+      "text": "AI 补充内容不伪装成来源事实，关键证据缺失时不能内部放行；AI 填齐任务字段后仍不能启动内容生产，只有当前 MissionConfirmation 与已登记材料或 `no-materials-confirmed` 一致时才允许进入内容链；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.2-08",
       "source_section": "17.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "任一适用硬规则或最低内容质量失败即返工，不使用数字评分或多数投票；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.2-09",
       "source_section": "17.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "用户修改先形成 FeedbackGovernanceRecord，再生成 ContentChangeSet；未受影响内容保持，修改后按风险复审；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.2-10",
       "source_section": "17.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "内部失败版本默认不进入用户审阅且不能通过 G0。"
     },
     {
+      "missing_evidence": [
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -183,6 +282,14 @@
       "text": "Deck Design System、全部页面合同与 2–3 页严格路线 B 锚点页完整，并由独立审美/工程角色通过；"
     },
     {
+      "missing_evidence": [
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -195,6 +302,14 @@
       "text": "HTML 在一份连续文档中逐字展示全部冻结页面文字、备注、来源/素材和完整合同，无摘要、改写、截断、省略或逐页切换依赖；"
     },
     {
+      "missing_evidence": [
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -207,6 +322,14 @@
       "text": "每项适用审美与工程条件只有 `通过 / 不通过`，任一不通过即返工；系统不生成数字审美评分；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -219,6 +342,14 @@
       "text": "参考实现偏离仅在实现更优秀且硬要求、最低审美结果均满足时自动放行，并保留理由与证据；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -231,6 +362,14 @@
       "text": "正式 PPTX 不使用整页位图；事实文字、数字、图表、表格和关系保持原生可编辑；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -243,6 +382,14 @@
       "text": "开发渲染仅作预检；G2 锚点页与 G4 整套均有 macOS PowerPoint、macOS WPS、Windows PowerPoint 和 Windows WPS 对同一 PPTX 哈希的实机导出证据；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -255,6 +402,14 @@
       "text": "目标软件导出中无对象消失、错位、字体静默替代、溢出、裁切、遮挡、异常换行和设计意图明显掉级；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -267,6 +422,14 @@
       "text": "每个生产页完成业务语义、视觉完成度、排版工程和目标软件渲染四重硬验收，整套完成节奏检查；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -279,6 +442,14 @@
       "text": "交付物能在四个强制桌面目标中继续修改；四个目标必须分别提供证据，不从其他目标推断兼容。"
     },
     {
+      "missing_evidence": [
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -291,6 +462,14 @@
       "text": "替代字体、字宽/换行风险和四目标复验均有证据；任一目标缺失或失败时 G2/G4 不得通过。"
     },
     {
+      "missing_evidence": [
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -303,6 +482,14 @@
       "text": "视觉生产、动态专家和独立审查角色边界清楚，正式名称统一使用中文。"
     },
     {
+      "missing_evidence": [
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -315,6 +502,14 @@
       "text": "正式路线使用的视觉 Prompt、工具任务包、经验切片和返工指令可定位到明确版本；A/C 实验产物未污染路线 B 上下文。"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -327,6 +522,14 @@
       "text": "视觉样张在聊天中发送并带项目、页面、版本和身份；专业审阅页不重复建设样张画廊。"
     },
     {
+      "missing_evidence": [
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -339,6 +542,14 @@
       "text": "内容/视觉专业审阅页只提供连续阅读、精确标记和右上角保存，不显示返回聊天、顶部版本历史、G0/G3/G4 按钮或 PPTX 下载。"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -351,96 +562,147 @@
       "text": "最终 PPTX 由 Codex 聊天发送；用户在聊天中的接受或修改可记录 G4 或重开范围。"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.4-01",
       "source_section": "17.4",
-      "status": "unproven",
+      "status": "passed",
       "text": "事实、推论、建议、决定和不确定性可区分；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.4-02",
       "source_section": "17.4",
-      "status": "unproven",
+      "status": "passed",
       "text": "高影响动作在 G0、G3、G4 或明确例外条件下确认，G1/G2 由 AI 内部放行；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.4-03",
       "source_section": "17.4",
-      "status": "unproven",
+      "status": "passed",
       "text": "可逆低影响任务 AI 自主完成；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.4-04",
       "source_section": "17.4",
-      "status": "unproven",
+      "status": "passed",
       "text": "每次修改有版本、来源、影响范围、撤销和恢复；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.4-05",
       "source_section": "17.4",
-      "status": "unproven",
+      "status": "passed",
       "text": "单次反馈不自动形成候选经验或稳定规则。"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.4-06",
       "source_section": "17.4",
-      "status": "unproven",
+      "status": "passed",
       "text": "F0–F3 路由、F2/F3 用户裁决、反馈治理回执和恢复行为可检查。"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.4-07",
       "source_section": "17.4",
-      "status": "unproven",
+      "status": "passed",
       "text": "优选案例只在通过专业资格门的候选中影响择优。"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.4-08",
       "source_section": "17.4",
-      "status": "unproven",
+      "status": "passed",
       "text": "角色化经验切片可显示来源、版本、范围、匹配理由和应用结果。"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.4-09",
       "source_section": "17.4",
-      "status": "unproven",
+      "status": "passed",
       "text": "稳定 Prompt、角色合同和场景能力包不会被运行时自动修改。"
     },
     {
+      "missing_evidence": [
+        "automated-test"
+      ],
+      "proof_refs": [
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
@@ -451,36 +713,56 @@
       "text": "3–5 秒内识别页面、当前结论、最大风险和主操作；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.5-02",
       "source_section": "17.5",
-      "status": "unproven",
+      "status": "passed",
       "text": "每页一个最强主操作；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.5-03",
       "source_section": "17.5",
-      "status": "unproven",
+      "status": "passed",
       "text": "状态不只依赖颜色；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.5-04",
       "source_section": "17.5",
-      "status": "unproven",
-      "text": "轻量 Widget 不复制完整合同、联系表、大图质检或交付文件区；"
+      "status": "passed",
+      "text": "侧边栏轻量工作台不复制完整合同、联系表、大图质检或交付文件区；"
     },
     {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
@@ -491,26 +773,43 @@
       "text": "用户不需要记住另一页面的信息才能判断；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.5-06",
       "source_section": "17.5",
-      "status": "unproven",
+      "status": "passed",
       "text": "长任务允许离开，回来后恢复进度和上一份有效结果。"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence"
       ],
       "requirement_id": "PRD-17.5-07",
       "source_section": "17.5",
-      "status": "unproven",
+      "status": "passed",
       "text": "专业审阅在 1440、1000 和 760px 视口中目录默认折叠、Header 单行且正文无横向溢出。"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/51d5ac34dd3c8bc894ff7e57cec515fc0406c75c8512918d6d6a49d989302fa8"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -519,9 +818,16 @@
       "requirement_id": "SDD-21.3-01",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "安装插件并打开项目；"
+      "text": "安装插件并从真实 Codex 侧边栏打开项目，聊天中不出现 Widget iframe；"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/51d5ac34dd3c8bc894ff7e57cec515fc0406c75c8512918d6d6a49d989302fa8"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -530,9 +836,16 @@
       "requirement_id": "SDD-21.3-02",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "轻量 Widget 打开内容/视觉专业审阅；右侧宿主不可用时同一页面独立降级；"
+      "text": "侧边栏只在 Codex 内置浏览器打开内容/视觉专业审阅；失败时明确阻断且不回退聊天 UI；"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -541,9 +854,15 @@
       "requirement_id": "SDD-21.3-03",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "页面提交决定并持久化；"
+      "text": "任务卡字段完整后保持 confirmable；用户确认当前任务与材料/无材料模式后才允许内容生产；"
     },
     {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -555,6 +874,13 @@
       "text": "发送 follow-up 到 Codex；"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -566,6 +892,13 @@
       "text": "Codex 读取 Context Pack、写回产物；"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -574,9 +907,16 @@
       "requirement_id": "SDD-21.3-06",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "Widget 读取新版本；"
+      "text": "侧边栏工作台读取新版本；"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -588,6 +928,13 @@
       "text": "并发修改产生冲突而非覆盖；"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/51d5ac34dd3c8bc894ff7e57cec515fc0406c75c8512918d6d6a49d989302fa8"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -596,9 +943,15 @@
       "requirement_id": "SDD-21.3-08",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "Widget 重挂载恢复；"
+      "text": "侧边栏工作台重挂载恢复；"
     },
     {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -610,6 +963,13 @@
       "text": "Image 2 失败、Presentations 失败和网络断开恢复；"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -621,6 +981,13 @@
       "text": "一个真实售前项目通过 G0–G4 并交付。"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -632,6 +999,13 @@
       "text": "内容初版完成后，售前/决策者/证据/叙事/表达审查相互隔离，任一硬条件失败可定向返工并复验；"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -643,6 +1017,13 @@
       "text": "用户首次审阅版本已有 passed ContentAcceptanceRecord，内部失败过程版本不能通过 G0；"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -654,6 +1035,13 @@
       "text": "用户区块反馈先生成 FeedbackGovernanceRecord，再生成 ContentChangeSet；局部表达、局部内容、结构和高影响修改走不同复审路由；"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -665,6 +1053,13 @@
       "text": "G1/G2 全程无需用户方向选择，失败可自动返工并保留证据；"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -676,6 +1071,13 @@
       "text": "G3 专业审阅 HTML 连续展示整套框架和全部页面完整内容/合同；目录默认折叠，区块/选中文字标记可批量保存并局部重开，样张由聊天发送；"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -687,6 +1089,13 @@
       "text": "G3 后批量生成，任一生产页硬门失败时自动修复，全部通过后才允许进入 G4。"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -698,6 +1107,13 @@
       "text": "F0/F1 反馈完成治理、自动修复、专业复审和结果回执；F2/F3 在用户裁决前不扩大执行。"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -709,6 +1125,13 @@
       "text": "用户坚持的项目特殊要求只写入项目约束，不自动创建候选经验。"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -720,6 +1143,13 @@
       "text": "优选案例、参考案例、成功/失败成品和内审失败可分别提炼三类学习结果。"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -731,6 +1161,13 @@
       "text": "同一经验对生产与审查角色编译出不同切片，并记录实际应用版本和结果。"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -742,6 +1179,13 @@
       "text": "错误场景应用被拒绝或标记无效，不能污染晋级统计。"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -753,6 +1197,13 @@
       "text": "严格路线 B 按“合同 → Presentations 原生首版 → 可选 Image 2 非语义资产 → Presentations 整合”执行，路线 A/C 产物不可读。"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -764,6 +1215,13 @@
       "text": "G2 锚点页在 macOS/Windows 上 PowerPoint/WPS 四目标对同一 PPTX 哈希实机导出；开发预检无法替代 TargetRenderEvidence。"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -772,9 +1230,16 @@
       "requirement_id": "SDD-21.3-24",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "G4 整套在目标 PowerPoint 实机导出；对象、字体、裁切、换行或设计意图任一失败均触发定向返工并保留上一有效版本；通过后由聊天发送 PPTX 并记录用户接受/修改。"
+      "text": "G4 整套在 macOS/Windows 上 PowerPoint/WPS 四目标对同一 PPTX 哈希分别实机导出；对象、字体、裁切、换行或设计意图任一失败均触发定向返工并保留上一有效版本；通过后由聊天发送 PPTX 并记录用户接受/修改。"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -786,6 +1251,13 @@
       "text": "四目标始终是一期强制阻断条件；无对应同哈希实机证据时不得通过 G2/G4 或声明兼容。"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -797,6 +1269,13 @@
       "text": "专业审阅页不存在返回聊天、顶部版本历史、Gate 确认、样张画廊和 PPTX 下载入口；保存标记不能误触发 G0/G3。"
     },
     {
+      "missing_evidence": [
+        "real-project"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -805,9 +1284,15 @@
       "requirement_id": "SDD-21.3-27",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "UI-05 Widget 投影只返回阶段、四门、阻断、平台证据和聊天发送状态，不下载全量联系表或大图。"
+      "text": "UI-05 侧边栏投影只返回阶段、四门、阻断、平台证据和聊天发送状态，不下载全量联系表或大图。"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -815,10 +1300,16 @@
       ],
       "requirement_id": "UI-23.1-01",
       "source_section": "23.1",
-      "status": "unproven",
+      "status": "passed",
       "text": "当前页面和项目；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -826,10 +1317,16 @@
       ],
       "requirement_id": "UI-23.1-02",
       "source_section": "23.1",
-      "status": "unproven",
+      "status": "passed",
       "text": "最重要结论、问题或风险；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -837,10 +1334,16 @@
       ],
       "requirement_id": "UI-23.1-03",
       "source_section": "23.1",
-      "status": "unproven",
+      "status": "passed",
       "text": "主操作；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -848,10 +1351,17 @@
       ],
       "requirement_id": "UI-23.1-04",
       "source_section": "23.1",
-      "status": "unproven",
-      "text": "查看证据/历史的位置。"
+      "status": "passed",
+      "text": "查看证据或来源的位置；版本历史只在允许的聊天/项目历史投影中出现，不要求专业审阅页提供历史入口。"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -860,9 +1370,16 @@
       "requirement_id": "UI-23.2-01",
       "source_section": "23.2",
       "status": "unproven",
-      "text": "从 Codex 打开紧凑 Widget；"
+      "text": "从真实 Codex 侧边栏打开紧凑工作台，聊天消息中没有 AI PPT Studio Widget；AI 填齐任务卡后仍为“待你确认”，未取得真实用户确认引用时，尝试启动内容任务必须失败；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -874,6 +1391,12 @@
       "text": "理解当前 AI 判断；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -881,10 +1404,17 @@
       ],
       "requirement_id": "UI-23.2-03",
       "source_section": "23.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "在五个认知空间之间切换轻量状态，不加载五个完整桌面页面；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -893,9 +1423,15 @@
       "requirement_id": "UI-23.2-04",
       "source_section": "23.2",
       "status": "unproven",
-      "text": "从内容蓝图空间点击 `打开内容审阅`，优先在右侧宿主浏览区打开；宿主不支持时用同一独立页面降级；"
+      "text": "从内容蓝图空间点击 `打开内容审阅`，只在 Codex 内置浏览器打开；失败时明确提示并重试，不回退为聊天 UI；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -903,10 +1439,17 @@
       ],
       "requirement_id": "UI-23.2-05",
       "source_section": "23.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "验证 1440、1000 和 760px 视口中目录默认折叠、Header 约 64px 单行，正文无横向溢出；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -915,9 +1458,15 @@
       "requirement_id": "UI-23.2-06",
       "source_section": "23.2",
       "status": "unproven",
-      "text": "在完整内容审阅中连续查看任一页的全部文字、讲解稿、事实身份、来源和材料；"
+      "text": "在完整内容审阅中连续查看任一页的全部文字、讲解稿、事实身份、来源和材料；用户确认“当前无材料”后可以继续，内容和审阅逐项显示诊断假设、方案建议、待联合验证，虚构数字、案例、事实或承诺会被硬门拒绝；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -925,10 +1474,16 @@
       ],
       "requirement_id": "UI-23.2-07",
       "source_section": "23.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "为内容页面、字段和选中文字添加多个标记，通过右上角 `保存标记` 批量保存；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -936,10 +1491,16 @@
       ],
       "requirement_id": "UI-23.2-08",
       "source_section": "23.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "刷新后标记仍存在；保存失败或 revision 冲突时未保存草稿不丢失；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -947,10 +1508,16 @@
       ],
       "requirement_id": "UI-23.2-09",
       "source_section": "23.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "验证保存标记不等于 G0、不显示“规则已采用”，专业审阅页也没有返回聊天和版本历史；"
     },
     {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -962,6 +1529,13 @@
       "text": "在聊天中查看 AI 对标记的专业治理、保持不变项、影响范围和复审路由，并确认或重开 G0；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -973,6 +1547,12 @@
       "text": "从视觉设计空间打开同一专业审阅页的视觉合同模式；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -980,10 +1560,16 @@
       ],
       "requirement_id": "UI-23.2-12",
       "source_section": "23.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "在一份连续文档中看懂整套框架、Deck Design System 和全部页面合同，任一页文字、备注、来源和合同字段无缺失/截断；"
     },
     {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -995,6 +1581,12 @@
       "text": "验证视觉样张、原生锚点页和必要前后对比由聊天发送，并带项目、页面、版本和身份；专业审阅页不建设样张画廊；"
     },
     {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -1006,6 +1598,12 @@
       "text": "为任一视觉合同区块或选中文字添加并保存标记，然后在聊天中确认或重开 G3；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -1013,10 +1611,17 @@
       ],
       "requirement_id": "UI-23.2-15",
       "source_section": "23.2",
-      "status": "unproven",
+      "status": "passed",
       "text": "验证专业审阅页不存在 G0/G3/G4 确认、PPTX 下载、返回聊天或顶部版本历史入口；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -1025,9 +1630,15 @@
       "requirement_id": "UI-23.2-16",
       "source_section": "23.2",
       "status": "unproven",
-      "text": "验证锚点页按严格路线 B 形成 Presentations 原生首版，Image 2 只在首版后生成可替换非语义资产，目标 PowerPoint 实机证据与开发预检身份清楚；"
+      "text": "验证锚点页按严格路线 B 形成 Presentations 原生首版，Image 2 只在首版后生成可替换非语义资产，四目标软件同哈希实机证据与开发预检身份清楚；"
     },
     {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -1039,6 +1650,12 @@
       "text": "验证 G3 后整套批量生产、逐页自动四重硬验收和返工不要求逐页点击；"
     },
     {
+      "missing_evidence": [],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -1046,10 +1663,17 @@
       ],
       "requirement_id": "UI-23.2-18",
       "source_section": "23.2",
-      "status": "unproven",
-      "text": "在 UI-05 Widget 投影中只看到阶段、完成数、四门、一个阻断项、平台证据和聊天发送状态；不出现联系表、大图质检或下载区；"
+      "status": "passed",
+      "text": "在 UI-05 侧边栏投影中只看到阶段、完成数、四门、一个阻断项、平台证据和聊天发送状态；不出现联系表、大图质检或下载区；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -1061,6 +1685,12 @@
       "text": "验证 G4 前整套已有 macOS PowerPoint、macOS WPS、Windows PowerPoint 和 Windows WPS 对同一 PPTX 哈希的实机导出、字体和逐页证据；任一目标缺失即阻断；"
     },
     {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -1072,6 +1702,12 @@
       "text": "Codex 在聊天发送可下载 PPTX 和必要交付说明，用户接受后记录 G4，提出修改则局部重开；"
     },
     {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -1083,6 +1719,12 @@
       "text": "提交 F0/F1 反馈，查看治理回执、自动修复、前后对比和专业复审结果；"
     },
     {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -1094,6 +1736,12 @@
       "text": "提交 F2/F3 反馈，在扩大执行前查看反例、范围、代价并完成三个动作之一；"
     },
     {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -1105,6 +1753,12 @@
       "text": "验证用户坚持的特殊要求只显示为当前项目约束，不自动形成候选经验；"
     },
     {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -1116,6 +1770,13 @@
       "text": "登记一个用户优选案例和一个失败成品，分别查看偏好信号、专业机制候选和失败模式候选；"
     },
     {
+      "missing_evidence": [
+        "runtime-evidence"
+      ],
+      "proof_refs": [
+        "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+        "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431"
+      ],
       "required_evidence": [
         "automated-test",
         "runtime-evidence",
@@ -1124,7 +1785,7 @@
       "requirement_id": "UI-23.2-25",
       "source_section": "23.2",
       "status": "unproven",
-      "text": "验证聊天、Widget 和专业审阅页始终读取同一项目 revision，关闭/重开任一表面都不形成第二套状态。"
+      "text": "验证聊天文字通道、侧边栏工作台和浏览器专业审阅页始终读取同一项目 revision，关闭/重开任一表面都不形成第二套状态。"
     }
   ],
   "version": "1.6"

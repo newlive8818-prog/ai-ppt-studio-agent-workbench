@@ -1,9 +1,11 @@
-import { StrictMode } from "react";
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
-import { createMcpAppClient } from "./lib/mcp-app-client";
-import type { HostBridge } from "./types";
+import { ProfessionalReviewApp } from "./ProfessionalReviewApp";
+import { createBrowserReviewClient } from "./lib/browser-review-client";
+import { createSidebarHostClient } from "./lib/sidebar-host-client";
+import type { HostBridge, SurfaceData } from "./types";
 import "./styles.css";
 
 function createPreviewBridge(): HostBridge {
@@ -19,17 +21,50 @@ function createPreviewBridge(): HostBridge {
     },
     async updateModelContext() {},
     async sendFollowUp() {},
-    async requestDisplayMode() {},
+    async confirmMission() {
+      throw new Error("Preview mode cannot confirm a mission.");
+    },
+    getHostEnvironment() {
+      return {
+        containerWidth: window.innerWidth,
+        canSendMessage: false,
+        canUpdateModelContext: false,
+      };
+    },
     notifySize() {},
   };
 }
 
-const bridge = window.__AI_PPT_PREVIEW__
+const preview = window.__AI_PPT_PREVIEW__;
+const browserReview = !preview && window.location.hash.startsWith("#token=");
+const bridge = preview
   ? createPreviewBridge()
-  : createMcpAppClient();
+  : browserReview
+    ? createBrowserReviewClient()
+    : createSidebarHostClient();
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App initialData={window.__AI_PPT_PREVIEW__} bridge={bridge} />
-  </StrictMode>,
-);
+function SurfaceRouter() {
+  const [data, setData] = useState<SurfaceData | undefined>(preview);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (preview) return;
+    let mounted = true;
+    bridge.connect((incoming) => {
+      if (mounted) setData(incoming);
+    }).catch(() => {
+      if (mounted) setError("无法连接 Codex 宿主，项目数据未被修改。");
+    });
+    return () => { mounted = false; };
+  }, []);
+
+  if (!data) {
+    return <main className="loading-shell"><div className="loading-mark">PPT</div><h1>正在读取 AI PPT 项目</h1><p>{error || "正在同步同一 project revision…"}</p></main>;
+  }
+  if (data.surface === "review") {
+    return <ProfessionalReviewApp initialData={data} bridge={bridge} managedConnection />;
+  }
+  return <App initialData={data} bridge={bridge} managedConnection />;
+}
+
+createRoot(document.getElementById("root")!).render(<SurfaceRouter />);

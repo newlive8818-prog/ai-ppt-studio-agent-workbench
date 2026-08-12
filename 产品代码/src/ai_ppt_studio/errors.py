@@ -29,6 +29,38 @@ class ArtifactValidationError(AiPptError):
     """Raised when a project artifact lacks required semantic content."""
 
 
+class ArtifactReferenceError(AiPptError):
+    """Raised when an immutable artifact reference cannot be resolved safely."""
+
+
+class ProjectIdentityError(AiPptError):
+    """Raised when a kernel is opened with the wrong project identity."""
+
+
+class GateMutationError(AiPptError):
+    """Raised when code attempts to forge or corrupt a gate transition."""
+
+
+class ContractValidationError(AiPptError):
+    """Raised when a schema 3.0 domain contract is invalid."""
+
+
+class MissionNotConfirmedError(AiPptError):
+    """Raised before formal content work without a current user confirmation."""
+
+
+class MaterialModeUnconfirmedError(AiPptError):
+    """Raised when neither current materials nor an explicit empty mode is bound."""
+
+
+class ProposalOnlyIdentityViolationError(AiPptError):
+    """Raised when no-material content is presented as sourced customer truth."""
+
+
+class FeedbackGovernanceError(AiPptError):
+    """Raised when feedback bypasses its required governance state."""
+
+
 class ExperienceValidationError(AiPptError):
     """Raised when personal experience data or an evolution action is invalid."""
 
@@ -46,6 +78,25 @@ class RevisionConflictError(AiPptError):
         super().__init__(
             f"Expected revision {expected_revision}, current revision is {actual_revision}"
         )
+
+
+class ReviewSourceStaleError(AiPptError):
+    """Raised when marks target a professional-review source that has changed."""
+
+    def __init__(self, expected_source: str, actual_source: str) -> None:
+        self.expected_source = expected_source
+        self.actual_source = actual_source
+        super().__init__(
+            f"Review source {expected_source} is stale; current source is {actual_source}"
+        )
+
+
+class ReviewMarkSaveError(AiPptError):
+    """Raised when a valid review-mark write fails at the persistence boundary."""
+
+
+class ChatDeliveryError(AiPptError):
+    """Raised when a valid chat-delivery receipt cannot be persisted."""
 
 
 class GateBlockedError(AiPptError):

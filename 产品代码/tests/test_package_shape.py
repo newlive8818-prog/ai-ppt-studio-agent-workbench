@@ -13,7 +13,11 @@ class PackageShapeTests(unittest.TestCase):
     def test_python_package_and_skill_metadata_exist(self) -> None:
         from ai_ppt_studio import __version__
 
-        self.assertEqual(__version__, "0.2.0")
+        self.assertEqual(__version__, "0.4.0")
+        self.assertIn(
+            'version = "0.4.0"',
+            (ROOT / "pyproject.toml").read_text(encoding="utf-8"),
+        )
         skill = ROOT / "skills" / "ai-ppt-studio"
         self.assertTrue((skill / "SKILL.md").is_file())
         self.assertTrue((skill / "agents" / "openai.yaml").is_file())
@@ -28,7 +32,51 @@ class PackageShapeTests(unittest.TestCase):
         self.assertLess(len(body.splitlines()), 180)
         self.assertIn("Never write into the current working directory", body)
         self.assertIn("managed runtime root", body)
-        self.assertIn("Read isolation-policy.md before any file write", body)
+        self.assertIn("Read `references/isolation-policy.md` before any write", body)
+
+    def test_production_tree_has_no_legacy_runtime_contract(self) -> None:
+        forbidden = (
+            "WorkbenchStore",
+            "space_projections",
+            "ReviewSurfaceProjector",
+            "seed-v15",
+            'schema_version": "2.0"',
+            "artifact://<kind>/vNNNN#sha256=<digest>",
+            "MissionBrief",
+            "render_ai_ppt_workbench",
+            "render_ai_ppt_review",
+            "AI_PPT_WIDGET_URI",
+            "AI_PPT_REVIEW_URI",
+            "requestedDisplayMode",
+            "requestDisplayMode",
+            "fullscreen/independent",
+            '"fullscreen"',
+            '"inline"',
+        )
+        roots = (
+            ROOT / "src",
+            ROOT / "mcp",
+            ROOT / "scripts",
+            ROOT / "skills",
+            ROOT / "widget" / "src",
+        )
+        hits: list[str] = []
+        for source_root in roots:
+            for path in source_root.rglob("*"):
+                if not path.is_file() or path.suffix not in {
+                    ".py", ".mjs", ".js", ".ts", ".tsx", ".md"
+                }:
+                    continue
+                relative = path.relative_to(ROOT).as_posix()
+                if relative == "src/ai_ppt_studio/adapters/legacy/importer.py":
+                    continue
+                if ".test." in path.name:
+                    continue
+                body = path.read_text(encoding="utf-8")
+                for token in forbidden:
+                    if token in body:
+                        hits.append(f"{relative}: {token}")
+        self.assertEqual(hits, [])
 
 
 if __name__ == "__main__":

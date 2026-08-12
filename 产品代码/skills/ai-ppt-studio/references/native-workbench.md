@@ -1,49 +1,30 @@
 # Native workbench protocol
 
-Use the Widget as a project-backed AI cognition map, not as a second chat transcript. The four spaces are stable; their content and next questions are generated from the current project state.
+AI PPT Studio has exactly two UI surfaces: the lightweight workbench in the real Codex sidebar and professional review in the Codex built-in Browser. Chat is a text collaboration, confirmation, sample, and delivery channel; it never renders a Widget in chat. Both UI surfaces consume the schema 3 project truth and never derive a Gate.
 
 ## Operating loop
 
-1. Call `render_ai_ppt_workbench` or `get_ai_ppt_project_snapshot` and keep its `revision`.
-2. Read the active space, open gate, active task, evidence, uncertainty, and allowed actions.
-3. For user input, call the matching governed write with `expectedRevision`. Refresh after every successful write; never reuse a stale revision.
-4. For AI work, call `request_ai_ppt_agent_action`. Treat the returned task context as the bounded execution brief.
-5. Do the requested reasoning or tool work in Codex. Use only task-listed targets and project material.
-6. Call `commit_ai_ppt_artifact` with the task ID, artifact kind, structured payload, exact sources, and the task's requested revision.
-7. Re-render the workbench. Ask the user only for the concentrated decision shown by the current space.
-8. Call `confirm_ai_ppt_gate` only after the user explicitly accepts and the gate evidence checker permits it.
+1. Use `create_ai_ppt_project` or `get_ai_ppt_project_snapshot`; retain `revision`.
+2. Read the five spaces: 项目总览、材料工作台、内容蓝图、视觉设计、制作与交付.
+3. Call `get_ai_ppt_sidebar_projection` only for a verified sidebar host. If it returns `HOST_SIDEBAR_UNAVAILABLE`, keep the acceptance item blocked and report the capability gap; do not attach a chat UI template.
+4. Before formal content work, save `MissionDraft` and show the complete current task/materials/unknowns. When confirmation is the only pending high-impact action, `OK / 确认 / 采纳 / 继续` and clear equivalents are confirmation intent; ordinary conversation is not. Call `confirm_ai_ppt_mission` with the current card summary. Use a verified sidebar/message reference when available, otherwise require host-native confirmation. Intent words are never persisted as evidence; only host acceptance lets the Python content precondition gate establish `material-backed` or `proposal-only`.
+5. Submit user input through the matching write with `expectedRevision`, then refresh.
+6. Before AI work, use `request_ai_ppt_agent_action` with one formal role action and exact artifact inputs. Execute only that bounded task; return it with `commit_ai_ppt_artifact` and the task identity.
+7. When content or visual review is formally available, call `open_ai_ppt_browser_review` and open the returned scoped URL only in the Codex built-in Browser.
+8. Keep both review types in the 64px Header. Save or finish the current mark first; switching asks the authenticated Bridge for a new single-reviewType session whose target sourceVersion/revision comes from Python authority. Never reuse the current token across review types.
+9. Save exact marks separately. Use `confirm_ai_ppt_gate` only for an explicit G0/G3/G4 user message with a real host-verified reference; use `record_internal_gate` only for authorized G1/G2 evidence.
 
-The Widget may request work, but it does not execute model reasoning inside the browser. Codex owns execution; the project store owns durable truth.
+## UI contract
 
-## Four spaces
+- Real sidebar workbench: 360–480px, five-space navigation, conclusion, highest focus/risk, affected artifacts, formal counts/state, and at most one strongest action.
+- Codex built-in Browser review: the same `ProfessionalReviewApp`, `ReviewProjection`, and save interface at 760/1000/1440px. Responsive width changes never create a third surface.
+- Review header is one 64px line. Outline and marks drawers overlay the document and are mutually exclusive. Content remains continuous and complete.
+- No review Gate button, PPTX download, return-chat button, contact sheet, or business state in local storage. Chat UI display modes cannot substitute for the real sidebar or Browser.
 
-| Space | Agent responsibility | Human responsibility | Gate |
-|---|---|---|---|
-| 材料空间 | Accept files, pasted text, and links; auto-classify; extract facts, cases, screenshots, images, gaps, and provenance | Correct only material misunderstandings that affect the deck | input to G0 |
-| 内容蓝图 | Produce chapters and every slide's objective, claim, visible wording, notes, sources, cases, and asset intentions; do not design visuals | Review the whole narrative and request revisions in natural language | G0 |
-| 视觉设计 | Produce structurally distinct concept directions with Image 2, then build difficult and content-complex editable samples with Codex Presentations; freeze the Visual Contract and Scene Graph | Select/revise direction and accept engineering fidelity | G1–G3 |
-| 制作与交付 | Build the full editable PPTX with Codex Presentations, render every slide, inspect, repair, and package evidence | Accept the rendered result and editable file | G4 |
+## Formal Agent actions
 
-## Tool routing
+Content actions require a current `MissionConfirmation` and Python-approved identity first, then build strategy, claim evidence, argument map, slide draft, repair, five independent specialist reviews, and aggregate review. `proposal-only` actions must carry 诊断假设, 方案建议, and 待联合验证 through every formal content artifact and review. Visual actions design the Deck system and slide contracts, use Codex Presentations for native-first anchors/PPTX, optionally use Image 2 for post-native non-semantic assets, run aesthetic/engineering/target reviews, and coordinate delivery. Feedback/experience actions remain isolated from producer self-approval.
 
-- `add_ai_ppt_material`: one unified inlet for file, text, or user-supplied link. Do not force the user to classify first.
-- `request_ai_ppt_agent_action`: create immutable work for classify-materials, generate/revise-blueprint, generate-visual-concepts, build-engineering-samples, build-pptx, qa-render, or repair-pptx.
-- `commit_ai_ppt_artifact`: commit only the artifact requested by the active task and keep source references exact.
-- `submit_ai_ppt_human_decision`: record user choice or natural-language feedback; do not manufacture a human decision.
-- `confirm_ai_ppt_gate`: human confirmation plus machine-checkable evidence.
-- `reopen_ai_ppt_scope`: reopen the earliest affected gate for a material change; preserve all prior versions.
-- `read_ai_ppt_project_asset`: preview only bounded files inside the managed project.
+## Failure behavior
 
-## Visual and PPTX boundary
-
-- Image 2 creates visual concepts and sample imagery. Its raster output is a design reference or replaceable image layer, never a whole-slide editable implementation.
-- Codex Presentations is the only PPTX creation, edit, render, and inspection route.
-- G2 requires real editable engineering samples and rendered comparisons before the full deck.
-- G4 requires an existing PPTX, real slide renders, passed QA, native business content, and `whole_slide_bitmap=false`.
-
-## Failure and revision behavior
-
-- On `REVISION_CONFLICT`, refresh and re-evaluate; do not retry blindly.
-- A failed build or QA run must not overwrite the last valid PPTX or passed artifact.
-- Report blocking fact conflicts in the workbench. Make ordinary implementation decisions autonomously.
-- A user revision targets the smallest affected artifact. Reopen downstream gates only when the change invalidates their evidence.
+On `REVISION_CONFLICT` or `REVIEW_SOURCE_STALE`, refresh and preserve drafts. Failed tasks keep the last valid artifacts. `HOST_CONFIRMATION_DECLINED` or `HOST_CONFIRMATION_UNAVAILABLE` leaves the task and revision unchanged; retry without demanding additional material or suggesting a workflow bypass. Return `BROWSER_REVIEW_UNAVAILABLE` when Browser open is unavailable and `BROWSER_REVIEW_SAVE_UNAVAILABLE` when reliable save is unavailable; preserve sourceVersion and mark drafts. Host capability failure leaves project state unchanged. A changed PPTX hash invalidates all four desktop rows.

@@ -37,7 +37,7 @@
 - Create: `产品代码/requirements/v1.6-acceptance-ledger.json`
 - Test: `产品代码/tests/test_acceptance_ledger.py`
 
-- [ ] **Step 1: Write the failing ledger tests**
+- [x] **Step 1: Write the failing ledger tests**
 
 ```python
 from __future__ import annotations
@@ -96,13 +96,13 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Run the ledger tests and verify RED**
+- [x] **Step 2: Run the ledger tests and verify RED**
 
 Run: `cd 产品代码 && python3 -m unittest tests.test_acceptance_ledger -v`
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'ai_ppt_studio.acceptance'`.
 
-- [ ] **Step 3: Implement the ledger extractor and validator**
+- [x] **Step 3: Implement the ledger extractor and validator**
 
 ```python
 # src/ai_ppt_studio/acceptance/__init__.py
@@ -261,13 +261,13 @@ target.write_text(
 print(f"wrote {len(ledger.requirements)} requirements to {target}")
 ```
 
-- [ ] **Step 4: Generate the ledger and verify GREEN**
+- [x] **Step 4: Generate the ledger and verify GREEN**
 
 Run: `cd 产品代码 && python3 scripts/build_acceptance_ledger.py && python3 -m unittest tests.test_acceptance_ledger -v`
 
 Expected: the generator reports at least 60 requirements and all three tests PASS.
 
-- [ ] **Step 5: Commit the ledger slice**
+- [x] **Step 5: Commit the ledger slice**
 
 ```bash
 git add 产品代码/requirements 产品代码/scripts/build_acceptance_ledger.py 产品代码/src/ai_ppt_studio/acceptance 产品代码/tests/test_acceptance_ledger.py
@@ -281,7 +281,7 @@ git commit -m "feat: establish v1.6 acceptance ledger"
 - Create: `产品代码/src/ai_ppt_studio/kernel/references.py`
 - Test: `产品代码/tests/test_kernel_references.py`
 
-- [ ] **Step 1: Write failing parser tests**
+- [x] **Step 1: Write failing parser tests**
 
 ```python
 from __future__ import annotations
@@ -321,13 +321,13 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `cd 产品代码 && python3 -m unittest tests.test_kernel_references -v`
 
 Expected: FAIL because `ai_ppt_studio.kernel` does not exist.
 
-- [ ] **Step 3: Implement the strict reference value object**
+- [x] **Step 3: Implement the strict reference value object**
 
 ```python
 # src/ai_ppt_studio/kernel/__init__.py
@@ -365,7 +365,7 @@ class ArtifactReference:
         return cls(kind=match.group(1), sha256=match.group(2))
 ```
 
-- [ ] **Step 4: Run and verify GREEN**
+- [x] **Step 4: Run and verify GREEN**
 
 Run: `cd 产品代码 && python3 -m unittest tests.test_kernel_references -v`
 
@@ -384,7 +384,7 @@ git commit -m "feat: add strict artifact identities"
 - Create: `产品代码/src/ai_ppt_studio/kernel/artifacts.py`
 - Test: `产品代码/tests/test_kernel_artifacts.py`
 
-- [ ] **Step 1: Write failing repository tests**
+- [x] **Step 1: Write failing repository tests**
 
 ```python
 from __future__ import annotations
@@ -431,13 +431,13 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `cd 产品代码 && python3 -m unittest tests.test_kernel_artifacts -v`
 
 Expected: FAIL because `ArtifactRepository` does not exist.
 
-- [ ] **Step 3: Implement immutable object storage**
+- [x] **Step 3: Implement immutable object storage**
 
 ```python
 from __future__ import annotations
@@ -492,7 +492,7 @@ class ArtifactRepository:
         return envelope
 ```
 
-- [ ] **Step 4: Run and verify GREEN**
+- [x] **Step 4: Run and verify GREEN**
 
 Run: `cd 产品代码 && python3 -m unittest tests.test_kernel_artifacts -v`
 
@@ -512,7 +512,7 @@ git commit -m "feat: store immutable content-addressed artifacts"
 - Create: `产品代码/src/ai_ppt_studio/kernel/transactions.py`
 - Test: `产品代码/tests/test_kernel_transactions.py`
 
-- [ ] **Step 1: Write failing transaction tests**
+- [x] **Step 1: Write failing transaction tests**
 
 ```python
 from __future__ import annotations
@@ -588,13 +588,13 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `cd 产品代码 && python3 -m unittest tests.test_kernel_transactions -v`
 
 Expected: FAIL because `ProjectKernel` does not exist.
 
-- [ ] **Step 3: Implement schema 3.0 state**
+- [x] **Step 3: Implement schema 3.0 state**
 
 ```python
 # src/ai_ppt_studio/kernel/state.py
@@ -636,7 +636,7 @@ class KernelState:
         )
 ```
 
-- [ ] **Step 4: Implement event-before-state logical commits**
+- [x] **Step 4: Implement event-before-state logical commits**
 
 ```python
 # src/ai_ppt_studio/kernel/transactions.py
@@ -727,7 +727,7 @@ class ProjectKernel:
             return committed
 ```
 
-- [ ] **Step 5: Run and verify GREEN**
+- [x] **Step 5: Run and verify GREEN**
 
 Run: `cd 产品代码 && python3 -m unittest tests.test_kernel_transactions -v`
 
@@ -748,7 +748,7 @@ git commit -m "feat: add revision-safe schema 3 kernel"
 - Create: `产品代码/src/ai_ppt_studio/domains/presentation/targets.py`
 - Test: `产品代码/tests/test_target_evidence_matrix.py`
 
-- [ ] **Step 1: Write failing four-target tests**
+- [x] **Step 1: Write failing four-target tests**
 
 ```python
 from __future__ import annotations
@@ -802,13 +802,13 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `cd 产品代码 && python3 -m unittest tests.test_target_evidence_matrix -v`
 
 Expected: FAIL because `ai_ppt_studio.domains.presentation.targets` does not exist.
 
-- [ ] **Step 3: Implement the four-target contract**
+- [x] **Step 3: Implement the four-target contract**
 
 ```python
 # src/ai_ppt_studio/domains/__init__.py
@@ -882,7 +882,7 @@ def validate_required_targets(
     )
 ```
 
-- [ ] **Step 4: Run and verify GREEN**
+- [x] **Step 4: Run and verify GREEN**
 
 Run: `cd 产品代码 && python3 -m unittest tests.test_target_evidence_matrix -v`
 
@@ -903,7 +903,7 @@ git commit -m "feat: require four target render profiles"
 - Create: `产品代码/src/ai_ppt_studio/adapters/legacy/importer.py`
 - Test: `产品代码/tests/test_legacy_importer.py`
 
-- [ ] **Step 1: Write the failing importer test**
+- [x] **Step 1: Write the failing importer test**
 
 ```python
 from __future__ import annotations
@@ -953,13 +953,13 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `cd 产品代码 && python3 -m unittest tests.test_legacy_importer -v`
 
 Expected: FAIL because the legacy importer does not exist.
 
-- [ ] **Step 3: Implement read-only one-way import**
+- [x] **Step 3: Implement read-only one-way import**
 
 ```python
 # src/ai_ppt_studio/adapters/__init__.py
@@ -1015,7 +1015,7 @@ class LegacyProjectImporter:
         )
 ```
 
-- [ ] **Step 4: Run and verify GREEN**
+- [x] **Step 4: Run and verify GREEN**
 
 Run: `cd 产品代码 && python3 -m unittest tests.test_legacy_importer -v`
 
@@ -1033,7 +1033,7 @@ git commit -m "feat: import legacy projects without false evidence"
 **Files:**
 - Modify: `产品代码/docs/superpowers/plans/2026-08-08-v16-slice-01-authoritative-kernel.md`
 
-- [ ] **Step 1: Run the focused schema 3.0 suite**
+- [x] **Step 1: Run the focused schema 3.0 suite**
 
 Run:
 
@@ -1049,13 +1049,13 @@ cd 产品代码 && python3 -m unittest \
 
 Expected: 12 tests PASS with zero failures and zero errors.
 
-- [ ] **Step 2: Run the complete Python regression suite**
+- [x] **Step 2: Run the complete Python regression suite**
 
 Run: `cd 产品代码 && python3 -m unittest discover -s tests`
 
 Expected: zero failures. Any legacy test that asserts a superseded v1.4/v1.5 behavior must be removed or rewritten only after a new v1.6 failing test demonstrates the replacement contract.
 
-- [ ] **Step 3: Verify repository hygiene**
+- [x] **Step 3: Verify repository hygiene**
 
 Run: `git diff --check && git status --short`
 

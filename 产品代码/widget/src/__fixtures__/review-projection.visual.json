@@ -1,0 +1,643 @@
+{
+  "review_type": "visual",
+  "display_policy": "professional-review",
+  "project_id": "p1",
+  "project_name": "经营一体化方案",
+  "title": "可信的经营证据链",
+  "revision": 28,
+  "source_version": "artifact://visual-contract/74cfa2a8a2ba9b8c3194ad8a80eb5c02845b53bee35a32b0acfd8754de4987d2",
+  "source_refs": [
+    "artifact://visual-contract/74cfa2a8a2ba9b8c3194ad8a80eb5c02845b53bee35a32b0acfd8754de4987d2"
+  ],
+  "status": "user-reviewable",
+  "gate_status": {
+    "G1": "passed",
+    "G2": "passed",
+    "G3": "user-reviewable"
+  },
+  "sections": [
+    {
+      "anchor": "visual-framework",
+      "title": "整套视觉框架",
+      "fields": [
+        {
+          "anchor": "visual-framework-anchor-identity",
+          "label": "anchor_identity",
+          "value": {
+            "editability_evidence_refs": [
+              "artifact://editability-evidence/131350f11a06098bb8065360eb6a10c0c77224cb9b63f17d28e1d8eeacc6f228"
+            ],
+            "native_first_frozen": true,
+            "native_first_pptx_ref": "artifact://native-pptx/0d2a92a9a6b2468af2ca0ae73c889ea758d1e54cf7eabe9f4284554328c1eac7",
+            "pptx_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "preflight_render_refs": [
+              "artifact://preflight-render/17c2f8a5a5576f9f9d3574e7cb1ae790e1eff85037551ca995541549784e58a7"
+            ],
+            "slide_ids": [
+              "s1",
+              "s2"
+            ],
+            "visual_contract_set_ref": "artifact://visual-contract-set/844c9eb22a01b2a8898811678f6cf967ebc8dfcef2510d96c4bed33c7fc79841"
+          }
+        },
+        {
+          "anchor": "visual-framework-anchor-slide-set-ref",
+          "label": "anchor_slide_set_ref",
+          "value": "artifact://anchor-slide-set/8bba18dcbbe926e706df7cce93f939831bbd0845e6eca25358a1fc9c39511fd0"
+        },
+        {
+          "anchor": "visual-framework-content-blueprint-ref",
+          "label": "content_blueprint_ref",
+          "value": "artifact://content-blueprint/9bc7b41c18a89619b047814d2412803539e78753a1e7305b66301795e3683820"
+        },
+        {
+          "anchor": "visual-framework-deck-design-system-ref",
+          "label": "deck_design_system_ref",
+          "value": "artifact://deck-design-system/2ba93b0624a741672653e59a9dcff7cc2adcebdbfe9f98ef256863c3f581055d"
+        },
+        {
+          "anchor": "visual-framework-deck-framework",
+          "label": "deck_framework",
+          "value": {
+            "argument_map": {
+              "chapters": [
+                {
+                  "chapter_id": "ch1",
+                  "task": "建立问题共识"
+                }
+              ],
+              "claim_evidence_map_ref": "artifact://claim-evidence-map/ff020079340329d6ea04ea1083215a4d00ad40102643c9316745654e9b843b7f",
+              "strategy_ref": "artifact://presales-content-strategy/6e8bc5c2e61c3d8d18b0ab7a5aa46b27a49da0bfbc788395538c8e3267877288"
+            },
+            "slides": [
+              {
+                "communication_goal": "建立紧迫性",
+                "core_claim": "割裂阻碍经营",
+                "slide_id": "s1",
+                "source_refs": [
+                  "artifact://material-inventory/55840994c3d4e395c46ac9d7ecc0697adde099dd443b28da7cb5dd77ac952b20"
+                ],
+                "speaker_notes": "解释来源",
+                "title": "为什么现在必须改变",
+                "visible_copy": [
+                  "五套系统",
+                  "三条断点"
+                ]
+              },
+              {
+                "communication_goal": "建立方案信心",
+                "core_claim": "核心主张 2",
+                "slide_id": "s2",
+                "source_refs": [
+                  "artifact://material-inventory/55840994c3d4e395c46ac9d7ecc0697adde099dd443b28da7cb5dd77ac952b20"
+                ],
+                "speaker_notes": "讲解备注 2",
+                "title": "方案论证页 2",
+                "visible_copy": [
+                  "方案要点 2"
+                ]
+              }
+            ],
+            "strategy": {
+              "core_tension": "系统割裂",
+              "decision_stage": "立项",
+              "material_inventory_ref": "artifact://material-inventory/55840994c3d4e395c46ac9d7ecc0697adde099dd443b28da7cb5dd77ac952b20",
+              "mission_ref": "artifact://mission-draft/1ae58399e0cf5233ce148541e8b6c930d611b6cc33f178632961df89d9d8b98a"
+            }
+          }
+        },
+        {
+          "anchor": "visual-framework-internal-review-refs",
+          "label": "internal_review_refs",
+          "value": [
+            "artifact://visual-review-record/ea07a1665d782ecfd2c1891556e780a2944e9ab94c8d8baf6e9e334cf3e7a29a",
+            "artifact://visual-review-record/3a1ec31da01c14359677f5a8ad8efb439ee08a015db8dacb7e38916759e26dde"
+          ]
+        },
+        {
+          "anchor": "visual-framework-production-route",
+          "label": "production_route",
+          "value": "strict-B"
+        },
+        {
+          "anchor": "visual-framework-role-runs",
+          "label": "role_runs",
+          "value": [
+            {
+              "context_pack_version": "visual-context-v1",
+              "display_name": "视觉艺术指导智能体",
+              "role_id": "visual-art-director",
+              "role_kind": "production",
+              "tool_pack_version": "native-visual-brief-v1"
+            },
+            {
+              "context_pack_version": "visual-review-context-v1",
+              "display_name": "独立审美审查智能体",
+              "role_id": "independent-aesthetic-reviewer",
+              "role_kind": "review",
+              "tool_pack_version": "aesthetic-review-v1"
+            }
+          ]
+        },
+        {
+          "anchor": "visual-framework-status",
+          "label": "status",
+          "value": "user-reviewable"
+        },
+        {
+          "anchor": "visual-framework-target-evidence-identities",
+          "label": "target_evidence_identities",
+          "value": [
+            {
+              "target_id": "macos-powerpoint",
+              "operating_system": "macOS",
+              "operating_system_version": "15.6",
+              "application": "Microsoft PowerPoint",
+              "application_version": "macos_powerpoint/test-version",
+              "font_inventory_ref": "artifact://font-inventory/6b6170c9ecf96c91e08367f4a9ba6cc6204c36dbc465c998ed89b916fcd1fc02",
+              "font_substitution_plan_ref": "artifact://font-plan/ac095a7c99be2fdefe5dd3a0a26ea1082fd812c74b6eeb97b54ee1549c662036",
+              "source_pptx_ref": "artifact://native-pptx/0d2a92a9a6b2468af2ca0ae73c889ea758d1e54cf7eabe9f4284554328c1eac7",
+              "pptx_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "overall_result": "passed",
+              "evidence_ref": "artifact://target-render-capture/0c7b04ce270a474ac6393499ab1175c24a8737a9433afdc7414890e305c97de0"
+            },
+            {
+              "target_id": "macos-wps",
+              "operating_system": "macOS",
+              "operating_system_version": "15.6",
+              "application": "WPS Office",
+              "application_version": "macos_wps/test-version",
+              "font_inventory_ref": "artifact://font-inventory/01e7853698d87beebe149d6af868a5689dfdc3a0c604920c7c6e7547b858e282",
+              "font_substitution_plan_ref": "artifact://font-plan/75282ec268351087bf79ee2805d7f4f38f6458b3ab8f469e0b4846f79f7dde13",
+              "source_pptx_ref": "artifact://native-pptx/0d2a92a9a6b2468af2ca0ae73c889ea758d1e54cf7eabe9f4284554328c1eac7",
+              "pptx_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "overall_result": "passed",
+              "evidence_ref": "artifact://target-render-capture/4f832a15403d1a1a011f10e88accab3f7c6773b6dc0112fe042b1fbcb9b82fc7"
+            },
+            {
+              "target_id": "windows-powerpoint",
+              "operating_system": "Windows 11",
+              "operating_system_version": "24H2",
+              "application": "Microsoft PowerPoint",
+              "application_version": "windows_powerpoint/test-version",
+              "font_inventory_ref": "artifact://font-inventory/8afce276da77580b10f18cd9ed862f4b61c421bcec8c067f009836fda90e89dd",
+              "font_substitution_plan_ref": "artifact://font-plan/cbd5a2fafb5c3a9de68014ab31f8a4d9a4d146e0f029700479bd390e3eddc8f0",
+              "source_pptx_ref": "artifact://native-pptx/0d2a92a9a6b2468af2ca0ae73c889ea758d1e54cf7eabe9f4284554328c1eac7",
+              "pptx_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "overall_result": "passed",
+              "evidence_ref": "artifact://target-render-capture/c1009d1403804f147915248c47ad3b94a392aecdb226d5d0cc867ae7a8506795"
+            },
+            {
+              "target_id": "windows-wps",
+              "operating_system": "Windows 11",
+              "operating_system_version": "24H2",
+              "application": "WPS Office",
+              "application_version": "windows_wps/test-version",
+              "font_inventory_ref": "artifact://font-inventory/9f4ca7f65f71c965f13437efc1d4bf3c5979444fa5d56b985e975087d82e602b",
+              "font_substitution_plan_ref": "artifact://font-plan/9d60cab1399b11d05e3157c792b5c989fb4132a0ee72fef4e967f9957d68420d",
+              "source_pptx_ref": "artifact://native-pptx/0d2a92a9a6b2468af2ca0ae73c889ea758d1e54cf7eabe9f4284554328c1eac7",
+              "pptx_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "overall_result": "passed",
+              "evidence_ref": "artifact://target-render-capture/6c1c96ebcb2cdec695c5340055211df04d27097f05b9b811ca91e569bdc162b4"
+            }
+          ]
+        },
+        {
+          "anchor": "visual-framework-target-evidence-refs",
+          "label": "target_evidence_refs",
+          "value": [
+            "artifact://target-render-evidence/e93b63d09de556c2ca7a3e50ff6b49be2f411f032b10c1e57775fc08a1b2a23d",
+            "artifact://target-render-evidence/f62e84953f623083a10c1e071b33cc6e49ac597f6d9d03dd800bdf7a4a362e36",
+            "artifact://target-render-evidence/cde723b85b662e283a20d35255b7cf58beda392432fa32d734a1b54a7eb263c3",
+            "artifact://target-render-evidence/5a86fef98b2b11d70c7efc9dea19fb1a2392e63bd0316c8540dc5bfdfd986562"
+          ]
+        },
+        {
+          "anchor": "visual-framework-visual-contract-set-ref",
+          "label": "visual_contract_set_ref",
+          "value": "artifact://visual-contract-set/844c9eb22a01b2a8898811678f6cf967ebc8dfcef2510d96c4bed33c7fc79841"
+        }
+      ]
+    },
+    {
+      "anchor": "deck-design-system",
+      "title": "Deck Design System",
+      "fields": [
+        {
+          "anchor": "deck-design-system-color-tokens",
+          "label": "color_tokens",
+          "value": {
+            "accent": "#5B3DF5",
+            "ink": "#172033"
+          }
+        },
+        {
+          "anchor": "deck-design-system-composition-grammar",
+          "label": "composition_grammar",
+          "value": "12 栅格，结论优先"
+        },
+        {
+          "anchor": "deck-design-system-content-blueprint-ref",
+          "label": "content_blueprint_ref",
+          "value": "artifact://content-blueprint/9bc7b41c18a89619b047814d2412803539e78753a1e7305b66301795e3683820"
+        },
+        {
+          "anchor": "deck-design-system-diagram-strategy",
+          "label": "diagram_strategy",
+          "value": "原生线条和形状"
+        },
+        {
+          "anchor": "deck-design-system-editability-rules",
+          "label": "editability_rules",
+          "value": "文字、数据、关系全部原生可编辑"
+        },
+        {
+          "anchor": "deck-design-system-fallback-fonts",
+          "label": "fallback_fonts",
+          "value": {
+            "Windows": "Microsoft YaHei",
+            "macOS": "PingFang SC"
+          }
+        },
+        {
+          "anchor": "deck-design-system-forbidden-patterns",
+          "label": "forbidden_patterns",
+          "value": [
+            "整页位图",
+            "数字评分"
+          ]
+        },
+        {
+          "anchor": "deck-design-system-imagery-strategy",
+          "label": "imagery_strategy",
+          "value": "非语义图像可替换"
+        },
+        {
+          "anchor": "deck-design-system-page-families",
+          "label": "page_families",
+          "value": [
+            "章节页",
+            "证据页",
+            "方案页"
+          ]
+        },
+        {
+          "anchor": "deck-design-system-production-route",
+          "label": "production_route",
+          "value": "strict-B"
+        },
+        {
+          "anchor": "deck-design-system-rule-definitions",
+          "label": "rule_definitions",
+          "value": [
+            {
+              "condition": "事实文字存在",
+              "evidence_method": "对象检查",
+              "expected_outcome": "原生可编辑",
+              "level": "must-follow",
+              "rule_id": "r1"
+            }
+          ]
+        },
+        {
+          "anchor": "deck-design-system-table-strategy",
+          "label": "table_strategy",
+          "value": "原生表格"
+        },
+        {
+          "anchor": "deck-design-system-theme-proposition",
+          "label": "theme_proposition",
+          "value": "可信的经营证据链"
+        },
+        {
+          "anchor": "deck-design-system-typography-tokens",
+          "label": "typography_tokens",
+          "value": {
+            "body": "Microsoft YaHei",
+            "title": "Microsoft YaHei"
+          }
+        },
+        {
+          "anchor": "deck-design-system-visual-brief-ref",
+          "label": "visual_brief_ref",
+          "value": "artifact://visual-brief/f5fe93964b4471d50c54fb0e3ec60dc891012db594a34e7390edab59355ae29a"
+        }
+      ]
+    },
+    {
+      "anchor": "visual-slide-s1",
+      "title": "第 1 页视觉合同 · 为什么现在必须改变",
+      "fields": [
+        {
+          "anchor": "visual-slide-s1-acceptance-criteria",
+          "label": "acceptance_criteria",
+          "value": [
+            {
+              "criterion_id": "r1",
+              "expected_outcome": "事实文字原生可编辑",
+              "level": "must-follow"
+            }
+          ]
+        },
+        {
+          "anchor": "visual-slide-s1-allowed-exceptions",
+          "label": "allowed_exceptions",
+          "value": []
+        },
+        {
+          "anchor": "visual-slide-s1-color-application",
+          "label": "color_application",
+          "value": "紫色仅表达当前焦点"
+        },
+        {
+          "anchor": "visual-slide-s1-communication-goal",
+          "label": "communication_goal",
+          "value": "建立紧迫性"
+        },
+        {
+          "anchor": "visual-slide-s1-composition-intent",
+          "label": "composition_intent",
+          "value": "左事实、右因果链"
+        },
+        {
+          "anchor": "visual-slide-s1-core-claim",
+          "label": "core_claim",
+          "value": "割裂阻碍经营"
+        },
+        {
+          "anchor": "visual-slide-s1-diagram-chart-table-treatment",
+          "label": "diagram_chart_table_treatment",
+          "value": "原生关系线"
+        },
+        {
+          "anchor": "visual-slide-s1-editability-requirements",
+          "label": "editability_requirements",
+          "value": "文字与关系可编辑"
+        },
+        {
+          "anchor": "visual-slide-s1-fallbacks",
+          "label": "fallbacks",
+          "value": [
+            "Windows 使用 Microsoft YaHei"
+          ]
+        },
+        {
+          "anchor": "visual-slide-s1-image-selection-and-crop",
+          "label": "image_selection_and_crop",
+          "value": "不使用语义图片"
+        },
+        {
+          "anchor": "visual-slide-s1-information-hierarchy",
+          "label": "information_hierarchy",
+          "value": "结论—事实—因果"
+        },
+        {
+          "anchor": "visual-slide-s1-native-bitmap-routing",
+          "label": "native_bitmap_routing",
+          "value": "全部语义对象原生"
+        },
+        {
+          "anchor": "visual-slide-s1-object-relationships",
+          "label": "object_relationships",
+          "value": [
+            "事实指向经营断点"
+          ]
+        },
+        {
+          "anchor": "visual-slide-s1-order",
+          "label": "order",
+          "value": 1
+        },
+        {
+          "anchor": "visual-slide-s1-page-family",
+          "label": "page_family",
+          "value": "证据页"
+        },
+        {
+          "anchor": "visual-slide-s1-reading-order",
+          "label": "reading_order",
+          "value": [
+            "title",
+            "facts",
+            "impact"
+          ]
+        },
+        {
+          "anchor": "visual-slide-s1-regions",
+          "label": "regions",
+          "value": [
+            {
+              "purpose": "事实",
+              "region_id": "facts"
+            }
+          ]
+        },
+        {
+          "anchor": "visual-slide-s1-slide-id",
+          "label": "slide_id",
+          "value": "s1"
+        },
+        {
+          "anchor": "visual-slide-s1-source-refs",
+          "label": "source_refs",
+          "value": [
+            "artifact://material-inventory/55840994c3d4e395c46ac9d7ecc0697adde099dd443b28da7cb5dd77ac952b20"
+          ]
+        },
+        {
+          "anchor": "visual-slide-s1-speaker-notes",
+          "label": "speaker_notes",
+          "value": "解释来源"
+        },
+        {
+          "anchor": "visual-slide-s1-title",
+          "label": "title",
+          "value": "为什么现在必须改变"
+        },
+        {
+          "anchor": "visual-slide-s1-typography-application",
+          "label": "typography_application",
+          "value": "标题 28pt，正文 16pt"
+        },
+        {
+          "anchor": "visual-slide-s1-visible-copy",
+          "label": "visible_copy",
+          "value": [
+            "五套系统",
+            "三条断点"
+          ]
+        }
+      ]
+    },
+    {
+      "anchor": "visual-slide-s2",
+      "title": "第 2 页视觉合同 · 方案论证页 2",
+      "fields": [
+        {
+          "anchor": "visual-slide-s2-acceptance-criteria",
+          "label": "acceptance_criteria",
+          "value": [
+            {
+              "criterion_id": "r1",
+              "expected_outcome": "事实文字原生可编辑",
+              "level": "must-follow"
+            }
+          ]
+        },
+        {
+          "anchor": "visual-slide-s2-allowed-exceptions",
+          "label": "allowed_exceptions",
+          "value": []
+        },
+        {
+          "anchor": "visual-slide-s2-color-application",
+          "label": "color_application",
+          "value": "紫色仅表达当前焦点"
+        },
+        {
+          "anchor": "visual-slide-s2-communication-goal",
+          "label": "communication_goal",
+          "value": "建立方案信心"
+        },
+        {
+          "anchor": "visual-slide-s2-composition-intent",
+          "label": "composition_intent",
+          "value": "左事实、右因果链"
+        },
+        {
+          "anchor": "visual-slide-s2-core-claim",
+          "label": "core_claim",
+          "value": "核心主张 2"
+        },
+        {
+          "anchor": "visual-slide-s2-diagram-chart-table-treatment",
+          "label": "diagram_chart_table_treatment",
+          "value": "原生关系线"
+        },
+        {
+          "anchor": "visual-slide-s2-editability-requirements",
+          "label": "editability_requirements",
+          "value": "文字与关系可编辑"
+        },
+        {
+          "anchor": "visual-slide-s2-fallbacks",
+          "label": "fallbacks",
+          "value": [
+            "Windows 使用 Microsoft YaHei"
+          ]
+        },
+        {
+          "anchor": "visual-slide-s2-image-selection-and-crop",
+          "label": "image_selection_and_crop",
+          "value": "不使用语义图片"
+        },
+        {
+          "anchor": "visual-slide-s2-information-hierarchy",
+          "label": "information_hierarchy",
+          "value": "结论—事实—因果"
+        },
+        {
+          "anchor": "visual-slide-s2-native-bitmap-routing",
+          "label": "native_bitmap_routing",
+          "value": "全部语义对象原生"
+        },
+        {
+          "anchor": "visual-slide-s2-object-relationships",
+          "label": "object_relationships",
+          "value": [
+            "事实指向经营断点"
+          ]
+        },
+        {
+          "anchor": "visual-slide-s2-order",
+          "label": "order",
+          "value": 2
+        },
+        {
+          "anchor": "visual-slide-s2-page-family",
+          "label": "page_family",
+          "value": "证据页"
+        },
+        {
+          "anchor": "visual-slide-s2-reading-order",
+          "label": "reading_order",
+          "value": [
+            "title",
+            "facts",
+            "impact"
+          ]
+        },
+        {
+          "anchor": "visual-slide-s2-regions",
+          "label": "regions",
+          "value": [
+            {
+              "purpose": "事实",
+              "region_id": "facts"
+            }
+          ]
+        },
+        {
+          "anchor": "visual-slide-s2-slide-id",
+          "label": "slide_id",
+          "value": "s2"
+        },
+        {
+          "anchor": "visual-slide-s2-source-refs",
+          "label": "source_refs",
+          "value": [
+            "artifact://material-inventory/55840994c3d4e395c46ac9d7ecc0697adde099dd443b28da7cb5dd77ac952b20"
+          ]
+        },
+        {
+          "anchor": "visual-slide-s2-speaker-notes",
+          "label": "speaker_notes",
+          "value": "讲解备注 2"
+        },
+        {
+          "anchor": "visual-slide-s2-title",
+          "label": "title",
+          "value": "方案论证页 2"
+        },
+        {
+          "anchor": "visual-slide-s2-typography-application",
+          "label": "typography_application",
+          "value": "标题 28pt，正文 16pt"
+        },
+        {
+          "anchor": "visual-slide-s2-visible-copy",
+          "label": "visible_copy",
+          "value": [
+            "方案要点 2"
+          ]
+        }
+      ]
+    }
+  ],
+  "outline": [
+    {
+      "anchor": "visual-framework",
+      "title": "整套视觉框架"
+    },
+    {
+      "anchor": "deck-design-system",
+      "title": "Deck Design System"
+    },
+    {
+      "anchor": "visual-slide-s1",
+      "title": "第 1 页视觉合同 · 为什么现在必须改变"
+    },
+    {
+      "anchor": "visual-slide-s2",
+      "title": "第 2 页视觉合同 · 方案论证页 2"
+    }
+  ],
+  "mark_set": {
+    "project_id": "p1",
+    "review_type": "visual",
+    "source_version": "artifact://visual-contract/74cfa2a8a2ba9b8c3194ad8a80eb5c02845b53bee35a32b0acfd8754de4987d2",
+    "revision": 0,
+    "status": "draft",
+    "marks": []
+  }
+}

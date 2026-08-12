@@ -2,15 +2,15 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const projectRoot = process.env.AI_PPT_PROBE_PROJECT?.trim() || undefined;
-const writeProbe = process.env.AI_PPT_PROBE_WRITE === "1";
-if (writeProbe && !projectRoot) {
-  throw new Error("AI_PPT_PROBE_PROJECT is required when AI_PPT_PROBE_WRITE=1.");
-}
 
 const client = new Client({ name: "ai-ppt-studio-probe", version: "0.1.0" });
+const transportEnv = Object.fromEntries(
+  Object.entries(process.env).filter((entry) => typeof entry[1] === "string"),
+);
 const transport = new StdioClientTransport({
-  command: "node",
+  command: process.execPath,
   args: ["./scripts/start-mcp.mjs"],
+  env: transportEnv,
 });
 
 await client.connect(transport);
@@ -22,56 +22,54 @@ try {
     "add_ai_ppt_material",
     "commit_ai_ppt_artifact",
     "confirm_ai_ppt_gate",
+    "confirm_ai_ppt_mission",
+    "create_ai_ppt_project",
     "get_ai_ppt_project_snapshot",
+    "get_ai_ppt_sidebar_projection",
+    "get_delivery_status_projection",
+    "open_ai_ppt_browser_review",
     "read_ai_ppt_project_asset",
-    "render_ai_ppt_workbench",
+    "record_chat_delivery",
+    "record_internal_gate",
     "reopen_ai_ppt_scope",
     "request_ai_ppt_agent_action",
+    "save_ai_ppt_mission_draft",
+    "save_review_marks",
     "submit_ai_ppt_human_decision",
   ];
+  if (toolNames.length !== 17) {
+    throw new Error(`Expected 17 pure-data tools, found ${toolNames.length}.`);
+  }
   for (const name of requiredTools) {
     if (!toolNames.includes(name)) {
       throw new Error(`${name} not found. Tools: ${toolNames.join(", ")}`);
     }
   }
-
-  const renderResult = await client.callTool({
-    name: "render_ai_ppt_workbench",
-    arguments: {
-      ...(projectRoot ? { projectRoot } : {}),
-      initialSpace: "overview",
-      requestedDisplayMode: "inline",
-    },
-  });
-  if (renderResult.isError) {
-    throw new Error(renderResult.content?.[0]?.text || "Workbench render failed.");
-  }
-  if (
-    renderResult._meta?.["openai/outputTemplate"] !==
-    "ui://ai-ppt-studio/workbench.html"
-  ) {
-    throw new Error("Render result did not include the expected output template.");
+  for (const tool of listed.tools) {
+    const metaKeys = Object.keys(tool._meta || {});
+    if (
+      tool._meta?.ui?.resourceUri ||
+      metaKeys.some((key) => key.toLowerCase().includes("outputtemplate"))
+    ) {
+      throw new Error(`${tool.name} must not attach a chat UI template.`);
+    }
   }
 
-  const resource = await client.readResource({
-    uri: "ui://ai-ppt-studio/workbench.html",
-  });
-  const resourceEntry = resource.contents?.[0];
-  const widgetHtml = resourceEntry?.text || "";
-  if (resourceEntry?.mimeType !== "text/html;profile=mcp-app") {
-    throw new Error(`Unexpected widget MIME type: ${resourceEntry?.mimeType}`);
-  }
-  if (!widgetHtml.includes('id="root"') || widgetHtml.length < 50_000) {
-    throw new Error("Widget resource does not contain the built application shell.");
-  }
-  if (
-    /<script\b[^>]+\bsrc=["']https?:\/\//i.test(widgetHtml) ||
-    /<link\b[^>]+\bhref=["']https?:\/\//i.test(widgetHtml)
-  ) {
-    throw new Error("Widget resource must be self-contained without network scripts or styles.");
-  }
-  if (/<script\b[^>]*\btype=["']module["']/i.test(widgetHtml)) {
-    throw new Error("Widget resource must not contain module scripts.");
+  const missionConfirmationTool = listed.tools.find(
+    (tool) => tool.name === "confirm_ai_ppt_mission",
+  );
+  const missionSummaryProperties =
+    missionConfirmationTool?.inputSchema?.properties?.missionSummary?.properties || {};
+  const missionSummaryExposed = [
+    "topic",
+    "primaryAudience",
+    "desiredJudgmentOrAction",
+    "materialSummary",
+  ].every((field) => Object.hasOwn(missionSummaryProperties, field));
+  if (!missionSummaryExposed) {
+    throw new Error(
+      "confirm_ai_ppt_mission must expose the complete missionSummary for host-native confirmation.",
+    );
   }
 
   const snapshotResult = await client.callTool({
@@ -86,73 +84,67 @@ try {
     throw new Error("Snapshot result is missing project identity or revision.");
   }
 
-  let writeResult = null;
-  if (writeProbe) {
-    const decision = initialSnapshot.current_decision;
-    const choice =
-      decision.options?.find((option) => option === decision.recommended_choice) ||
-      decision.options?.[0] ||
-      "继续推进";
-    const submitted = await client.callTool({
-      name: "submit_ai_ppt_human_decision",
-      arguments: {
-        projectRoot,
-        expectedRevision: initialSnapshot.revision,
-        targetRef: decision.target_ref,
-        choice,
-        feedback: "Phase A MCP 双向回写验收；不代表真实业务决策。",
-      },
-    });
-    if (submitted.isError) {
-      throw new Error(submitted.content?.[0]?.text || "Decision write failed.");
-    }
-    const refreshed = submitted.structuredContent?.snapshot;
-    if (refreshed?.revision !== initialSnapshot.revision + 1) {
-      throw new Error("Decision write did not advance the project revision exactly once.");
-    }
-    if (!submitted.structuredContent?.follow_up_message) {
-      throw new Error("Decision write did not return a Codex follow-up message.");
-    }
+  const selectedProjectRoot = initialSnapshot.project.project_root;
+  const sidebarResult = await client.callTool({
+    name: "get_ai_ppt_sidebar_projection",
+    arguments: { projectRoot: selectedProjectRoot, initialSpace: "overview" },
+  });
+  const sidebarCode = sidebarResult.structuredContent?.error?.code;
+  if (sidebarResult.isError !== true || sidebarCode !== "HOST_SIDEBAR_UNAVAILABLE") {
+    throw new Error("Missing host sidebar must be reported as HOST_SIDEBAR_UNAVAILABLE.");
+  }
 
-    const staleWrite = await client.callTool({
-      name: "submit_ai_ppt_human_decision",
-      arguments: {
-        projectRoot,
-        expectedRevision: initialSnapshot.revision,
-        targetRef: decision.target_ref,
-        choice,
-      },
-    });
-    if (
-      staleWrite.isError !== true ||
-      staleWrite.structuredContent?.error?.code !== "REVISION_CONFLICT"
-    ) {
-      throw new Error("Stale revision write was not rejected with REVISION_CONFLICT.");
-    }
-    writeResult = {
-      revisionBefore: initialSnapshot.revision,
-      revisionAfter: refreshed.revision,
-      staleWriteCode: staleWrite.structuredContent.error.code,
-    };
+  const browserResult = await client.callTool({
+    name: "open_ai_ppt_browser_review",
+    arguments: {
+      projectRoot: selectedProjectRoot,
+      reviewType: "content",
+      sourceVersion: "probe-unproven-source",
+    },
+  });
+  const browserCode = browserResult.structuredContent?.error?.code;
+  if (browserResult.isError !== true || browserCode !== "BROWSER_REVIEW_UNAVAILABLE") {
+    throw new Error("Missing Browser adapter must be reported as BROWSER_REVIEW_UNAVAILABLE.");
   }
 
   process.stdout.write(
     `${JSON.stringify(
       {
         ok: true,
+        tool_count: toolNames.length,
         tools: toolNames,
-        widget: {
-          uri: "ui://ai-ppt-studio/workbench.html",
-          mimeType: resourceEntry.mimeType,
-          bytes: Buffer.byteLength(widgetHtml, "utf8"),
-          selfContained: true,
+        chat_ui: {
+          templateCount: 0,
+          ordinaryToolsAreDataOnly: true,
+          proofEligible: true,
+        },
+        mission_confirmation: {
+          host_native_fallback: true,
+          mission_summary_exposed: missionSummaryExposed,
+          chat_ui_template: Boolean(
+            missionConfirmationTool?._meta?.ui?.resourceUri ||
+              Object.keys(missionConfirmationTool?._meta || {}).some((key) =>
+                key.toLowerCase().includes("outputtemplate"),
+              ),
+          ),
+        },
+        sidebar: {
+          status: "unavailable",
+          code: sidebarCode,
+          proofEligible: false,
+          realHostEvidence: false,
+        },
+        browser: {
+          status: "unavailable",
+          code: browserCode,
+          proofEligible: false,
+          realHostEvidence: false,
         },
         project: {
           name: initialSnapshot.project.name,
-          root: initialSnapshot.project.project_root,
+          root: selectedProjectRoot,
           revision: initialSnapshot.revision,
         },
-        writeProbe: writeResult,
       },
       null,
       2,

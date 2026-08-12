@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "evidence_identity": "v1.6-automated-regression-run",
+  "proof_eligible": true,
+  "simulation": false,
+  "uses_deterministic_fixtures": true,
+  "checked_at": "2026-08-11T09:01:38Z",
+  "branch": "codex/mvp-skill-app-design",
+  "results": [
+    {
+      "command": "python3 -m unittest discover -s tests",
+      "result": "passed",
+      "test_count": 121
+    },
+    {
+      "command": "npm run test:node",
+      "result": "passed",
+      "test_count": 15
+    },
+    {
+      "command": "npm run test:widget -- --reporter=dot",
+      "result": "passed",
+      "test_count": 33
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    },
+    {
+      "command": "npm run accept:v16-ui",
+      "result": "passed",
+      "screenshot_count": 15,
+      "long_document_cases": 2
+    },
+    {
+      "command": "npm run probe:mcp",
+      "result": "passed",
+      "tool_count": 15,
+      "widget_self_contained": true,
+      "real_project_revision": 28
+    },
+    {
+      "command": "PATH='' PYTHONPATH='' AI_PPT_WORKSPACE_CONFIG='/Users/defei/Documents/AI-PPT-Workspace/workspace.json' AI_PPT_PROBE_PROJECT='/Users/defei/Documents/AI-PPT-Workspace/projects/v16-真实售前验收-经营一体化方案' /opt/homebrew/bin/node scripts/probe-mcp.mjs",
+      "result": "passed",
+      "tool_count": 15,
+      "installed_plugin_version": "0.4.0+codex.20260811084333",
+      "release_manifest_sha256": "417acf152d7222d24546c0cc513cc3579126ac5bc4abd7c519f8621c139fedca",
+      "real_project_revision": 28
+    },
+    {
+      "command": "npm run release -- --output /private/tmp/ai-ppt-studio-v16-final.v0AH7A && npm run verify:release -- --release /private/tmp/ai-ppt-studio-v16-final.v0AH7A/ai-ppt-studio",
+      "result": "passed",
+      "release_file_count": 3702,
+      "release_manifest_sha256": "e5e25d16145ce497900048e647070e1904c2962efea733e2379100ef36727f31"
+    }
+  ],
+  "scope": "Fresh automated contract, component, build, browser, MCP, and release execution for the current v1.6 worktree.",
+  "exclusions": [
+    "actual Codex host interaction",
+    "Codex Presentations PPTX production",
+    "G0/G3/G4 chat confirmation",
+    "macOS or Windows PowerPoint/WPS desktop evidence"
+  ]
+}

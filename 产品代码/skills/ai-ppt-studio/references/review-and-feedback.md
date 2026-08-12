@@ -1,28 +1,23 @@
-# Review and feedback
+# Professional review and feedback
 
-## Four concentrated review pages
+## One shared professional review resource
 
-1. content blueprint review;
-2. visual direction and concept comparison;
-3. concept, scene graph, and engineering-render comparison;
-4. full-deck render and delivery acceptance.
+Content and visual review use one application and save contract. Content review shows the complete argument structure and every page's full copy, speaker notes, fact identity, sources, materials, state, and stable field anchors. Visual review adds the Deck framework, Deck Design System, native anchor identity, four-target evidence identities, and every page implementation/acceptance field.
 
-Generate them from versioned project state. They are disposable, offline, and never replace project artifacts. Let the user select, reject, or export natural-language feedback.
+The source projection is authoritative. React never summarizes away contract fields, invents a passed status, or stores business state locally. Saving an exact mark records `field_anchor`, `exact_text`, `prefix`, `suffix`, `comment`, and `source_version`; it never confirms G0 or G3.
 
-## Change scope
+## Change scope and recovery
 
-Interpret feedback into one of four scopes: whole deck, chapter/page family, single slide, or element. Show the interpreted scope and downstream impact before a high-impact change. Create a new version; never overwrite the prior artifact.
+Interpret feedback as whole deck, chapter/page family, page, or element. Preserve raw wording separately from diagnosis and recommended action. Store target refs, preserve refs, previous/current versions, scope, evidence, decision, and result.
 
-Reopen gates narrowly:
+- Mission, audience, fact, narrative, or material change reopens G0.
+- Full visual contract change reopens G1.
+- Native/editability/target defect reopens G2.
+- User visual decision change reopens G3.
+- Full-deck/local delivery defect reopens G4 unless its root cause belongs earlier.
 
-- fact, audience, goal, narrative, or material change: reopen G0 and lock downstream gates;
-- concept-direction change: reopen G1;
-- implementation/editability failure: reopen G2;
-- visual-contract change: reopen G3;
-- local post-delivery defect: reopen G4, and reopen earlier gates only when its cause actually belongs there.
+Do not reopen unrelated accepted work. Revision/source conflicts preserve drafts; network/save failure does not display a saved state.
 
-Minor text fit, crop, alignment, or isolated rendering repair must not reopen unrelated content decisions.
+## Learning boundary
 
-## Feedback record
-
-Keep raw user wording separate from model interpretation. Record decision, scope, affected object references, previous/new versions, rationale, result, and whether the final output was accepted. Support compare, undo, and restore through version history.
+Govern feedback before creating a change set or experience candidate. A project reaction is not a stable rule. Promote only sanitized, scoped mechanisms or anti-patterns with independent evidence, counterexamples, later-project evaluation, and rollback support.

@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "evidence_identity": "v1.6-real-project-content-governance-revision-28",
+  "proof_eligible": true,
+  "simulation": false,
+  "captured_at": "2026-08-11T07:13:06Z",
+  "project": {
+    "project_id": "v16-真实售前验收-经营一体化方案",
+    "schema_version": "3.0",
+    "revision": 28,
+    "runtime_location": "external-managed-workspace",
+    "scenario_pack": "reading-first-presales-v1.6"
+  },
+  "gate_state": {
+    "G0": "user-reviewable",
+    "G1": "locked",
+    "G2": "locked",
+    "G3": "locked",
+    "G4": "locked"
+  },
+  "content": {
+    "slide_count": 12,
+    "material_source_count": 1,
+    "external_search": false,
+    "content_blueprint_ref": "artifact://content-blueprint/e2c1a4a64bc5a4f06add659a296513c0a55a1de5e6441d04d5254fe998257a76",
+    "content_blueprint_object_sha256": "0463ee6b85e5381d95a4d809ef4d46b07321bd69be7d36f0e7936c74e7f61918",
+    "slide_draft_ref": "artifact://slide-draft-set/65dd0dc05f791ee1ab5876075cd82424f604f240569bbf9c44276352def73bf6",
+    "slide_draft_object_sha256": "1808d3d318c90c4e56c3dc4e60cb89ecafd560f1d768f7a831e498a98affda8e",
+    "material_inventory_ref": "artifact://material-inventory/6d628611ae5e7225fb821b2a84a2237f9a47a33d63e89275f55380f96564f08d",
+    "material_inventory_object_sha256": "8c3bc753017b98f0b799978175331bf18dc286a14289b7f2aa9e72c6b63eb1d7",
+    "content_acceptance_ref": "artifact://content-acceptance/0d08e5d74ac72d7e605987f194a80950f00bfcdf763e4892637a77170adb75b3",
+    "content_acceptance_object_sha256": "7841d6eaf849ee22997e5d99fab04d4cf596dc3c95fe2248417c37c5c19ab3b1",
+    "content_acceptance_result": "passed",
+    "content_acceptance_passed_at": "2026-08-11T06:13:03.080827+00:00",
+    "applicable_check_count": 10,
+    "applicable_check_results": [
+      "PRESALES-DECISION-FIT:passed",
+      "PRESALES-BOUNDARY:passed",
+      "DECISION-ASK-CLARITY:passed",
+      "DECISION-RISK-VISIBILITY:passed",
+      "EVIDENCE-SOURCE-IDENTITY:passed",
+      "EVIDENCE-NO-OVERCLAIM:passed",
+      "NARRATIVE-PROGRESSION:passed",
+      "NARRATIVE-SINGLE-TASK:passed",
+      "EDITORIAL-COMPLETE-PAGE:passed",
+      "EDITORIAL-IDENTITY-LABELS:passed"
+    ],
+    "review_records": [
+      {
+        "role_id": "presales-reviewer",
+        "result": "passed",
+        "artifact_ref": "artifact://content-review-record/0239c8e1fafdc2105c3446390e5508135ec7a59a9bb6ba933bac7ed2e87b3396"
+      },
+      {
+        "role_id": "decision-maker-reviewer",
+        "result": "passed",
+        "artifact_ref": "artifact://content-review-record/ee37160bad931ab624502c3d0f999af90e96508d6b0e8f9a211d3b34342fe5ad"
+      },
+      {
+        "role_id": "evidence-reviewer",
+        "result": "passed",
+        "artifact_ref": "artifact://content-review-record/a1ee52d43d8c2f2845fee7d18b3a48684077a2a292a1b454d287cf0257c4f759"
+      },
+      {
+        "role_id": "narrative-reviewer",
+        "result": "passed",
+        "artifact_ref": "artifact://content-review-record/b9d2bf5273130dfa7418f8b2316e0b89678e5e6a610acf5fab12d3821124870c"
+      },
+      {
+        "role_id": "editorial-reviewer",
+        "result": "passed",
+        "artifact_ref": "artifact://content-review-record/823be61a9882fe2954f4baa3685e5b205c9bafb1e813f8fac9c467c4cf6342b6"
+      }
+    ]
+  },
+  "review_mark_recovery": {
+    "review_type": "content",
+    "source_version": "artifact://content-blueprint/e2c1a4a64bc5a4f06add659a296513c0a55a1de5e6441d04d5254fe998257a76",
+    "saved_mark_count": 1,
+    "mark_set_ref": "artifact://review-mark-set/ef7b132635c5c822ba225dc2eaf46491adaa165ed9cb584aa0f044ec975f42f5",
+    "mark_set_object_sha256": "9062158e972f498a5c27c970b2fc4c385b8c0cd721a6a1c5c37ace457442a740",
+    "refreshed_in_new_runtime_read": true,
+    "gate_unchanged": true
+  },
+  "scope": "Repository-safe hashes and identities from one real managed schema 3 project. This proves the content-governance runtime slice and current content review persistence only; no customer payload is copied into the repository.",
+  "exclusions": [
+    "G0 chat acceptance",
+    "actual Codex host Widget interaction",
+    "visual G1/G2/G3",
+    "Codex Presentations PPTX production",
+    "macOS or Windows PowerPoint/WPS desktop evidence",
+    "final chat delivery and G4"
+  ]
+}

@@ -8,8 +8,11 @@
     "test:widget": "vitest run",
     "test": "npm run build && npm run test:node && npm run test:widget",
     "build": "node scripts/build-widget.mjs",
+    "accept:v16-ui": "npm run build --silent && node scripts/run-v16-ui-acceptance.mjs",
     "probe:mcp": "node scripts/probe-mcp.mjs",
-    "accept:bcd": "node scripts/run-bcd-acceptance.mjs",
+    "release": "node scripts/build-plugin-release.mjs",
+    "verify:release": "node scripts/verify-plugin-release.mjs",
+    "install:plugin": "node scripts/install-plugin.mjs",
     "quality": "npm test && npm run probe:mcp"
   },
   "dependencies": {

@@ -46,12 +46,19 @@ class CliTests(unittest.TestCase):
             self.assertEqual(created.returncode, 0, created.stderr)
             payload = json.loads(created.stdout)
             self.assertEqual(payload["ok"], True)
+            self.assertEqual(payload["project"]["schema_version"], "3.0")
             project_root = payload["project"]["project_root"]
+            self.assertTrue((Path(project_root) / "kernel" / "state.json").is_file())
+            self.assertFalse((Path(project_root) / "project.json").exists())
             status = self.run_cli(
                 *common, "status", "--project", project_root, cwd=protected
             )
             self.assertEqual(status.returncode, 0, status.stderr)
-            self.assertEqual(json.loads(status.stdout)["state"]["current_gate"], "G0")
+            status_payload = json.loads(status.stdout)
+            self.assertEqual(status_payload["snapshot"]["schema_version"], "3.0")
+            self.assertEqual(
+                status_payload["snapshot"]["gate_state"]["current_gate"], "G0"
+            )
             self.assertEqual(list(protected.iterdir()), [])
 
 

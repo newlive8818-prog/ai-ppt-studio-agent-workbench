@@ -3,48 +3,56 @@ import test from "node:test";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
-import {
-  AI_PPT_WIDGET_URI,
-  createAiPptMcpServer,
-} from "../mcp/server.mjs";
+import { createAiPptMcpServer } from "../mcp/server.mjs";
 import { PythonBridgeError } from "../mcp/runtime-bridge/python-runtime.mjs";
 
 const snapshot = {
-  schema_version: "2.0",
+  schema_version: "3.0",
   revision: 3,
-  updated_at: "2026-08-02T00:00:00Z",
-  active_space: "overview",
   project: { project_id: "p1", name: "测试项目", project_root: "/managed/project" },
   gate_state: { current_gate: "G0", gates: { G0: "open" } },
-  cognition_map: {
-    delivery_goal: "促成一期立项",
-    audiences: ["客户领导"],
-    problem: "确认建设路径",
-    ai_judgment: "先形成内容蓝图",
-    facts: [],
-    confirmed_decisions: [],
-    uncertainty: "案例证据仍需补充",
-    affected_artifacts: [],
-    outcome_status: "成果正在形成中",
-    dialogue_focus: "案例证据仍需补充",
-  },
   artifacts: {},
-  space_projections: { materials: {}, blueprint: {}, visual: {}, delivery: {} },
-  current_decision: {
-    target_ref: "project://next-focus",
-    status: "available",
-    question: "是否继续？",
-    options: ["继续推进", "提出修改"],
+  workspace: {
+    active_space: "overview",
+    navigation: ["overview", "materials", "blueprint", "visual", "delivery"].map((space_id) => ({
+      space_id, label: space_id, status: "open", high_impact_count: 0,
+    })),
+    overview: {}, materials: {}, blueprint: {}, visual: {},
+    delivery: {
+      targets: ["macos-powerpoint", "macos-wps", "windows-powerpoint", "windows-wps"].map((target_id) => ({
+        target_id, status: "pending", pptx_sha256: "",
+      })),
+    },
   },
-  last_human_decision_id: null,
+  experience: {},
   allowed_next_actions: ["submit-human-decision"],
 };
 
-async function connectedClient() {
+const review = {
+  review_type: "content",
+  display_policy: "professional-review",
+  project_id: "p1",
+  project_name: "测试项目",
+  title: "内容蓝图专业审阅",
+  source_version: "content-v0001-abc123",
+  source_refs: ["content-blueprint:v0001:abc123"],
+  sections: [{ anchor: "content-overview", title: "整套内容", value: {} }],
+  outline: [{ anchor: "content-overview", title: "整套内容" }],
+  mark_set: { marks: [] },
+};
+
+async function connectedClient(options = {}) {
   const calls = [];
   const invokeBridge = async (request) => {
     calls.push(request);
+    if (request.operation === "get-review-projection") {
+      return { ok: true, review: { ...review, review_type: request.review_type }, snapshot_revision: 3 };
+    }
+    if (request.operation === "get-delivery-status-projection") {
+      return { ok: true, delivery: { status: "qa-passed", chat_delivery: {} }, snapshot_revision: 3 };
+    }
     if (request.operation !== "get-project-snapshot") {
       return {
         ok: true,
@@ -64,14 +72,22 @@ async function connectedClient() {
     }
     return { ok: true, snapshot };
   };
-  const server = createAiPptMcpServer({ invokeBridge });
+  const server = createAiPptMcpServer({
+    invokeBridge,
+    confirmationVerifier: {
+      async verify() {
+        return true;
+      },
+    },
+    ...options,
+  });
   const client = new Client({ name: "ai-ppt-test", version: "0.1.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
   return { client, server, calls };
 }
 
-test("MCP exposes decoupled data tools and one render tool", async () => {
+test("MCP exposes data contracts without rendering a Widget in chat", async () => {
   const { client, calls } = await connectedClient();
   try {
     const tools = await client.listTools();
@@ -81,31 +97,529 @@ test("MCP exposes decoupled data tools and one render tool", async () => {
         "add_ai_ppt_material",
         "commit_ai_ppt_artifact",
         "confirm_ai_ppt_gate",
+        "confirm_ai_ppt_mission",
+        "create_ai_ppt_project",
         "get_ai_ppt_project_snapshot",
+        "get_ai_ppt_sidebar_projection",
+        "get_delivery_status_projection",
+        "open_ai_ppt_browser_review",
         "read_ai_ppt_project_asset",
-        "render_ai_ppt_workbench",
+        "record_chat_delivery",
+        "record_internal_gate",
         "reopen_ai_ppt_scope",
         "request_ai_ppt_agent_action",
+        "save_ai_ppt_mission_draft",
+        "save_review_marks",
         "submit_ai_ppt_human_decision",
       ],
     );
     const readTool = tools.tools.find((tool) => tool.name === "get_ai_ppt_project_snapshot");
-    const renderTool = tools.tools.find((tool) => tool.name === "render_ai_ppt_workbench");
     assert.equal(readTool._meta?.ui?.resourceUri, undefined);
-    assert.equal(renderTool._meta?.ui?.resourceUri, AI_PPT_WIDGET_URI);
+    const saveTool = tools.tools.find((tool) => tool.name === "save_review_marks");
+    assert.equal(saveTool._meta?.ui?.resourceUri, undefined);
+    assert.deepEqual(Object.keys(saveTool.inputSchema.properties.marks.items.properties).sort(), [
+      "comment", "exact_text", "field_anchor", "mark_id", "prefix", "suffix",
+    ]);
+    const actionTool = tools.tools.find((tool) => tool.name === "request_ai_ppt_agent_action");
+    assert.deepEqual(actionTool.inputSchema.properties.actionType.enum, [
+      "build-presales-strategy",
+      "build-claim-evidence-map",
+      "build-deck-argument-map",
+      "build-slide-draft-set",
+      "repair-content",
+      "review-content-presales",
+      "review-content-decision-maker",
+      "review-content-evidence",
+      "review-content-narrative",
+      "review-content-editorial",
+      "aggregate-content-reviews",
+      "design-deck-system",
+      "design-slide-visuals",
+      "build-native-first",
+      "generate-image-assets",
+      "review-visual-aesthetic",
+      "review-visual-engineering",
+      "verify-target-render",
+      "govern-feedback",
+      "curate-experience",
+      "evaluate-experience",
+      "coordinate-delivery",
+    ]);
+    const artifactTool = tools.tools.find((tool) => tool.name === "commit_ai_ppt_artifact");
+    assert.deepEqual(artifactTool.inputSchema.properties.kind.enum, [
+      "mission",
+      "content-blueprint",
+      "content-acceptance",
+      "visual-brief",
+      "concept-set",
+      "visual-contract",
+      "native-anchor-set",
+      "feedback",
+      "delivery",
+      "experience",
+      "target-render-evidence",
+    ]);
+
+    await assert.rejects(
+      client.listResources(),
+      (error) => error.code === -32601,
+    );
 
     const result = await client.callTool({
-      name: "render_ai_ppt_workbench",
-      arguments: { projectRoot: "/managed/project", requestedDisplayMode: "inline" },
+      name: "get_ai_ppt_project_snapshot",
+      arguments: { projectRoot: "/managed/project" },
     });
     assert.equal(result.structuredContent.snapshot.project.name, "测试项目");
-    assert.equal(result._meta.widgetData.snapshot.revision, 3);
-    assert.equal(result._meta["openai/outputTemplate"], AI_PPT_WIDGET_URI);
+    assert.equal(result._meta?.widgetData, undefined);
+    assert.equal("space_projections" in result.structuredContent.snapshot, false);
+    assert.deepEqual(
+      result.structuredContent.snapshot.workspace.delivery.targets.map((item) => item.target_id),
+      ["macos-powerpoint", "macos-wps", "windows-powerpoint", "windows-wps"],
+    );
+    assert.equal(result._meta?.["openai/outputTemplate"], undefined);
     assert.equal(calls[0].operation, "get-project-snapshot");
+
+    const sidebarResult = await client.callTool({
+      name: "get_ai_ppt_sidebar_projection",
+      arguments: { projectRoot: "/managed/project", initialSpace: "overview" },
+    });
+    assert.equal(sidebarResult.isError, true);
+    assert.equal(
+      sidebarResult.structuredContent.error.code,
+      "HOST_SIDEBAR_UNAVAILABLE",
+    );
+    assert.equal(
+      sidebarResult.structuredContent.error.details.projection.project.name,
+      "测试项目",
+    );
+    assert.equal(sidebarResult._meta?.["openai/outputTemplate"], undefined);
+
+    const browserResult = await client.callTool({
+      name: "open_ai_ppt_browser_review",
+      arguments: {
+        projectRoot: "/managed/project",
+        reviewType: "content",
+        sourceVersion: "content-v0001-abc123",
+      },
+    });
+    assert.equal(browserResult.isError, true);
+    assert.equal(
+      browserResult.structuredContent.error.code,
+      "BROWSER_REVIEW_UNAVAILABLE",
+    );
+    assert.equal(browserResult._meta?.["openai/outputTemplate"], undefined);
   } finally {
     await client.close();
   }
 });
+
+test("Browser review opens a scoped loopback session only through a host adapter", async () => {
+  const calls = [];
+  const opened = [];
+  const stopped = [];
+  const server = createAiPptMcpServer({
+    invokeBridge: async (request) => {
+      calls.push(request);
+      return {
+        ok: true,
+        selected_project_root: "/managed/project",
+        review,
+        snapshot_revision: 3,
+      };
+    },
+    browserSurfaceAdapter: {
+      canOpen: true,
+      canSave: true,
+      async openUrl(url) {
+        opened.push(url);
+        return { opened: true };
+      },
+    },
+    reviewBridgeFactory: (scope) => ({
+      async start() {
+        assert.equal(scope.reviewType, "content");
+        assert.equal(scope.sourceVersion, "content-v0001-abc123");
+        assert.equal(scope.expectedRevision, 3);
+        return {
+          url: "http://127.0.0.1:43123/#token=short-lived-token",
+          expiresAt: 123456,
+          host: "127.0.0.1",
+          port: 43123,
+        };
+      },
+      async stop() {
+        stopped.push(true);
+      },
+    }),
+  });
+  const client = new Client({ name: "browser-review-test", version: "0.1.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "open_ai_ppt_browser_review",
+      arguments: {
+        projectRoot: "/managed/project",
+        reviewType: "content",
+        sourceVersion: "content-v0001-abc123",
+      },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent.opened, true);
+    assert.equal(result.structuredContent.reviewType, "content");
+    assert.equal(result.structuredContent.sourceVersion, "content-v0001-abc123");
+    assert.equal(result.structuredContent.revision, 3);
+    assert.equal(result.structuredContent.expiresAt, 123456);
+    assert.deepEqual(opened, [
+      "http://127.0.0.1:43123/#token=short-lived-token",
+    ]);
+    assert.equal(calls.at(-1).operation, "get-review-projection");
+    assert.equal(result._meta?.["openai/outputTemplate"], undefined);
+    assert.deepEqual(stopped, []);
+  } finally {
+    await client.close();
+  }
+});
+
+test("Browser review switch resolves the target scope from the authoritative projection", async () => {
+  const calls = [];
+  const scopes = [];
+  let createReviewSession;
+  const server = createAiPptMcpServer({
+    invokeBridge: async (request) => {
+      calls.push(request);
+      const target = request.review_type === "visual";
+      return {
+        ok: true,
+        selected_project_root: "/managed/project",
+        review: {
+          ...review,
+          review_type: target ? "visual" : "content",
+          source_version: target
+            ? "visual-authoritative-v2"
+            : "content-v0001-abc123",
+        },
+        snapshot_revision: target ? 9 : 3,
+      };
+    },
+    browserSurfaceAdapter: {
+      canOpen: true,
+      canSave: true,
+      async openUrl() {
+        return { opened: true };
+      },
+    },
+    reviewBridgeFactory: (scope) => {
+      scopes.push(scope);
+      if (scope.reviewType === "content") {
+        createReviewSession = scope.createReviewSession;
+      }
+      return {
+        async start() {
+          return {
+            url: scope.reviewType === "content"
+              ? "http://127.0.0.1:43123/#token=content-token"
+              : "http://127.0.0.1:43124/#token=visual-token",
+            expiresAt: 123456,
+            reviewType: scope.reviewType,
+            sourceVersion: scope.sourceVersion,
+            expectedRevision: scope.expectedRevision,
+          };
+        },
+        async stop() {},
+      };
+    },
+  });
+  const client = new Client({ name: "browser-switch-test", version: "0.1.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    const opened = await client.callTool({
+      name: "open_ai_ppt_browser_review",
+      arguments: {
+        projectRoot: "/managed/project",
+        reviewType: "content",
+        sourceVersion: "content-v0001-abc123",
+      },
+    });
+    assert.equal(opened.isError, undefined);
+    assert.equal(typeof createReviewSession, "function");
+
+    const target = await createReviewSession({
+      projectRoot: "/managed/project",
+      reviewType: "visual",
+    });
+
+    assert.equal(calls.at(-1).operation, "get-review-projection");
+    assert.equal(calls.at(-1).review_type, "visual");
+    assert.equal(scopes.at(-1).projectRoot, "/managed/project");
+    assert.equal(scopes.at(-1).reviewType, "visual");
+    assert.equal(scopes.at(-1).sourceVersion, "visual-authoritative-v2");
+    assert.equal(scopes.at(-1).expectedRevision, 9);
+    assert.equal(target.sourceVersion, "visual-authoritative-v2");
+    assert.equal(target.expectedRevision, 9);
+  } finally {
+    await client.close();
+  }
+});
+
+test("Browser review refuses to open when reliable save is unavailable", async () => {
+  const server = createAiPptMcpServer({
+    invokeBridge: async () => ({
+      ok: true,
+      selected_project_root: "/managed/project",
+      review,
+      snapshot_revision: 3,
+    }),
+    browserSurfaceAdapter: {
+      canOpen: true,
+      canSave: false,
+      async openUrl() {
+        throw new Error("must not open");
+      },
+    },
+  });
+  const client = new Client({ name: "browser-save-test", version: "0.1.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "open_ai_ppt_browser_review",
+      arguments: {
+        projectRoot: "/managed/project",
+        reviewType: "content",
+        sourceVersion: "content-v0001-abc123",
+      },
+    });
+    assert.equal(result.isError, true);
+    assert.equal(
+      result.structuredContent.error.code,
+      "BROWSER_REVIEW_SAVE_UNAVAILABLE",
+    );
+  } finally {
+    await client.close();
+  }
+});
+
+test("mission confirmation reports native confirmation unavailable without a verifier or host capability", async () => {
+  const server = createAiPptMcpServer({
+    invokeBridge: async () => {
+      throw new Error("must not reach Python");
+    },
+  });
+  const client = new Client({ name: "mission-verifier-test", version: "0.1.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "confirm_ai_ppt_mission",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        missionDraftRef:
+          "artifact://mission-draft/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        materialMode: "no-materials-confirmed",
+        userMessageRef: "model-invented-reference",
+      },
+    });
+    assert.equal(result.isError, true);
+    assert.equal(
+      result.structuredContent.error.code,
+      "HOST_CONFIRMATION_UNAVAILABLE",
+    );
+    assert.doesNotMatch(result.structuredContent.error.message, /补充.*材料/);
+    assert.doesNotMatch(result.structuredContent.error.message, /绕开|绕过|Presentations/);
+  } finally {
+    await client.close();
+  }
+});
+
+test("production startup uses host-native mission confirmation", async () => {
+  const calls = [];
+  const elicitations = [];
+  const server = createAiPptMcpServer({
+    invokeBridge: async (request) => {
+      calls.push(request);
+      return {
+        ok: true,
+        result: { snapshot: { ...snapshot, revision: 4 } },
+      };
+    },
+  });
+  const client = new Client(
+    { name: "native-confirmation-client", version: "0.1.0" },
+    { capabilities: { elicitation: { form: {} } } },
+  );
+  client.setRequestHandler(ElicitRequestSchema, async (request) => {
+    elicitations.push(request.params);
+    return { action: "accept", content: { confirmed: true } };
+  });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "confirm_ai_ppt_mission",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        missionDraftRef:
+          "artifact://mission-draft/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        materialMode: "no-materials-confirmed",
+        missionSummary: {
+          topic: "经营一体化方案",
+          primaryAudience: "客户经营与数字化决策团队",
+          desiredJudgmentOrAction: "确认一期范围并进入联合验证",
+          materialSummary: "当前明确无材料",
+        },
+      },
+    });
+
+    assert.equal(result.isError, undefined);
+    assert.equal(elicitations.length, 1);
+    assert.match(elicitations[0].message, /经营一体化方案/);
+    assert.match(elicitations[0].message, /客户经营与数字化决策团队/);
+    assert.match(elicitations[0].message, /确认一期范围并进入联合验证/);
+    assert.match(elicitations[0].message, /当前明确无材料/);
+    assert.match(elicitations[0].message, /方案建议/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].operation, "confirm-mission");
+    assert.match(calls[0].user_action_ref, /^host-elicitation:\/\//);
+    assert.equal(calls[0].user_message_ref, "");
+  } finally {
+    await client.close();
+  }
+});
+
+test("verified host message confirmation bypasses elicitation and preserves its reference", async () => {
+  const { client, calls } = await connectedClient();
+  try {
+    const result = await client.callTool({
+      name: "confirm_ai_ppt_mission",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        missionDraftRef:
+          "artifact://mission-draft/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        materialMode: "no-materials-confirmed",
+        userMessageRef: "host-message-reference-preserved",
+      },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(calls.at(-1).user_message_ref, "host-message-reference-preserved");
+    assert.equal(calls.at(-1).user_action_ref, "");
+  } finally {
+    await client.close();
+  }
+});
+
+test("a rejecting host verifier never falls back to native confirmation", async () => {
+  const calls = [];
+  let elicitationCount = 0;
+  const server = createAiPptMcpServer({
+    invokeBridge: async (request) => {
+      calls.push(request);
+      throw new Error("must not reach Python");
+    },
+    confirmationVerifier: {
+      async verify() {
+        return false;
+      },
+    },
+  });
+  const client = new Client(
+    { name: "rejecting-verifier-client", version: "0.1.0" },
+    { capabilities: { elicitation: { form: {} } } },
+  );
+  client.setRequestHandler(ElicitRequestSchema, async () => {
+    elicitationCount += 1;
+    return { action: "accept", content: { confirmed: true } };
+  });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "confirm_ai_ppt_mission",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        missionDraftRef:
+          "artifact://mission-draft/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        materialMode: "no-materials-confirmed",
+        userMessageRef: "untrusted-model-string",
+        missionSummary: {
+          topic: "经营一体化方案",
+          primaryAudience: "客户决策团队",
+          desiredJudgmentOrAction: "确认一期范围",
+          materialSummary: "当前明确无材料",
+        },
+      },
+    });
+    assert.equal(result.isError, true);
+    assert.equal(result.structuredContent.error.code, "MISSION_NOT_CONFIRMED");
+    assert.equal(elicitationCount, 0);
+    assert.equal(calls.length, 0);
+  } finally {
+    await client.close();
+  }
+});
+
+async function callNativeMissionConfirmation(hostResult) {
+  const calls = [];
+  const server = createAiPptMcpServer({
+    invokeBridge: async (request) => {
+      calls.push(request);
+      return {
+        ok: true,
+        result: { snapshot: { ...snapshot, revision: 4 } },
+      };
+    },
+  });
+  const client = new Client(
+    { name: "native-confirmation-result-client", version: "0.1.0" },
+    { capabilities: { elicitation: { form: {} } } },
+  );
+  client.setRequestHandler(ElicitRequestSchema, async () => hostResult);
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "confirm_ai_ppt_mission",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        missionDraftRef:
+          "artifact://mission-draft/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        materialMode: "no-materials-confirmed",
+        missionSummary: {
+          topic: "经营一体化方案",
+          primaryAudience: "客户决策团队",
+          desiredJudgmentOrAction: "确认一期范围",
+          materialSummary: "当前明确无材料",
+        },
+      },
+    });
+    return { result, calls };
+  } finally {
+    await client.close();
+  }
+}
+
+for (const hostResult of [
+  { action: "decline" },
+  { action: "cancel" },
+  { action: "accept", content: { confirmed: false } },
+]) {
+  test(`host-native mission confirmation makes no write for ${JSON.stringify(hostResult)}`, async () => {
+    const { result, calls } = await callNativeMissionConfirmation(hostResult);
+    assert.equal(result.isError, true);
+    assert.equal(
+      result.structuredContent.error.code,
+      "HOST_CONFIRMATION_DECLINED",
+    );
+    assert.equal(calls.length, 0);
+    assert.match(result.structuredContent.error.message, /项目状态未改变/);
+  });
+}
 
 test("BCD tools map governed inputs to bridge operations", async () => {
   const { client, calls } = await connectedClient();
@@ -123,13 +637,59 @@ test("BCD tools map governed inputs to bridge operations", async () => {
     assert.equal(material.structuredContent.snapshot.revision, 4);
     assert.equal(calls.at(-1).operation, "add-material");
 
+    const mission = await client.callTool({
+      name: "save_ai_ppt_mission_draft",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        missionDraft: {
+          topic: "经营一体化方案",
+          primary_audience: "客户决策者",
+          desired_judgment_or_action: "批准一期立项",
+        },
+      },
+    });
+    assert.equal(mission.structuredContent.snapshot.revision, 4);
+    assert.equal(calls.at(-1).operation, "save-mission-draft");
+
+    const confirmation = await client.callTool({
+      name: "confirm_ai_ppt_mission",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        missionDraftRef:
+          "artifact://mission-draft/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        materialMode: "no-materials-confirmed",
+        userMessageRef: "host-message-reference-1",
+      },
+    });
+    assert.equal(confirmation.structuredContent.snapshot.revision, 4);
+    assert.equal(calls.at(-1).operation, "confirm-mission");
+    assert.equal(calls.at(-1).user_message_ref, "host-message-reference-1");
+    assert.equal(calls.at(-1).user_action_ref, "");
+
+    await client.callTool({
+      name: "commit_ai_ppt_artifact",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        kind: "experience",
+        payload: {
+          artifact_type: "experience-intake",
+          intake_id: "intake-public-contract",
+        },
+      },
+    });
+    assert.equal(calls.at(-1).operation, "commit-artifact");
+    assert.equal(calls.at(-1).kind, "experience");
+
     const requested = await client.callTool({
       name: "request_ai_ppt_agent_action",
       arguments: {
         projectRoot: "/managed/project",
         expectedRevision: 3,
-        actionType: "generate-blueprint",
-        targetRefs: ["artifact://content-blueprint"],
+        actionType: "build-presales-strategy",
+        targetRefs: ["artifact://mission-draft/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
         instructions: "生成内容蓝图",
       },
     });
@@ -142,10 +702,98 @@ test("BCD tools map governed inputs to bridge operations", async () => {
         projectRoot: "/managed/project",
         expectedRevision: 3,
         gate: "G0",
+        userMessageRef: "chat://message/g0-accepted",
       },
     });
     assert.equal(gate.structuredContent.snapshot.revision, 4);
     assert.equal(calls.at(-1).operation, "confirm-gate");
+    assert.equal(calls.at(-1).user_message_ref, "chat://message/g0-accepted");
+  } finally {
+    await client.close();
+  }
+});
+
+test("v1.6 tools map formal review marks, internal gates, and chat delivery inputs", async () => {
+  const { client, calls } = await connectedClient();
+  try {
+    const tools = await client.listTools();
+    const gateTool = tools.tools.find((tool) => tool.name === "confirm_ai_ppt_gate");
+    assert.deepEqual(gateTool.inputSchema.properties.gate.enum, ["G0", "G3", "G4"]);
+    assert.ok(gateTool.inputSchema.required.includes("userMessageRef"));
+
+    const saved = await client.callTool({
+      name: "save_review_marks",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        reviewType: "content",
+        sourceVersion: "content-v0001-abc123",
+        marks: [{
+          mark_id: "m1",
+          field_anchor: "content-overview",
+          exact_text: "",
+          prefix: "",
+          suffix: "",
+          comment: "补充证据",
+        }],
+      },
+    });
+    assert.equal(saved.structuredContent.snapshot.revision, 4);
+    assert.equal(calls.at(-1).operation, "save-review-marks");
+    assert.equal(calls.at(-1).source_version, "content-v0001-abc123");
+    assert.deepEqual(calls.at(-1).marks[0], {
+      mark_id: "m1",
+      field_anchor: "content-overview",
+      exact_text: "",
+      prefix: "",
+      suffix: "",
+      comment: "补充证据",
+    });
+
+    const rejectedLegacy = await client.callTool({
+      name: "save_review_marks",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        reviewType: "content",
+        sourceVersion: "content-v0001-abc123",
+        marks: [{ mark_id: "legacy", target_anchor: "content-overview", comment: "旧合同" }],
+      },
+    });
+    assert.equal(rejectedLegacy.isError, true);
+
+    await client.callTool({
+      name: "record_internal_gate",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        gate: "G2",
+        reviewerRole: "PPT 工程审查智能体",
+        acceptanceRecordRefs: ["reviews/target-render-evidence/v0001.json"],
+      },
+    });
+    assert.equal(calls.at(-1).operation, "record-internal-gate");
+
+    await client.callTool({
+      name: "record_chat_delivery",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        deliveryType: "pptx",
+        artifactRefs: ["reviews/delivery/v0001.json"],
+        messageRef: "chat://message/pptx-1",
+        sendStatus: "sent",
+      },
+    });
+    assert.equal(calls.at(-1).operation, "record-chat-delivery");
+
+    const delivery = await client.callTool({
+      name: "get_delivery_status_projection",
+      arguments: { projectRoot: "/managed/project" },
+    });
+    assert.equal(delivery.structuredContent.snapshotRevision, 3);
+    assert.equal(delivery._meta?.widgetData, undefined);
+    assert.equal(calls.at(-1).operation, "get-delivery-status-projection");
   } finally {
     await client.close();
   }
@@ -166,7 +814,7 @@ test("decision tool returns follow-up intent and refreshed projection", async ()
     });
     assert.equal(result.structuredContent.snapshot.revision, 4);
     assert.equal(result.structuredContent.follow_up_message, "继续处理");
-    assert.equal(result._meta.widgetData.snapshot.revision, 4);
+    assert.equal(result._meta?.widgetData, undefined);
   } finally {
     await client.close();
   }

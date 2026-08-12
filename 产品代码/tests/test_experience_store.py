@@ -10,11 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.config import RuntimeConfig
+from ai_ppt_studio.application.project_service import ProjectService
 from ai_ppt_studio.errors import ExperienceValidationError
 from ai_ppt_studio.experience_models import ExperienceLevel, EvaluationOutcome
 from ai_ppt_studio.experience_store import ExperienceStore
 from ai_ppt_studio.paths import PathPolicy
-from ai_ppt_studio.project_store import ProjectStore
 
 
 def candidate_payload(name: str = "双主体协同页对齐机制") -> dict[str, object]:
@@ -59,10 +59,10 @@ class ExperienceStoreTests(unittest.TestCase):
             base / "runtime", base / "repo", base / "install", base / "web"
         )
         policy = PathPolicy(config)
-        projects = ProjectStore(config, policy)
-        source = projects.create("华西合作方案")
-        target_a = projects.create("重庆轨道能力方案")
-        target_b = projects.create("环境投资合作方案")
+        projects = ProjectService(config)
+        source = projects.create_project("华西合作方案")
+        target_a = projects.create_project("重庆轨道能力方案")
+        target_b = projects.create_project("环境投资合作方案")
         return config, projects, source, target_a, target_b, ExperienceStore(config, policy)
 
     def test_create_candidate_persists_immutable_personal_memory_version(self) -> None:
@@ -167,7 +167,7 @@ class ExperienceStoreTests(unittest.TestCase):
             self.assertEqual(store.get(created.experience_id).level, ExperienceLevel.PERSONAL)
 
             for name in ("失败项目一", "失败项目二"):
-                target = projects.create(name)
+                target = projects.create_project(name)
                 application = store.record_application(target, created.experience_id, context())
                 store.evaluate(
                     application.application_id,

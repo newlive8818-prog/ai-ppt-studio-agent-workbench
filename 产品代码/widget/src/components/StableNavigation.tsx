@@ -2,37 +2,46 @@ import { Boxes, FileText, LayoutDashboard, PackageCheck, Palette } from "lucide-
 
 import type { SpaceId } from "../types";
 
-const spaces: Array<{ id: SpaceId; label: string; icon: typeof LayoutDashboard; phase: string }> = [
-  { id: "overview", label: "项目总览", icon: LayoutDashboard, phase: "当前" },
-  { id: "materials", label: "材料工作台", icon: Boxes, phase: "Phase B" },
-  { id: "blueprint", label: "内容蓝图", icon: FileText, phase: "Phase B" },
-  { id: "visual", label: "视觉设计", icon: Palette, phase: "Phase C" },
-  { id: "delivery", label: "制作与交付", icon: PackageCheck, phase: "Phase D" },
-];
+const icons = {
+  overview: LayoutDashboard,
+  materials: Boxes,
+  blueprint: FileText,
+  visual: Palette,
+  delivery: PackageCheck,
+} satisfies Record<SpaceId, typeof LayoutDashboard>;
 
 interface Props {
   active: SpaceId;
+  items: Array<{
+    space_id: SpaceId;
+    label: string;
+    status: string;
+    high_impact_count: number;
+  }>;
   onChange: (space: SpaceId) => void;
 }
 
-export function StableNavigation({ active, onChange }: Props) {
+export function StableNavigation({ active, items, onChange }: Props) {
   return (
     <nav className="stable-navigation" aria-label="AI PPT 认知空间">
       <p className="nav-eyebrow">AI 认知空间</p>
-      {spaces.map(({ id, label, icon: Icon, phase }) => (
+      {items.map(({ space_id: id, label, status, high_impact_count: highImpactCount }) => {
+        const Icon = icons[id];
+        return (
         <button
           key={id}
           type="button"
           className={active === id ? "nav-item active" : "nav-item"}
           aria-current={active === id ? "page" : undefined}
-          aria-label={`${label}，${phase}`}
+          aria-label={`${label}，${status}${highImpactCount ? `，${highImpactCount} 项高影响` : ""}`}
           onClick={() => onChange(id)}
         >
           <Icon size={19} />
           <span className="nav-label">{label}</span>
-          <small>{phase}</small>
+          <small>{highImpactCount ? `${highImpactCount} 项` : status}</small>
         </button>
-      ))}
+        );
+      })}
     </nav>
   );
 }

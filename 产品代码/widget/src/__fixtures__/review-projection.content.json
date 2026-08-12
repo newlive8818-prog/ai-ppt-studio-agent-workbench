@@ -1,0 +1,207 @@
+{
+  "review_type": "content",
+  "display_policy": "professional-review",
+  "project_id": "p1",
+  "project_name": "经营一体化方案",
+  "title": "经营一体化方案",
+  "revision": 28,
+  "source_version": "artifact://content-blueprint/9bc7b41c18a89619b047814d2412803539e78753a1e7305b66301795e3683820",
+  "source_refs": [
+    "artifact://content-blueprint/9bc7b41c18a89619b047814d2412803539e78753a1e7305b66301795e3683820"
+  ],
+  "status": "user-reviewable",
+  "gate_status": {
+    "G0": "passed"
+  },
+  "sections": [
+    {
+      "anchor": "content-overview",
+      "title": "整套内容与论证结构",
+      "fields": [
+        {
+          "anchor": "content-acceptance-ref",
+          "label": "acceptance_ref",
+          "value": "artifact://content-acceptance/a41b677b2471261483347327717787b472d4adf5cddb6cdd707db48fadbd4801"
+        },
+        {
+          "anchor": "content-argument-map",
+          "label": "argument_map",
+          "value": {
+            "chapters": [
+              {
+                "chapter_id": "ch1",
+                "task": "建立问题共识"
+              }
+            ],
+            "claim_evidence_map_ref": "artifact://claim-evidence-map/ff020079340329d6ea04ea1083215a4d00ad40102643c9316745654e9b843b7f",
+            "strategy_ref": "artifact://presales-content-strategy/6e8bc5c2e61c3d8d18b0ab7a5aa46b27a49da0bfbc788395538c8e3267877288"
+          }
+        },
+        {
+          "anchor": "content-argument-map-ref",
+          "label": "argument_map_ref",
+          "value": "artifact://deck-argument-map/ff6ab66a70681105e59b37215d2cf73d52642003d0a1094c420132ec1c609ed9"
+        },
+        {
+          "anchor": "content-claim-evidence-map",
+          "label": "claim_evidence_map",
+          "value": {
+            "claims": [
+              {
+                "claim_id": "claim-1",
+                "evidence_refs": [
+                  "artifact://material-inventory/55840994c3d4e395c46ac9d7ecc0697adde099dd443b28da7cb5dd77ac952b20"
+                ],
+                "status": "supported"
+              }
+            ],
+            "strategy_ref": "artifact://presales-content-strategy/6e8bc5c2e61c3d8d18b0ab7a5aa46b27a49da0bfbc788395538c8e3267877288"
+          }
+        },
+        {
+          "anchor": "content-claim-evidence-map-ref",
+          "label": "claim_evidence_map_ref",
+          "value": "artifact://claim-evidence-map/ff020079340329d6ea04ea1083215a4d00ad40102643c9316745654e9b843b7f"
+        },
+        {
+          "anchor": "content-draft-ref",
+          "label": "draft_ref",
+          "value": "artifact://slide-draft-set/8d22ab5cd2eea63d990babd43716a67074d90b262ab86ec3c9d2d4c48d88dbc9"
+        },
+        {
+          "anchor": "content-status",
+          "label": "status",
+          "value": "user-reviewable"
+        },
+        {
+          "anchor": "content-strategy",
+          "label": "strategy",
+          "value": {
+            "core_tension": "系统割裂",
+            "decision_stage": "立项",
+            "material_inventory_ref": "artifact://material-inventory/55840994c3d4e395c46ac9d7ecc0697adde099dd443b28da7cb5dd77ac952b20",
+            "mission_ref": "artifact://mission-draft/1ae58399e0cf5233ce148541e8b6c930d611b6cc33f178632961df89d9d8b98a"
+          }
+        },
+        {
+          "anchor": "content-strategy-ref",
+          "label": "strategy_ref",
+          "value": "artifact://presales-content-strategy/6e8bc5c2e61c3d8d18b0ab7a5aa46b27a49da0bfbc788395538c8e3267877288"
+        }
+      ]
+    },
+    {
+      "anchor": "slide-s1",
+      "title": "第 1 页 · 为什么现在必须改变",
+      "fields": [
+        {
+          "anchor": "slide-s1-communication-goal",
+          "label": "communication_goal",
+          "value": "建立紧迫性"
+        },
+        {
+          "anchor": "slide-s1-core-claim",
+          "label": "core_claim",
+          "value": "割裂阻碍经营"
+        },
+        {
+          "anchor": "slide-s1-slide-id",
+          "label": "slide_id",
+          "value": "s1"
+        },
+        {
+          "anchor": "slide-s1-source-refs",
+          "label": "source_refs",
+          "value": [
+            "artifact://material-inventory/55840994c3d4e395c46ac9d7ecc0697adde099dd443b28da7cb5dd77ac952b20"
+          ]
+        },
+        {
+          "anchor": "slide-s1-speaker-notes",
+          "label": "speaker_notes",
+          "value": "解释来源"
+        },
+        {
+          "anchor": "slide-s1-title",
+          "label": "title",
+          "value": "为什么现在必须改变"
+        },
+        {
+          "anchor": "slide-s1-visible-copy",
+          "label": "visible_copy",
+          "value": [
+            "五套系统",
+            "三条断点"
+          ]
+        }
+      ]
+    },
+    {
+      "anchor": "slide-s2",
+      "title": "第 2 页 · 方案论证页 2",
+      "fields": [
+        {
+          "anchor": "slide-s2-communication-goal",
+          "label": "communication_goal",
+          "value": "建立方案信心"
+        },
+        {
+          "anchor": "slide-s2-core-claim",
+          "label": "core_claim",
+          "value": "核心主张 2"
+        },
+        {
+          "anchor": "slide-s2-slide-id",
+          "label": "slide_id",
+          "value": "s2"
+        },
+        {
+          "anchor": "slide-s2-source-refs",
+          "label": "source_refs",
+          "value": [
+            "artifact://material-inventory/55840994c3d4e395c46ac9d7ecc0697adde099dd443b28da7cb5dd77ac952b20"
+          ]
+        },
+        {
+          "anchor": "slide-s2-speaker-notes",
+          "label": "speaker_notes",
+          "value": "讲解备注 2"
+        },
+        {
+          "anchor": "slide-s2-title",
+          "label": "title",
+          "value": "方案论证页 2"
+        },
+        {
+          "anchor": "slide-s2-visible-copy",
+          "label": "visible_copy",
+          "value": [
+            "方案要点 2"
+          ]
+        }
+      ]
+    }
+  ],
+  "outline": [
+    {
+      "anchor": "content-overview",
+      "title": "整套内容与论证结构"
+    },
+    {
+      "anchor": "slide-s1",
+      "title": "第 1 页 · 为什么现在必须改变"
+    },
+    {
+      "anchor": "slide-s2",
+      "title": "第 2 页 · 方案论证页 2"
+    }
+  ],
+  "mark_set": {
+    "project_id": "p1",
+    "review_type": "content",
+    "source_version": "artifact://content-blueprint/9bc7b41c18a89619b047814d2412803539e78753a1e7305b66301795e3683820",
+    "revision": 0,
+    "status": "draft",
+    "marks": []
+  }
+}

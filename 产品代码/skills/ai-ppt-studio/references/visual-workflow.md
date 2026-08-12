@@ -1,32 +1,23 @@
-# Visual conception workflow
+# Strict route B visual workflow
 
-## Visual Brief
+## Visual input and internal exploration
 
-Derive the design challenge from the frozen content, audience, decision objective, brand, real materials, display environment, and PowerPoint editability boundary. Do not ask ordinary users to choose fonts, palettes, or layout vocabulary before proposing a design position.
+Start only after G0. Derive the design problem from frozen content, audience, decision objective, brand, real evidence, reading mode, environment, and editability boundary. Internal creative roles may compare structurally different mechanisms and challenge weak proposals; this is not a user-selected G1 direction.
 
-Record:
+Image 2 exploration is non-binding. It may help investigate composition, atmosphere, image language, or art direction, but its raster text is never a content source and its page image is never the final editable slide.
 
-- design thesis and intended emotional response;
-- information-density rhythm;
-- visual hierarchy and reading behavior;
-- relationship between authentic screenshots/data/cases and expressive imagery;
-- brand constraints and explicit visual prohibitions;
-- which media should be Image 2, native PPT, scene-graph preview, or real source material.
+## Full contract before anchors
 
-## Concept directions
+Create the complete `DeckDesignSystem` and all `SlideVisualContract` entries first. The Deck contract includes theme proposition, composition grammar, grid, density rhythm, typography, color, imagery, recurring geometry, page families, native/bitmap routing, accessibility, fallback, and acceptance rules. Every page contract binds frozen text and notes, source/material refs, page family, composition intent, hierarchy, reading order, regions, relationships, imagery, typography/color application, editability, fallback, and binary acceptance checks.
 
-Create two or three directions. A direction is valid only when it differs structurally, not merely by color or font. Compare visual concept, composition grammar, density, imagery, typography/color, page-family rhythm, and emotional posture. At least one composition-level difference is required.
+G1 is internal. It passes only when the entire current contract resolves and every applicable contract check passes.
 
-Use the same common test content across directions. Each direction may also include a characteristic page that demonstrates its unique strength. Explain fit, risk, editability cost, and expected audience response.
+## Native-first anchors and Image 2 boundary
 
-## Image 2 role
+Codex Presentations creates the difficult and content-complex anchor pages as native editable objects from the accepted full contract. Freeze the native-first build before any Image 2 asset. An Image 2 asset may be added only as a separate replaceable background, texture, illustration, or light effect with no text, number, business relationship, or real-evidence impersonation.
 
-Use Image 2 to explore composition, atmosphere, image language, art direction, and difficult visual samples. There is no additional AI PPT Studio privacy gate. The user has already chosen the project materials. Keep generated concept text subordinate to the verified content blueprint; inaccurate raster text never becomes an authoritative fact.
+## G2 and G3
 
-Do not reconstruct a generated raster by blindly tracing pixels. Extract the visual mechanism, then express it through a Visual Contract and Slide Scene Graph that PowerPoint can implement.
+G2 requires independent aesthetic and PowerPoint engineering reviews plus `macos-powerpoint`, `macos-wps`, `windows-powerpoint`, and `windows-wps` target evidence for the same PPTX SHA-256. Each row must pass semantic, aesthetic, engineering, and target-render doors.
 
-## Selection and revision
-
-The user chooses one primary direction. Controlled fusion may borrow a small number of named traits from another direction. Do not freely mix pages from unrelated directions. For vague feedback such as “more premium,” diagnose whether the issue is composition, hierarchy, imagery, density, typography, color, or emotional posture before regenerating.
-
-Save every concept-set version, generate the concept comparison HTML, and pass G1 only after the selected direction is coherent enough to engineer.
+After G2, publish the full visual contract, anchor identity, and target evidence identities to the shared professional review resource. Exact marks never pass a Gate. G3 requires explicit Codex chat confirmation of the current visual source.
