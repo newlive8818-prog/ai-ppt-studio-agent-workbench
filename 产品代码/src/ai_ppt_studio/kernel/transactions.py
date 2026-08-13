@@ -416,8 +416,8 @@ class ProjectKernel:
             ] = candidates[0]
         return bindings
 
-    @staticmethod
     def _validate_framework_reset_contract(
+        self,
         *,
         state: KernelState,
         artifact_updates: dict[str, tuple[str, dict[str, Any]]],
@@ -440,8 +440,32 @@ class ProjectKernel:
         payload = artifact_updates.get(
             "content/framework-draft", ("", {})
         )[1]
+        try:
+            from ai_ppt_studio.domains.content.framework import (
+                validate_framework_draft,
+            )
+            from ai_ppt_studio.kernel.references import ArtifactReference
+
+            normalized = validate_framework_draft(payload)
+            mission_reference = ArtifactReference.parse(
+                mission_confirmation_ref
+            )
+            current_mission_ref = state.artifact_heads.get(
+                "mission/confirmation", ""
+            )
+            mission_envelope = self.artifacts.resolve(mission_reference)
+            domain_valid = (
+                normalized == payload
+                and mission_reference.kind == "mission-confirmation"
+                and current_mission_ref == mission_confirmation_ref
+                and mission_envelope.get("project_id") == state.project_id
+                and mission_envelope.get("kind") == "mission-confirmation"
+            )
+        except (ArtifactReferenceError, KeyError, TypeError, ValueError):
+            domain_valid = False
         valid = (
-            reset_revision == state.revision
+            domain_valid
+            and reset_revision == state.revision
             and set(artifact_updates) == {"content/framework-draft"}
             and artifact_updates["content/framework-draft"][0]
             == "content-framework-draft"

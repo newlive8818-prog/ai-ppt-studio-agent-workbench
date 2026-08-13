@@ -23,6 +23,7 @@ from ai_ppt_studio.application.framework_discussion_service import (
 )
 from ai_ppt_studio.application.scoped_confirmation import (
     HOST_CONFIRMATION_SECRET_ENV,
+    issue_content_framework_reset,
 )
 from ai_ppt_studio.errors import (
     ConfirmationTransactionError,
@@ -812,6 +813,89 @@ class FrameworkDiscussionTests(unittest.TestCase):
                     "content/framework-draft": (
                         "content-framework-draft",
                         invalid_payload,
+                    )
+                },
+                content_framework_reset=reset,
+            )
+
+        self.assertEqual(self._filesystem_snapshot(), before)
+
+    def test_direct_issuer_cannot_reset_with_invalid_framework_payload(self) -> None:
+        invalid = {
+            **valid_framework(self.mission_confirmation_ref),
+            "unvalidated_extra": "must not survive normalization",
+        }
+        framework_ref = str(
+            self.kernel.artifacts.reference_for(
+                "content-framework-draft", invalid
+            )
+        )
+        reset = issue_content_framework_reset(
+            revision=self.kernel.load().revision,
+            framework_ref=framework_ref,
+            mission_confirmation_ref=self.mission_confirmation_ref,
+        )
+        before = self._filesystem_snapshot()
+
+        with self.assertRaises(ConfirmationTransactionError):
+            self.kernel.commit(
+                command_id="direct-issuer-invalid-framework-reset",
+                expected_revision=self.kernel.load().revision,
+                event_type="test.direct-issuer-invalid-framework-reset",
+                artifact_updates={
+                    "content/framework-draft": (
+                        "content-framework-draft",
+                        invalid,
+                    )
+                },
+                content_framework_reset=reset,
+            )
+
+        self.assertEqual(self._filesystem_snapshot(), before)
+
+    def test_direct_issuer_cannot_reset_with_stale_mission(self) -> None:
+        stale_mission_ref = self.mission_confirmation_ref
+        content = ContentService(self.kernel)
+        new_draft_ref = content.save_mission_draft(
+            "new-mission-before-stale-reset",
+            self.kernel.load().revision,
+            {
+                "topic": "经营一体化方案 v2",
+                "primary_audience": "客户决策者",
+                "desired_judgment_or_action": "批准新版联合验证",
+            },
+        )
+        self.mission_confirmation_ref = content.confirm_mission(
+            "confirm-new-mission-before-stale-reset",
+            self.kernel.load().revision,
+            mission_draft_ref=new_draft_ref,
+            material_mode="no-materials-confirmed",
+            material_inventory_ref="",
+            user_action_ref="test-user-action://new-mission",
+            user_message_ref="",
+        )
+        stale = valid_framework(stale_mission_ref)
+        framework_ref = str(
+            self.kernel.artifacts.reference_for(
+                "content-framework-draft", stale
+            )
+        )
+        reset = issue_content_framework_reset(
+            revision=self.kernel.load().revision,
+            framework_ref=framework_ref,
+            mission_confirmation_ref=stale_mission_ref,
+        )
+        before = self._filesystem_snapshot()
+
+        with self.assertRaises(ConfirmationTransactionError):
+            self.kernel.commit(
+                command_id="direct-issuer-stale-mission-reset",
+                expected_revision=self.kernel.load().revision,
+                event_type="test.direct-issuer-stale-mission-reset",
+                artifact_updates={
+                    "content/framework-draft": (
+                        "content-framework-draft",
+                        stale,
                     )
                 },
                 content_framework_reset=reset,
