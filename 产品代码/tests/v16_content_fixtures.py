@@ -40,6 +40,65 @@ def complete_planned_gap_evidence() -> dict[str, str]:
     }
 
 
+def complete_proposal_only_slide(
+    *, slide_id: str = "s1", order: int = 1
+) -> dict[str, Any]:
+    planned_gap = complete_planned_gap_evidence()
+    planned_gap.update(
+        {
+            "used_region": "待补联合澄清的现状证据",
+            "supports_claim": "诊断假设：流程可能存在重复录入",
+            "evidence_gap": "需补材料，或将主张降级为诊断假设。",
+        }
+    )
+    slide = complete_reading_first_slide(
+        slide_id=slide_id,
+        order=order,
+        evidence_items=[planned_gap],
+        source_refs=[],
+    )
+    slide.update(
+        {
+            "title": "联合验证的起点",
+            "page_purpose": "方案建议：明确当前是联合澄清阶段。",
+            "customer_judgment": "待联合验证：先补充现状依据，再冻结建设范围。",
+            "communication_goal": "明确当前内容身份",
+            "core_claim": "诊断假设：跨系统协同可能存在断点",
+            "identity_class": "diagnostic-hypothesis",
+            "visible_copy": [
+                {
+                    "copy_id": "COPY-GAP-01",
+                    "role": "body",
+                    "text": "诊断假设：流程断点需联合澄清。",
+                },
+                {
+                    "copy_id": "COPY-GAP-02",
+                    "role": "boundary",
+                    "text": "当前内容不代表已确认事实。",
+                },
+            ],
+            "speaker_notes": "方案建议：先共同验证现状，再冻结建设范围。",
+            "user_judgment_prompt": "待联合验证：请判断是否先补充现状证据。",
+        }
+    )
+    return slide
+
+
+def complete_proposal_only_draft_payload(
+    *, argument_map_ref: str = "artifact://deck-argument-map/" + "b" * 64
+) -> dict[str, Any]:
+    return {
+        "argument_map_ref": argument_map_ref,
+        "content_identity_mode": "proposal-only",
+        "identity_labels": [
+            "diagnostic-hypothesis",
+            "solution-recommendation",
+            "joint-validation-required",
+        ],
+        "slides": [complete_proposal_only_slide()],
+    }
+
+
 def complete_reading_first_slide(
     *,
     order: int = 1,

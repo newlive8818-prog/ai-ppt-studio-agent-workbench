@@ -14,8 +14,12 @@ from ai_ppt_studio.domains.content.framework import (
     validate_full_deck_expansion_authorization,
 )
 from ai_ppt_studio.domains.content.contracts import validate_content_stage
-from ai_ppt_studio.errors import ContractValidationError
+from ai_ppt_studio.errors import (
+    ContractValidationError,
+    ProposalOnlyIdentityViolationError,
+)
 from tests.v16_content_fixtures import (
+    complete_proposal_only_draft_payload,
     complete_planned_gap_evidence,
     complete_reading_first_slide,
     complete_slide_draft_payload,
@@ -216,33 +220,7 @@ class ReadingFirstSlideContractTests(unittest.TestCase):
                     validate_content_stage("slide-draft-set", payload)
 
     def test_accepts_explicit_planned_gap_and_rejects_other_evidence_kinds(self) -> None:
-        slide = complete_reading_first_slide(
-            evidence_items=[complete_planned_gap_evidence()], source_refs=[]
-        )
-        payload = {
-            "argument_map_ref": "artifact://deck-argument-map/" + "b" * 64,
-            "content_identity_mode": "proposal-only",
-            "identity_labels": [
-                "diagnostic-hypothesis",
-                "solution-recommendation",
-                "joint-validation-required",
-            ],
-            "slides": [
-                {
-                    **slide,
-                    "identity_class": "diagnostic-hypothesis",
-                    "core_claim": "诊断假设：流程可能存在重复录入",
-                    "speaker_notes": "待联合验证：补充现状材料或降级主张。",
-                    "visible_copy": [
-                        {
-                            "copy_id": "COPY-GAP-01",
-                            "role": "body",
-                            "text": "诊断假设：重复录入需与客户联合澄清。",
-                        }
-                    ],
-                }
-            ],
-        }
+        payload = complete_proposal_only_draft_payload()
         self.assertEqual(validate_content_stage("slide-draft-set", payload), payload)
         payload["slides"][0]["evidence_items"][0]["evidence_kind"] = "internet"
         with self.assertRaises(ContractValidationError):
@@ -271,6 +249,48 @@ class ReadingFirstSlideContractTests(unittest.TestCase):
             ContractValidationError, "planned-gap.*joint-validation-required"
         ):
             validate_content_stage("slide-draft-set", payload)
+
+    def test_proposal_only_rejects_material_evidence(self) -> None:
+        payload = self._proposal_only_payload()
+        payload["slides"][0]["evidence_items"] = [
+            complete_slide_draft_payload()["slides"][0]["evidence_items"][0]
+        ]
+        with self.assertRaises(ProposalOnlyIdentityViolationError):
+            validate_content_stage("slide-draft-set", payload)
+
+    def test_proposal_only_scans_all_new_user_visible_semantics(self) -> None:
+        fields = (
+            "page_purpose",
+            "customer_judgment",
+            "user_judgment_prompt",
+        )
+        for field in fields:
+            with self.subTest(field=field):
+                payload = self._proposal_only_payload()
+                payload["slides"][0][field] = "客户确认当前存在流程断点"
+                with self.assertRaises(ProposalOnlyIdentityViolationError):
+                    validate_content_stage("slide-draft-set", payload)
+
+    def test_proposal_only_scans_displayed_evidence_semantics(self) -> None:
+        fields = (
+            "source_file",
+            "source_page_or_region",
+            "used_region",
+            "supports_claim",
+            "evidence_gap",
+        )
+        for field in fields:
+            with self.subTest(field=field):
+                payload = self._proposal_only_payload()
+                payload["slides"][0]["evidence_items"][0][field] = (
+                    "客户确认当前存在流程断点"
+                )
+                with self.assertRaises(ProposalOnlyIdentityViolationError):
+                    validate_content_stage("slide-draft-set", payload)
+
+    @staticmethod
+    def _proposal_only_payload() -> dict[str, object]:
+        return complete_proposal_only_draft_payload()
 
     def test_requires_readability_quality_invariants(self) -> None:
         quality_fields = (

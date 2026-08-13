@@ -354,6 +354,15 @@ def validate_proposal_only_identity(
                 raise ProposalOnlyIdentityViolationError(
                     "PROPOSAL_ONLY_IDENTITY_VIOLATION: no-material slide cannot cite project materials"
                 )
+            for evidence in slide["evidence_items"]:
+                if (
+                    evidence.get("evidence_kind") != "planned-gap"
+                    or evidence.get("material_ref") != ""
+                    or evidence.get("asset_ref") != ""
+                ):
+                    raise ProposalOnlyIdentityViolationError(
+                        "PROPOSAL_ONLY_IDENTITY_VIOLATION: proposal-only evidence must be an unbound planned-gap"
+                    )
             visible = " ".join(
                 [
                     slide["core_claim"],
@@ -398,6 +407,8 @@ def _semantic_proposal_text(stage: str, payload: dict[str, Any]) -> str:
         values = [
             {
                 "title": slide.get("title"),
+                "page_purpose": slide.get("page_purpose"),
+                "customer_judgment": slide.get("customer_judgment"),
                 "communication_goal": slide.get("communication_goal"),
                 "core_claim": slide.get("core_claim"),
                 "visible_copy": [
@@ -408,6 +419,22 @@ def _semantic_proposal_text(stage: str, payload: dict[str, Any]) -> str:
                     for item in slide.get("visible_copy") or []
                 ],
                 "speaker_notes": slide.get("speaker_notes"),
+                "user_judgment_prompt": slide.get("user_judgment_prompt"),
+                "evidence_items": [
+                    {
+                        key: evidence.get(key)
+                        for key in (
+                            "source_file",
+                            "source_page_or_region",
+                            "used_region",
+                            "supports_claim",
+                            "treatment",
+                            "fact_identity",
+                            "evidence_gap",
+                        )
+                    }
+                    for evidence in slide.get("evidence_items") or []
+                ],
             }
             for slide in payload.get("slides") or []
         ]

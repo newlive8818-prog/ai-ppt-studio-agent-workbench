@@ -16,6 +16,7 @@ from ai_ppt_studio.application.content_service import ContentService
 from ai_ppt_studio.errors import ProjectNotFoundError
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.workbench_bridge import dispatch
+from tests.v16_content_fixtures import complete_slide_draft_payload
 
 
 def runtime_config(base: Path) -> tuple[RuntimeConfig, Path]:
@@ -448,18 +449,11 @@ class V16ProjectServiceTests(unittest.TestCase):
                     "kind": "content-blueprint",
                     "payload": {
                         "artifact_type": "slide-draft-set",
-                        "argument_map_ref": argument_ref,
-                        "slides": [
-                            {
-                                "slide_id": "s1",
-                                "title": "为什么现在必须改变",
-                                "communication_goal": "建立紧迫性",
-                                "core_claim": "系统割裂阻碍经营",
-                                "visible_copy": ["五套系统", "三个断点"],
-                                "speaker_notes": "解释来源和影响。",
-                                "source_refs": [material_ref],
-                            }
-                        ],
+                        **complete_slide_draft_payload(
+                            argument_map_ref=argument_ref,
+                            material_ref=material_ref,
+                            slide_id_prefix="s",
+                        ),
                     },
                 }
             )["result"]["artifact_ref"]

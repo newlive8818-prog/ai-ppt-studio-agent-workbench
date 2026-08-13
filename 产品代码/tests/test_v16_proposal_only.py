@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from ai_ppt_studio.application.content_service import ContentService
 from ai_ppt_studio.errors import ProposalOnlyIdentityViolationError
 from ai_ppt_studio.kernel.references import ArtifactReference
+from tests.v16_content_fixtures import complete_proposal_only_draft_payload
 
 
 MISSION = {
@@ -104,26 +105,9 @@ class ProposalOnlyContentTests(unittest.TestCase):
                 "slide-draft-set",
                 revision + 3,
                 "slide-draft-set",
-                {
-                    "argument_map_ref": argument_ref,
-                    "content_identity_mode": "proposal-only",
-                    "identity_labels": IDENTITY_LABELS,
-                    "slides": [
-                        {
-                            "slide_id": "s1",
-                            "title": "联合验证的起点",
-                            "communication_goal": "明确当前内容身份",
-                            "core_claim": "诊断假设：跨系统协同可能存在断点",
-                            "identity_class": "diagnostic-hypothesis",
-                            "visible_copy": [
-                                "诊断假设：流程断点需与客户联合澄清",
-                                "当前内容不代表客户已确认事实",
-                            ],
-                            "speaker_notes": "方案建议：先共同验证现状，再冻结建设范围。",
-                            "source_refs": [],
-                        }
-                    ],
-                },
+                complete_proposal_only_draft_payload(
+                    argument_map_ref=argument_ref
+                ),
             )
 
             self.assertTrue(slide_ref.startswith("artifact://slide-draft-set/"))
