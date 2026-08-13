@@ -362,6 +362,98 @@ class V16ProjectServiceTests(unittest.TestCase):
             )
             self.assertEqual(kernel.load(), before)
 
+    def test_missing_latest_framework_reset_event_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config, _profile = runtime_config(Path(temp))
+            kernel = ProjectService(config).create_project("missing reset event")
+            content = ContentService(kernel)
+            mission_ref = content.save_mission_draft(
+                "mission", 1, {
+                    "topic": "经营一体化", "primary_audience": "决策者",
+                    "desired_judgment_or_action": "批准一期",
+                },
+            )
+            mission_confirmation = content.confirm_mission(
+                "confirm", 2, mission_draft_ref=mission_ref,
+                material_mode="no-materials-confirmed", material_inventory_ref="",
+                user_action_ref="test-user-action://missing-event", user_message_ref="",
+            )
+            _save_confirm_authorize(kernel, mission_confirmation)
+            latest_event = kernel.events_root / f"r{kernel.load().revision:08d}.json"
+            latest_event.unlink()
+            before = kernel.load()
+            with self.assertRaises(ContentWorkflowError) as caught:
+                ProjectCommandService(kernel).request_agent_action(
+                    "event-gap-action", before.revision,
+                    action_type="build-presales-strategy",
+                    target_refs=[before.artifact_heads["project/manifest"]],
+                    instructions="不应放行",
+                )
+            self.assertEqual(
+                caught.exception.code, "FULL_DECK_EXPANSION_NOT_AUTHORIZED"
+            )
+            self.assertEqual(kernel.load(), before)
+
+    def test_old_confirmation_plus_fresh_authorization_cannot_bypass_reset(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config, _profile = runtime_config(Path(temp))
+            kernel = ProjectService(config).create_project("fresh auth stale confirmation")
+            content = ContentService(kernel)
+            mission_ref = content.save_mission_draft(
+                "mission", 1, {
+                    "topic": "经营一体化", "primary_audience": "决策者",
+                    "desired_judgment_or_action": "批准一期",
+                },
+            )
+            mission_confirmation = content.confirm_mission(
+                "confirm", 2, mission_draft_ref=mission_ref,
+                material_mode="no-materials-confirmed", material_inventory_ref="",
+                user_action_ref="test-user-action://fresh-auth", user_message_ref="",
+            )
+            framework_ref, confirmation_ref, _authorization_ref = (
+                _save_confirm_authorize(kernel, mission_confirmation)
+            )
+            old_confirmation = kernel.artifacts.resolve(
+                ArtifactReference.parse(confirmation_ref)
+            )["payload"]
+            same_ref, _ = FrameworkDiscussionService(kernel).save_draft(
+                "identical-reset-for-fresh-auth", kernel.load().revision,
+                _framework_payload(mission_confirmation),
+            )
+            self.assertEqual(same_ref, framework_ref)
+            kernel.commit(
+                command_id="restore-old-confirmation-only",
+                expected_revision=kernel.load().revision,
+                event_type="test.restore-old-confirmation-only",
+                artifact_updates={
+                    "content/framework-confirmation": (
+                        "content-framework-confirmation", old_confirmation
+                    )
+                },
+            )
+            workflow = FrameworkDiscussionService(kernel)
+            context = workflow.expansion_authorization_context()
+            workflow.authorize_full_deck_expansion(
+                "fresh-authorization-on-old-confirmation",
+                kernel.load().revision,
+                framework_ref,
+                str(context["challenge_id"]),
+                int(context["challenge_revision"]),
+                _signed_assertion(context),
+            )
+            before = kernel.load()
+            with self.assertRaises(ContentWorkflowError) as caught:
+                ProjectCommandService(kernel).request_agent_action(
+                    "reject-fresh-auth-stale-confirmation", before.revision,
+                    action_type="build-presales-strategy",
+                    target_refs=[before.artifact_heads["project/manifest"]],
+                    instructions="不应放行",
+                )
+            self.assertEqual(
+                caught.exception.code, "FULL_DECK_EXPANSION_NOT_AUTHORIZED"
+            )
+            self.assertEqual(kernel.load(), before)
+
     def test_project_id_accepts_unicode_letters_but_rejects_path_syntax(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)

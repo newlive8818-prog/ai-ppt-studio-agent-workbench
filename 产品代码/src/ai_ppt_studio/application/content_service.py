@@ -76,6 +76,18 @@ def require_full_deck_expansion_authorization(
         ).expansion_authorization_context()
         framework_ref = str(context["source_version"])
         confirmation_ref = str(context["scope_id"])
+        confirmation_reference = ArtifactReference.parse(confirmation_ref)
+        if confirmation_reference.kind != "content-framework-confirmation":
+            raise ValueError("confirmation kind is invalid")
+        confirmation = dict(
+            kernel.artifacts.resolve(confirmation_reference)["payload"]
+        )
+        confirmation_revision = confirmation.get("challenge_revision")
+        if (
+            isinstance(confirmation_revision, bool)
+            or not isinstance(confirmation_revision, int)
+        ):
+            raise ValueError("confirmation revision is invalid")
         authorization_ref = state.artifact_heads.get(
             "content/full-deck-expansion-authorization", ""
         )
@@ -136,7 +148,8 @@ def require_full_deck_expansion_authorization(
             != f"{FULL_DECK_EXPANSION_SCOPE}:{confirmation_ref}"
             or kernel.confirmation_artifact_binding(identities[0])
             != authorization_ref
-            or revision < _latest_framework_reset_revision(kernel)
+            or confirmation_revision < _latest_framework_reset_revision(kernel)
+            or revision <= confirmation_revision
         ):
             raise ValueError("authorization trust binding is invalid")
     except (
@@ -171,14 +184,37 @@ def require_full_deck_expansion_authorization(
 
 def _latest_framework_reset_revision(kernel: ProjectKernel) -> int:
     latest = -1
+    state = kernel.load()
     try:
-        for path in sorted(kernel.events_root.glob("r*.json")):
+        expected_paths = [
+            kernel.events_root / f"r{revision:08d}.json"
+            for revision in range(1, state.revision + 1)
+        ]
+        actual_paths = sorted(kernel.events_root.glob("r*.json"))
+        if actual_paths != expected_paths:
+            raise ValueError("event history is incomplete or non-contiguous")
+        final_transaction = ""
+        for expected_revision, path in enumerate(expected_paths, start=1):
             event = json.loads(path.read_text(encoding="utf-8"))
+            if (
+                event.get("revision") != expected_revision
+                or not isinstance(event.get("transaction_id"), str)
+                or not event["transaction_id"].strip()
+                or not isinstance(event.get("command_id"), str)
+                or not event["command_id"].strip()
+                or not isinstance(event.get("event_type"), str)
+                or not event["event_type"].strip()
+                or not isinstance(event.get("artifact_heads"), dict)
+            ):
+                raise ValueError("event history entry is malformed")
+            final_transaction = event["transaction_id"]
             if event.get("event_type") == "content.framework-draft-saved":
                 revision = event.get("revision")
                 if isinstance(revision, bool) or not isinstance(revision, int):
                     raise ValueError("framework reset revision is invalid")
                 latest = max(latest, revision)
+        if final_transaction != state.last_transaction_id:
+            raise ValueError("event history does not match current state")
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         raise ContentWorkflowError(
             "FULL_DECK_EXPANSION_NOT_AUTHORIZED",
@@ -389,7 +425,12 @@ class ContentService:
             value = state.artifact_heads.get(f"content/review/{role}")
             if not value:
                 continue
-            envelope = self.kernel.artifacts.resolve(ArtifactReference.parse(value))
+            reference = ArtifactReference.parse(value)
+            if reference.kind != "content-review-record":
+                raise ArtifactReferenceError(
+                    f"Unexpected artifact kind for content/review/{role}"
+                )
+            envelope = self.kernel.artifacts.resolve(reference)
             self._require_exact_workflow_lineage(envelope["payload"], lineage)
             records.append((value, envelope["payload"]))
         acceptance = aggregate_content_reviews(draft_ref, records)
