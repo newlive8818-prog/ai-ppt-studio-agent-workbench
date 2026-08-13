@@ -469,6 +469,38 @@ class FrameworkDiscussionTests(unittest.TestCase):
             )
         self.assertEqual(self.kernel.load(), before)
 
+    def test_same_command_and_identity_confirmation_replay_is_rejected(self) -> None:
+        framework_ref, _state = self._save()
+        identity = "test-host-action://same-command-replay"
+        context = self.service.confirmation_context()
+        self.service.confirm_framework(
+            command_id="same-confirmation-command",
+            expected_revision=self.kernel.load().revision,
+            source_version=framework_ref,
+            challenge_id=str(context["challenge_id"]),
+            challenge_revision=int(context["challenge_revision"]),
+            host_confirmation_assertion=signed_assertion(
+                context,
+                identity_ref=identity,
+            ),
+        )
+        before = self.kernel.load()
+        replay_context = self.service.confirmation_context()
+
+        with self.assertRaises(ContentWorkflowError):
+            self.service.confirm_framework(
+                command_id="same-confirmation-command",
+                expected_revision=before.revision,
+                source_version=framework_ref,
+                challenge_id=str(replay_context["challenge_id"]),
+                challenge_revision=int(replay_context["challenge_revision"]),
+                host_confirmation_assertion=signed_assertion(
+                    replay_context,
+                    identity_ref=identity,
+                ),
+            )
+        self.assertEqual(self.kernel.load(), before)
+
     def test_forged_framework_confirmation_head_cannot_authorize_expansion(self) -> None:
         framework_ref, _state = self._save()
         context = self.service.confirmation_context()
@@ -548,6 +580,43 @@ class FrameworkDiscussionTests(unittest.TestCase):
             self.service.expansion_authorization_context()
         self.assertEqual(self.kernel.load(), before)
 
+    def test_consumed_identity_cannot_authenticate_a_replacement_artifact(self) -> None:
+        framework_ref, _state = self._save()
+        confirmation_ref, _state = self._confirm(
+            framework_ref,
+            identity_ref="test-host-action://real-framework-confirmation",
+        )
+        real_payload = dict(
+            self.kernel.artifacts.resolve(
+                ArtifactReference.parse(confirmation_ref)
+            )["payload"]
+        )
+        replacement_payload = {
+            **real_payload,
+            "confirmed_at": "2026-08-14T23:59:59+00:00",
+            "host_assertion_sha256": "f" * 64,
+        }
+        replacement_state = self.kernel.commit(
+            command_id="replace-confirmation-with-forgery",
+            expected_revision=self.kernel.load().revision,
+            event_type="test.replace-confirmation-with-forgery",
+            artifact_updates={
+                "content/framework-confirmation": (
+                    "content-framework-confirmation",
+                    replacement_payload,
+                )
+            },
+        )
+        self.assertNotEqual(
+            replacement_state.artifact_heads["content/framework-confirmation"],
+            confirmation_ref,
+        )
+        before = self.kernel.load()
+
+        with self.assertRaises(ContentWorkflowError):
+            self.service.expansion_authorization_context()
+        self.assertEqual(self.kernel.load(), before)
+
     def test_new_framework_reopens_g0_and_removes_formal_page_content_heads(self) -> None:
         state = self.kernel.load()
         content_heads = {
@@ -613,6 +682,53 @@ class FrameworkDiscussionTests(unittest.TestCase):
                     ArtifactReference.parse(reference)
                 )
             )
+
+    def test_new_framework_removes_future_content_heads_but_keeps_non_content_heads(self) -> None:
+        state = self.kernel.commit(
+            command_id="simulate-future-content-heads",
+            expected_revision=self.kernel.load().revision,
+            event_type="test.future-content-heads",
+            artifact_updates={
+                "content/repair-plan": (
+                    "content-repair-plan",
+                    {"slides": [{"old": True}]},
+                ),
+                "content/review/custom-role": (
+                    "content-review-record",
+                    {"page_level": True},
+                ),
+                "project/non-content-proof": (
+                    "project-proof",
+                    {"keep": True},
+                ),
+            },
+        )
+        old_repair_ref = state.artifact_heads["content/repair-plan"]
+        proof_ref = state.artifact_heads["project/non-content-proof"]
+
+        _framework_ref, framework_state = self.service.save_draft(
+            command_id="clear-future-content-heads",
+            expected_revision=state.revision,
+            payload=valid_framework(self.mission_confirmation_ref),
+        )
+
+        self.assertEqual(
+            {
+                slot
+                for slot in framework_state.artifact_heads
+                if slot.startswith("content/")
+            },
+            {"content/framework-draft"},
+        )
+        self.assertEqual(
+            framework_state.artifact_heads["project/non-content-proof"],
+            proof_ref,
+        )
+        self.assertTrue(
+            self.kernel.artifacts.resolve(
+                ArtifactReference.parse(old_repair_ref)
+            )
+        )
 
     def test_new_draft_clears_current_confirmation_and_authorization_heads(self) -> None:
         framework_ref, _state = self._save()

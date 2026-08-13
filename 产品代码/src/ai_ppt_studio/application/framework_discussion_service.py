@@ -24,27 +24,6 @@ FRAMEWORK_CONFIRMATION_SCOPE = "content-framework-confirmation"
 FULL_DECK_EXPANSION_SCOPE = (
     "content-full-deck-expansion-authorization"
 )
-FORMAL_CONTENT_HEADS = (
-    "content/strategy",
-    "content/claim-map",
-    "content/argument-map",
-    "content/draft",
-    "content/review/presales-reviewer",
-    "content/review/decision-maker-reviewer",
-    "content/review/evidence-reviewer",
-    "content/review/narrative-reviewer",
-    "content/review/editorial-reviewer",
-    "content/acceptance",
-    "content/blueprint",
-    "content/change-set",
-    "content/page-decisions",
-    "content/review-batch",
-    "content/batch-revision-plan",
-    "content/batch-plan-confirmation",
-    "content/review-batch-withdrawal",
-)
-
-
 class FrameworkDiscussionService:
     """Persist only chapter-level discussion until two user actions exist."""
 
@@ -76,6 +55,13 @@ class FrameworkDiscussionService:
                     ],
                 },
             )
+        current = self.kernel.load()
+        content_head_removals = tuple(
+            slot
+            for slot in current.artifact_heads
+            if slot.startswith("content/")
+            and slot != "content/framework-draft"
+        )
         state = self.kernel.commit(
             command_id=command_id,
             expected_revision=expected_revision,
@@ -87,9 +73,7 @@ class FrameworkDiscussionService:
                 )
             },
             artifact_removals=(
-                "content/framework-confirmation",
-                "content/full-deck-expansion-authorization",
-                *FORMAL_CONTENT_HEADS,
+                *content_head_removals,
             ),
             content_framework_reset=True,
         )
@@ -361,6 +345,9 @@ class FrameworkDiscussionService:
         invalid = invalid or self.kernel.confirmation_owner(
             identities[0] if identities else ""
         ) != expected_owner
+        invalid = invalid or self.kernel.confirmation_artifact_binding(
+            identities[0] if identities else ""
+        ) != confirmation_ref
         if invalid:
             self._raise_unconfirmed(state, framework_ref, confirmation_ref)
 

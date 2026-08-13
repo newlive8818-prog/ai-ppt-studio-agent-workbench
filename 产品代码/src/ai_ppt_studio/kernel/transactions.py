@@ -83,10 +83,10 @@ class ProjectKernel:
         with self._locked():
             state = self.load()
             if command_id in state.processed_commands:
-                self._validate_idempotent_confirmation_replay(
-                    state,
-                    confirmation_consumptions,
-                )
+                if confirmation_consumptions:
+                    raise ValueError(
+                        "Confirmation identity cannot replay a processed command"
+                    )
                 return state
             if state.revision != expected_revision:
                 raise RevisionConflictError(expected_revision, state.revision)
@@ -102,7 +102,7 @@ class ProjectKernel:
             ):
                 raise ValueError("The confirmation ledger is kernel-owned")
 
-            consumed = self._confirmation_consumptions(state, heads)
+            consumed, artifact_bindings = self._confirmation_ledger(state, heads)
             consumption_updates: dict[str, str] = {}
             for raw_identity, raw_owner in confirmation_consumptions:
                 identity = raw_identity.strip()
@@ -141,12 +141,23 @@ class ProjectKernel:
             for slot, (kind, payload) in artifact_updates.items():
                 heads[slot] = str(self.artifacts.put(kind, payload))
             if consumption_updates:
+                binding_updates = self._confirmation_artifact_bindings(
+                    artifact_updates=artifact_updates,
+                    heads=heads,
+                    confirmation_consumptions=confirmation_consumptions,
+                )
+                artifact_bindings.update(binding_updates)
                 heads[CONFIRMATION_LEDGER_SLOT] = str(
                     self.artifacts.put(
                         CONFIRMATION_LEDGER_KIND,
-                        {"consumed": consumed},
+                        {
+                            "consumed": consumed,
+                            "artifact_bindings": artifact_bindings,
+                        },
                     )
                 )
+            else:
+                binding_updates = {}
 
             next_revision = state.revision + 1
             authorized_gate = (
@@ -179,6 +190,7 @@ class ProjectKernel:
                 "artifact_heads": heads,
                 "artifact_head_removals": removed_heads,
                 "confirmation_consumptions": consumption_updates,
+                "confirmation_artifact_bindings": binding_updates,
                 "gate_updates": gate_updates,
                 "gate_evidence_refs": (
                     list(authorized_gate.evidence_refs) if authorized_gate else []
@@ -208,12 +220,18 @@ class ProjectKernel:
     def _confirmation_consumptions(
         self, state: KernelState, heads: dict[str, str]
     ) -> dict[str, str]:
+        return self._confirmation_ledger(state, heads)[0]
+
+    def _confirmation_ledger(
+        self, state: KernelState, heads: dict[str, str]
+    ) -> tuple[dict[str, str], dict[str, str]]:
         consumed = dict(
             getattr(state, "consumed_user_confirmations", {})
         )
+        artifact_bindings: dict[str, str] = {}
         ledger_ref = heads.get(CONFIRMATION_LEDGER_SLOT, "")
         if not ledger_ref:
-            return consumed
+            return consumed, artifact_bindings
         from ai_ppt_studio.kernel.references import ArtifactReference
 
         reference = ArtifactReference.parse(ledger_ref)
@@ -221,17 +239,24 @@ class ProjectKernel:
             raise ValueError("Confirmation ledger artifact kind is invalid")
         payload = self.artifacts.resolve(reference)["payload"]
         ledger_consumed = payload.get("consumed")
+        ledger_bindings = payload.get("artifact_bindings", {})
         if not isinstance(ledger_consumed, dict) or any(
             not isinstance(key, str) or not isinstance(value, str)
             for key, value in ledger_consumed.items()
         ):
             raise ValueError("Confirmation ledger payload is invalid")
+        if not isinstance(ledger_bindings, dict) or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in ledger_bindings.items()
+        ):
+            raise ValueError("Confirmation artifact binding ledger is invalid")
         for key, value in ledger_consumed.items():
             previous = consumed.get(key)
             if previous is not None and previous != value:
                 raise ValueError("Confirmation consumption history conflicts")
             consumed[key] = value
-        return consumed
+        artifact_bindings.update(ledger_bindings)
+        return consumed, artifact_bindings
 
     def confirmation_owner(self, identity: str) -> str:
         """Return the atomic owner of a consumed trusted identity, if any."""
@@ -246,35 +271,50 @@ class ProjectKernel:
             "",
         )
 
-    def _validate_idempotent_confirmation_replay(
-        self,
-        state: KernelState,
-        confirmation_consumptions: tuple[tuple[str, str], ...],
-    ) -> None:
-        if not confirmation_consumptions:
-            return
-        consumed = self._confirmation_consumptions(
+    def confirmation_artifact_binding(self, identity: str) -> str:
+        """Return the exact artifact atomically written with an identity."""
+
+        state = self.load()
+        _consumed, bindings = self._confirmation_ledger(
             state,
             dict(state.artifact_heads),
         )
+        return bindings.get(
+            hashlib.sha256(identity.encode("utf-8")).hexdigest(),
+            "",
+        )
+
+    def _confirmation_artifact_bindings(
+        self,
+        *,
+        artifact_updates: dict[str, tuple[str, dict[str, Any]]],
+        heads: dict[str, str],
+        confirmation_consumptions: tuple[tuple[str, str], ...],
+    ) -> dict[str, str]:
+        bindings: dict[str, str] = {}
         for raw_identity, raw_owner in confirmation_consumptions:
             identity = raw_identity.strip()
             owner = raw_owner.strip()
-            if not identity or not owner:
+            candidates = [
+                heads[slot]
+                for slot, (_kind, payload) in artifact_updates.items()
+                if payload.get("scope_kind")
+                and owner
+                == f"{payload.get('scope_kind')}:{payload.get('scope_id')}"
+                and identity
+                in {
+                    str(payload.get("user_action_ref") or ""),
+                    str(payload.get("user_message_ref") or ""),
+                }
+            ]
+            if len(candidates) != 1:
                 raise ValueError(
-                    "Confirmation consumption identity and owner are required"
+                    "Confirmation consumption must bind one exact artifact"
                 )
-            identity_key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
-            previous = consumed.get(identity_key)
-            if previous is None:
-                raise ValueError(
-                    "Confirmation identity cannot be added to a processed command"
-                )
-            if previous != owner:
-                raise ValueError(
-                    "Confirmation identity was already consumed by "
-                    f"{previous}"
-                )
+            bindings[
+                hashlib.sha256(identity.encode("utf-8")).hexdigest()
+            ] = candidates[0]
+        return bindings
 
     def _historical_confirmation_owner(
         self,
