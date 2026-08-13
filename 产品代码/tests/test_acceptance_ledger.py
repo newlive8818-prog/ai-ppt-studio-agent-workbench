@@ -16,6 +16,26 @@ from ai_ppt_studio.acceptance.ledger import (
     extract_numbered_requirements,
 )
 
+REPLACED_REQUIREMENT_IDS = frozenset(
+    {
+        "PRD-17.1-04",
+        "PRD-17.2-03",
+        "PRD-17.2-04",
+        "PRD-17.2-05",
+        "PRD-17.2-06",
+        "PRD-17.2-07",
+        "PRD-17.2-08",
+        "PRD-17.2-09",
+        "PRD-17.2-10",
+        "PRD-17.5-04",
+        "PRD-17.5-07",
+        "UI-23.2-05",
+        "UI-23.2-07",
+        "UI-23.2-08",
+        "UI-23.2-09",
+    }
+)
+
 
 class AcceptanceLedgerTests(unittest.TestCase):
     def test_extracts_stable_ids_and_proof_kinds(self) -> None:
@@ -111,24 +131,20 @@ class AcceptanceLedgerTests(unittest.TestCase):
             "UI-23.2-25",
         ):
             self.assertEqual(by_id[requirement_id].status, "unproven")
-        for requirement_id in (
-            "PRD-17.1-04",
-            "PRD-17.2-03",
-            "PRD-17.2-04",
-            "PRD-17.2-05",
-            "PRD-17.2-06",
-            "PRD-17.2-07",
-            "PRD-17.2-08",
-            "PRD-17.2-09",
-            "PRD-17.2-10",
-            "PRD-17.5-04",
-            "PRD-17.5-07",
-            "UI-23.2-05",
-            "UI-23.2-07",
-            "UI-23.2-08",
-            "UI-23.2-09",
-        ):
+        for requirement_id in REPLACED_REQUIREMENT_IDS:
             self.assertEqual(by_id[requirement_id].status, "unproven")
+
+        evidence_payload = json.loads(
+            (ROOT / "requirements" / "v1.6-evidence.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        for proof in evidence_payload["proofs"]:
+            residual_ids = set(proof["requirement_ids"]) & REPLACED_REQUIREMENT_IDS
+            self.assertFalse(
+                residual_ids,
+                f"{proof['proof_ref']} still maps replaced IDs: {sorted(residual_ids)}",
+            )
 
     def test_content_review_contract_boundaries_are_explicit(self) -> None:
         index = (ROOT.parent / "00-唯一研发基线索引-v1.0.md").read_text(
@@ -140,7 +156,13 @@ class AcceptanceLedgerTests(unittest.TestCase):
         ui = (ROOT.parent / "03-UI设计与交互规范-v1.0.md").read_text(
             encoding="utf-8"
         )
-        self.assertIn("9–10. 保留既有专项编号位置", index)
+        numbered_specs = index.split("已批准的专项设计为：", 1)[1].split(
+            "本轮真实实验", 1
+        )[0]
+        self.assertIn("9–10. 编号保留", numbered_specs)
+        self.assertIn("待各自独立基线提交接入", numbered_specs)
+        self.assertIn("当前不构成本提交可导航专项", numbered_specs)
+        self.assertNotIn("两项既有专项继续由其原提交维护", numbered_specs)
         self.assertIn("11. [内容蓝图侧边栏全稿审核与批次修改设计]", index)
         self.assertIn("第 11 项仅取代旧 UI-03", index)
         current_product = index.split("### 已批准的 RC1 默认值", 1)[0]
