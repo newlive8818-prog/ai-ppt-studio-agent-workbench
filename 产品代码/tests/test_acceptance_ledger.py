@@ -82,11 +82,8 @@ class AcceptanceLedgerTests(unittest.TestCase):
         self.assertEqual(len(ledger.requirements), 104)
         self.assertEqual(len(ledger.requirements), len(set(ledger.ids)))
         self.assertEqual(ledger.as_dict(), expected.as_dict())
-        self.assertGreater(
-            sum(item.status == "passed" for item in ledger.requirements), 0
-        )
-        self.assertLess(
-            sum(item.status == "passed" for item in ledger.requirements), 104
+        self.assertEqual(
+            sum(item.status == "passed" for item in ledger.requirements), 22
         )
         self.assertTrue(
             all(
@@ -96,6 +93,20 @@ class AcceptanceLedgerTests(unittest.TestCase):
             )
         )
         by_id = {item.requirement_id: item for item in ledger.requirements}
+        self.assertIn("目录框架", by_id["PRD-17.2-03"].text)
+        self.assertIn("冻结批次", by_id["PRD-17.2-09"].text)
+        self.assertIn("最大宽度侧边栏", by_id["UI-23.2-04"].text)
+        self.assertIn("全部页面", by_id["UI-23.2-07"].text)
+        self.assertIn("修改方案", by_id["SDD-21.3-13"].text)
+        self.assertIn("当前发布策略", by_id["PRD-17.3-06"].text)
+        self.assertIn("只要求 macOS PowerPoint", by_id["PRD-17.3-06"].text)
+        self.assertNotIn("四目标始终是一期强制", by_id["SDD-21.3-25"].text)
+        self.assertIn("ReleaseTargetPolicy", by_id["SDD-21.3-25"].text)
+        self.assertIn("延期目标不得声明兼容", by_id["SDD-21.3-25"].text)
+        self.assertEqual(by_id["PRD-17.3-06"].status, "unproven")
+        self.assertIn(
+            "target-evidence", by_id["PRD-17.3-06"].missing_evidence
+        )
         for requirement_id in (
             "PRD-17.1-01",
             "PRD-17.1-03",
@@ -104,6 +115,24 @@ class AcceptanceLedgerTests(unittest.TestCase):
             "UI-23.2-01",
             "UI-23.2-04",
             "UI-23.2-25",
+        ):
+            self.assertEqual(by_id[requirement_id].status, "unproven")
+        for requirement_id in (
+            "PRD-17.1-04",
+            "PRD-17.2-03",
+            "PRD-17.2-04",
+            "PRD-17.2-05",
+            "PRD-17.2-06",
+            "PRD-17.2-07",
+            "PRD-17.2-08",
+            "PRD-17.2-09",
+            "PRD-17.2-10",
+            "PRD-17.5-04",
+            "PRD-17.5-07",
+            "UI-23.2-05",
+            "UI-23.2-07",
+            "UI-23.2-08",
+            "UI-23.2-09",
         ):
             self.assertEqual(by_id[requirement_id].status, "unproven")
 
