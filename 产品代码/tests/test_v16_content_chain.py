@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.application.content_service import ContentService
 from ai_ppt_studio.errors import ArtifactReferenceError
+from tests.v16_content_fixtures import complete_slide_draft_payload
 
 
 def valid_mission() -> dict[str, str]:
@@ -92,35 +93,12 @@ def build_ready_draft(
         "c7",
         6,
         "slide-draft-set",
-        {
-            "argument_map_ref": argument,
-            "slides": [
-                {
-                    "slide_id": f"s{index}",
-                    "title": (
-                        "为什么现在必须改变"
-                        if index == 1
-                        else f"方案论证页 {index}"
-                    ),
-                    "communication_goal": (
-                        "建立紧迫性" if index == 1 else "建立方案信心"
-                    ),
-                    "core_claim": (
-                        "割裂阻碍经营" if index == 1 else f"核心主张 {index}"
-                    ),
-                    "visible_copy": (
-                        ["五套系统", "三条断点"]
-                        if index == 1
-                        else [f"方案要点 {index}"]
-                    ),
-                    "speaker_notes": (
-                        "解释来源" if index == 1 else f"讲解备注 {index}"
-                    ),
-                    "source_refs": [materials],
-                }
-                for index in range(1, slide_count + 1)
-            ],
-        },
+        complete_slide_draft_payload(
+            argument_map_ref=argument,
+            material_ref=materials,
+            slide_count=slide_count,
+            slide_id_prefix="s",
+        ),
     )
     return 7, draft, {
         "mission": mission,

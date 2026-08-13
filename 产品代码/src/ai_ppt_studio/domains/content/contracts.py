@@ -49,6 +49,8 @@ PROHIBITED_PROPOSAL_PATTERNS = (
     (re.compile(r"客户(?:已经|已|现有|确认|明确|当前)"), "unsourced-customer-fact"),
     (re.compile(r"保证|承诺|必然|一定能够|确保.{0,12}(?:提升|实现|达到)"), "unsupported-promise"),
 )
+READING_DENSITY_LEVELS = frozenset({"low", "moderate", "high"})
+EVIDENCE_KINDS = frozenset({"material", "planned-gap"})
 
 
 def _text(payload: dict[str, Any], field: str) -> str:
@@ -65,6 +67,120 @@ def _objects(payload: dict[str, Any], field: str) -> list[dict[str, Any]]:
     ):
         raise ContractValidationError(f"{field} must be a non-empty object array")
     return [dict(item) for item in value]
+
+
+def _string_array(
+    payload: dict[str, Any], field: str, *, allow_empty: bool = False
+) -> list[str]:
+    value = payload.get(field)
+    if not isinstance(value, list) or (not allow_empty and not value) or any(
+        not isinstance(item, str) or not item.strip() for item in value
+    ):
+        raise ContractValidationError(f"{field} must be a string array")
+    return [item.strip() for item in value]
+
+
+def _boundary_text(payload: dict[str, Any], field: str) -> str:
+    if field not in payload or not isinstance(payload[field], str):
+        raise ContractValidationError(f"{field} must be a string")
+    return payload[field].strip()
+
+
+def _validate_visible_copy(slide: dict[str, Any]) -> list[dict[str, str]]:
+    items = _objects(slide, "visible_copy")
+    return [
+        {
+            "copy_id": _text(item, "copy_id"),
+            "role": _text(item, "role"),
+            "text": _text(item, "text"),
+        }
+        for item in items
+    ]
+
+
+def _validate_evidence_items(slide: dict[str, Any]) -> list[dict[str, str]]:
+    items = _objects(slide, "evidence_items")
+    normalized: list[dict[str, str]] = []
+    fields = (
+        "evidence_id",
+        "source_file",
+        "source_page_or_region",
+        "used_region",
+        "supports_claim",
+        "treatment",
+        "fact_identity",
+        "evidence_gap",
+    )
+    for item in items:
+        evidence = {field: _text(item, field) for field in fields}
+        evidence_kind = _text(item, "evidence_kind")
+        if evidence_kind not in EVIDENCE_KINDS:
+            raise ContractValidationError(
+                "evidence_kind must be material or planned-gap"
+            )
+        evidence["evidence_kind"] = evidence_kind
+        if evidence_kind == "material":
+            evidence["material_ref"] = _text(item, "material_ref")
+            evidence["asset_ref"] = _text(item, "asset_ref")
+        else:
+            evidence["material_ref"] = _boundary_text(item, "material_ref")
+            evidence["asset_ref"] = _boundary_text(item, "asset_ref")
+        normalized.append(
+            {
+                field: evidence[field]
+                for field in (
+                    "evidence_id",
+                    "evidence_kind",
+                    "material_ref",
+                    "asset_ref",
+                    "source_file",
+                    "source_page_or_region",
+                    "used_region",
+                    "supports_claim",
+                    "treatment",
+                    "fact_identity",
+                    "evidence_gap",
+                )
+            }
+        )
+    return normalized
+
+
+def _validate_reading_quality(slide: dict[str, Any]) -> dict[str, Any]:
+    quality = slide.get("reading_quality")
+    if not isinstance(quality, dict):
+        raise ContractValidationError("reading_quality must be an object")
+    if quality.get("independently_readable") is not True:
+        raise ContractValidationError("independently_readable must be true")
+    density = _text(quality, "information_density")
+    if density not in READING_DENSITY_LEVELS:
+        raise ContractValidationError(
+            "information_density must be low, moderate, or high"
+        )
+    if quality.get("claim_reason_evidence_boundary_complete") is not True:
+        raise ContractValidationError(
+            "claim_reason_evidence_boundary_complete must be true"
+        )
+    return {
+        "independently_readable": True,
+        "information_density": density,
+        "claim_reason_evidence_boundary_complete": True,
+        "review_note": _text(quality, "review_note"),
+    }
+
+
+def _validate_sequence(slide: dict[str, Any]) -> dict[str, str]:
+    sequence = slide.get("sequence")
+    if not isinstance(sequence, dict):
+        raise ContractValidationError("sequence must be an object")
+    return {
+        "previous_slide_id": _boundary_text(sequence, "previous_slide_id"),
+        "next_slide_id": _boundary_text(sequence, "next_slide_id"),
+        "transition_from_previous": _text(
+            sequence, "transition_from_previous"
+        ),
+        "transition_to_next": _text(sequence, "transition_to_next"),
+    }
 
 
 def validate_content_stage(stage: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -125,27 +241,42 @@ def validate_content_stage(stage: str, payload: dict[str, Any]) -> dict[str, Any
         for slide in slides:
             for field in (
                 "slide_id",
+                "chapter_id",
                 "title",
+                "page_purpose",
+                "customer_judgment",
                 "communication_goal",
                 "core_claim",
                 "speaker_notes",
+                "user_judgment_prompt",
             ):
                 slide[field] = _text(slide, field)
-            for field in ("visible_copy", "source_refs"):
-                values = slide.get(field)
-                allow_empty = (
-                    field == "source_refs"
-                    and payload.get("content_identity_mode") == "proposal-only"
-                )
-                if not isinstance(values, list) or (
-                    not allow_empty and not values
-                ) or any(
-                    not isinstance(value, str) or not value.strip()
-                    for value in values
-                ):
-                    raise ContractValidationError(
-                        f"Every slide requires non-empty {field}"
-                    )
+            order = slide.get("order")
+            if (
+                isinstance(order, bool)
+                or not isinstance(order, int)
+                or order < 1
+            ):
+                raise ContractValidationError("order must be a positive integer")
+            slide["order"] = order
+            slide["visible_copy"] = _validate_visible_copy(slide)
+            slide["evidence_items"] = _validate_evidence_items(slide)
+            slide["reading_quality"] = _validate_reading_quality(slide)
+            slide["sequence"] = _validate_sequence(slide)
+            slide["source_refs"] = _string_array(
+                slide,
+                "source_refs",
+                allow_empty=(
+                    payload.get("content_identity_mode") == "proposal-only"
+                ),
+            )
+        orders = [slide["order"] for slide in slides]
+        if len(set(orders)) != len(orders) or sorted(orders) != list(
+            range(1, len(slides) + 1)
+        ):
+            raise ContractValidationError(
+                "slide order must be unique and contiguous from 1"
+            )
         normalized["slides"] = slides
     if normalized.get("content_identity_mode") == "proposal-only":
         validate_proposal_only_identity(stage, normalized)
@@ -218,7 +349,7 @@ def validate_proposal_only_identity(
             visible = " ".join(
                 [
                     slide["core_claim"],
-                    *slide["visible_copy"],
+                    *[item["text"] for item in slide["visible_copy"]],
                     slide["speaker_notes"],
                 ]
             )
@@ -258,14 +389,17 @@ def _semantic_proposal_text(stage: str, payload: dict[str, Any]) -> str:
     else:
         values = [
             {
-                key: slide.get(key)
-                for key in (
-                    "title",
-                    "communication_goal",
-                    "core_claim",
-                    "visible_copy",
-                    "speaker_notes",
-                )
+                "title": slide.get("title"),
+                "communication_goal": slide.get("communication_goal"),
+                "core_claim": slide.get("core_claim"),
+                "visible_copy": [
+                    {
+                        "role": item.get("role"),
+                        "text": item.get("text"),
+                    }
+                    for item in slide.get("visible_copy") or []
+                ],
+                "speaker_notes": slide.get("speaker_notes"),
             }
             for slide in payload.get("slides") or []
         ]
