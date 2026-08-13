@@ -129,6 +129,15 @@ class ContextCompiler:
                 "content/batch-plan-confirmation", ""
             ),
         }
+        if task_type in FRAMEWORK_ACTIONS:
+            content_workflow = {
+                **content_workflow,
+                "framework_confirmation_ref": "",
+                "full_deck_expansion_authorization_ref": "",
+                "review_batch_ref": "",
+                "batch_revision_plan_ref": "",
+                "batch_plan_confirmation_ref": "",
+            }
         allowed_content_heads = (
             {"content/framework-draft"}
             if task_type in FRAMEWORK_ACTIONS

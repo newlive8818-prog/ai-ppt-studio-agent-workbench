@@ -161,6 +161,50 @@ def register_reviews(
 
 
 class V16ContentAcceptanceTests(unittest.TestCase):
+    def test_acceptance_revalidates_every_current_content_chain_head_zero_write(self) -> None:
+        stages = {
+            "content/strategy": "presales-content-strategy",
+            "content/claim-map": "claim-evidence-map",
+            "content/argument-map": "deck-argument-map",
+            "content/draft": "slide-draft-set",
+        }
+        for slot, kind in stages.items():
+            with self.subTest(slot=slot), tempfile.TemporaryDirectory() as temp, patch.dict(
+                os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
+            ):
+                service = ContentService.initialize(Path(temp), project_id="adversarial")
+                revision, draft_ref, _lineage = build_authorized_draft(service)
+                revision = register_reviews(service, revision, draft_ref)
+                current_ref = service.kernel.load().artifact_heads[slot]
+                forged = dict(service.kernel.artifacts.resolve(
+                    ArtifactReference.parse(current_ref)
+                )["payload"])
+                forged["framework_ref"] = (
+                    "artifact://content-framework-draft/" + "f" * 64
+                )
+                service.kernel.commit(
+                    command_id=f"forge:{slot}", expected_revision=revision,
+                    event_type="test.forge-content-chain-head",
+                    artifact_updates={slot: (kind, forged)},
+                )
+                before = service.kernel.load()
+                objects_before = tuple(
+                    path.relative_to(service.kernel.artifacts.objects_root)
+                    for path in service.kernel.artifacts.objects_root.rglob("*")
+                    if path.is_file()
+                )
+                with self.assertRaises(ContentWorkflowError):
+                    service.accept_content("reject-forged-chain", before.revision)
+                self.assertEqual(service.kernel.load(), before)
+                objects_after = tuple(
+                    path.relative_to(service.kernel.artifacts.objects_root)
+                    for path in service.kernel.artifacts.objects_root.rglob("*")
+                    if path.is_file()
+                )
+                self.assertEqual(objects_after, objects_before)
+                self.assertNotIn("content/acceptance", before.artifact_heads)
+                self.assertNotIn("content/blueprint", before.artifact_heads)
+
     def test_formal_content_cannot_start_from_mission_readiness_alone(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             service = ContentService.initialize(Path(temp), project_id="mission-only")

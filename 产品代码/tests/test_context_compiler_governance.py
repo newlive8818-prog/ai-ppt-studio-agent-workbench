@@ -11,9 +11,21 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.config import RuntimeConfig  # noqa: E402
 from ai_ppt_studio.application.content_service import ContentService  # noqa: E402
+from ai_ppt_studio.application.framework_discussion_service import (  # noqa: E402
+    FrameworkDiscussionService,
+)
 from ai_ppt_studio.application.project_service import ProjectService  # noqa: E402
 from ai_ppt_studio.context_compiler import ContextCompiler  # noqa: E402
 from ai_ppt_studio.errors import WorkbenchValidationError  # noqa: E402
+from tests.test_v16_content_acceptance import (  # noqa: E402
+    TEST_SECRET,
+    authorize_current_framework,
+)
+from ai_ppt_studio.application.scoped_confirmation import (  # noqa: E402
+    HOST_CONFIRMATION_SECRET_ENV,
+)
+import os
+from unittest.mock import patch
 
 
 def make_project(base: Path, name: str = "测试项目"):
@@ -85,6 +97,58 @@ class ContextCompilerGovernanceTests(unittest.TestCase):
             )
             self.assertIn(
                 "material_summary", pack["layers"]["project_facts"]
+            )
+
+    def test_authorized_framework_context_hides_all_downstream_workflow_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
+        ):
+            project = make_project(Path(temp))
+            content = ContentService(project)
+            mission_ref = content.save_mission_draft(
+                "mission", project.load().revision, {
+                    "topic": "经营一体化", "primary_audience": "决策者",
+                    "desired_judgment_or_action": "批准一期",
+                },
+            )
+            confirmation_ref = content.confirm_mission(
+                "confirm", project.load().revision,
+                mission_draft_ref=mission_ref,
+                material_mode="no-materials-confirmed",
+                material_inventory_ref="",
+                user_action_ref="test-user-action://authorized-framework-context",
+                user_message_ref="",
+            )
+            framework_ref, _confirmation, _authorization = (
+                authorize_current_framework(content, confirmation_ref)
+            )
+            project.commit(
+                command_id="seed-downstream-workflow-heads",
+                expected_revision=project.load().revision,
+                event_type="test.seed-downstream-workflow-heads",
+                artifact_updates={
+                    "content/review-batch": ("content-review-batch", {"x": 1}),
+                    "content/batch-revision-plan": ("batch-revision-plan", {"x": 1}),
+                    "content/batch-plan-confirmation": ("batch-plan-confirmation", {"x": 1}),
+                },
+            )
+            pack = ContextCompiler(project).compile_role_task(
+                role_id="presales-content-strategist",
+                task_type="build-content-framework",
+                project_revision=project.load().revision,
+                target_refs=[], instructions="仅修订框架",
+            )
+            workflow = pack["layers"]["content_workflow"]
+            self.assertEqual(workflow["framework_ref"], framework_ref)
+            self.assertEqual(
+                {key: value for key, value in workflow.items() if key != "framework_ref"},
+                {
+                    "framework_confirmation_ref": "",
+                    "full_deck_expansion_authorization_ref": "",
+                    "review_batch_ref": "",
+                    "batch_revision_plan_ref": "",
+                    "batch_plan_confirmation_ref": "",
+                },
             )
 
     def test_compile_role_task_produces_layered_pack(self) -> None:

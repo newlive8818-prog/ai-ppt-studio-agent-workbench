@@ -143,7 +143,8 @@ class V16ProjectServiceTests(unittest.TestCase):
             target = kernel.load().artifact_heads["project/manifest"]
             _ref, task, state = command.request_agent_action(
                 "framework-task", 3, action_type="build-content-framework",
-                target_refs=[target], instructions="先规划章节框架",
+                target_refs=[mission_ref, mission_confirmation_ref],
+                instructions="先规划章节框架",
             )
             self.assertEqual(task["action_type"], "build-content-framework")
             self.assertEqual(state.revision, 4)
@@ -182,22 +183,48 @@ class V16ProjectServiceTests(unittest.TestCase):
                 "batch_plan_confirmation_ref": "",
             })
 
-            _batch_ref, batch_task, batch_state = command.request_agent_action(
-                "batch-plan-registered", kernel.load().revision,
-                action_type="propose-content-batch-revision-plan",
-                target_refs=[target], instructions="集中形成修订计划",
+            for batch_action in (
+                "propose-content-batch-revision-plan",
+                "apply-content-batch-revision",
+            ):
+                before_batch = kernel.load()
+                events_before_batch = tuple(kernel.events_root.iterdir())
+                objects_before_batch = tuple(
+                    kernel.artifacts.objects_root.rglob("*")
+                )
+                with self.subTest(action=batch_action):
+                    with self.assertRaises(
+                        ContentWorkflowError
+                    ) as batch_error:
+                        command.request_agent_action(
+                            f"registered-but-unavailable:{batch_action}",
+                            before_batch.revision,
+                            action_type=batch_action,
+                            target_refs=[target],
+                            instructions="后续批次合同尚未实现",
+                        )
+                self.assertEqual(
+                    batch_error.exception.code, "CONTENT_REVIEW_CONFLICT"
+                )
+                self.assertEqual(kernel.load(), before_batch)
+                self.assertEqual(
+                    tuple(kernel.events_root.iterdir()), events_before_batch
+                )
+                self.assertEqual(
+                    tuple(kernel.artifacts.objects_root.rglob("*")),
+                    objects_before_batch,
+                )
+
+            _expand_ref, expand_task, _expand_state = (
+                command.request_agent_action(
+                    "expand-authorized-blueprint", kernel.load().revision,
+                    action_type="expand-full-content-blueprint",
+                    target_refs=[target], instructions="按已授权框架展开全篇",
+                )
             )
             self.assertEqual(
-                batch_task["role_id"], "deck-coherence-editor"
+                expand_task["role_id"], "deck-narrative-architect"
             )
-            batch_context_ref = batch_task["context_pack_ref"]
-            batch_context = kernel.artifacts.resolve(
-                ArtifactReference.parse(batch_context_ref)
-            )["payload"]["layers"]["content_workflow"]
-            self.assertEqual(batch_context["review_batch_ref"], "")
-            self.assertEqual(batch_context["batch_revision_plan_ref"], "")
-            self.assertEqual(batch_context["batch_plan_confirmation_ref"], "")
-            self.assertEqual(batch_state.revision, kernel.load().revision)
 
             FrameworkDiscussionService(kernel).save_draft(
                 "replacement-framework", kernel.load().revision,
@@ -210,6 +237,130 @@ class V16ProjectServiceTests(unittest.TestCase):
                     instructions="不应放行",
                 )
             self.assertEqual(stale.exception.code, "FULL_DECK_EXPANSION_NOT_AUTHORIZED")
+
+    def test_expand_full_blueprint_is_registered_but_requires_authorization(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config, _profile = runtime_config(Path(temp))
+            kernel = ProjectService(config).create_project("expand gate")
+            content = ContentService(kernel)
+            mission_ref = content.save_mission_draft(
+                "mission", 1, {
+                    "topic": "经营一体化", "primary_audience": "决策者",
+                    "desired_judgment_or_action": "批准一期",
+                },
+            )
+            content.confirm_mission(
+                "confirm", 2, mission_draft_ref=mission_ref,
+                material_mode="no-materials-confirmed", material_inventory_ref="",
+                user_action_ref="test-user-action://expand", user_message_ref="",
+            )
+            target = kernel.load().artifact_heads["project/manifest"]
+            before = kernel.load()
+            with self.assertRaises(ContentWorkflowError) as caught:
+                ProjectCommandService(kernel).request_agent_action(
+                    "expand-too-early", before.revision,
+                    action_type="expand-full-content-blueprint",
+                    target_refs=[target], instructions="不应放行",
+                )
+            self.assertEqual(
+                caught.exception.code, "FULL_DECK_EXPANSION_NOT_AUTHORIZED"
+            )
+            self.assertEqual(kernel.load(), before)
+
+    def test_framework_action_rejects_formal_or_unknown_content_targets_zero_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config, _profile = runtime_config(Path(temp))
+            kernel = ProjectService(config).create_project("framework targets")
+            content = ContentService(kernel)
+            mission_ref = content.save_mission_draft(
+                "mission", 1, {
+                    "topic": "经营一体化", "primary_audience": "决策者",
+                    "desired_judgment_or_action": "批准一期",
+                },
+            )
+            content.confirm_mission(
+                "confirm", 2, mission_draft_ref=mission_ref,
+                material_mode="no-materials-confirmed", material_inventory_ref="",
+                user_action_ref="test-user-action://framework-targets",
+                user_message_ref="",
+            )
+            forbidden = str(kernel.artifacts.put(
+                "slide-draft-set", {"slides": ["formal-page"]}
+            ))
+            unknown = str(kernel.artifacts.put(
+                "content-blueprint", {"pages": ["formal-page"]}
+            ))
+            commands = ProjectCommandService(kernel)
+            for target in (forbidden, unknown):
+                before = kernel.load()
+                events_before = tuple(kernel.events_root.iterdir())
+                with self.subTest(target=target):
+                    with self.assertRaises(ContentWorkflowError) as caught:
+                        commands.request_agent_action(
+                            f"reject-target:{target[-8:]}", before.revision,
+                            action_type="build-content-framework",
+                            target_refs=[target], instructions="不应泄露逐页内容",
+                        )
+                self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+                self.assertEqual(kernel.load(), before)
+                self.assertEqual(tuple(kernel.events_root.iterdir()), events_before)
+
+    def test_identical_framework_reset_cannot_replay_old_authorization(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config, _profile = runtime_config(Path(temp))
+            kernel = ProjectService(config).create_project("identical reset")
+            content = ContentService(kernel)
+            mission_ref = content.save_mission_draft(
+                "mission", 1, {
+                    "topic": "经营一体化", "primary_audience": "决策者",
+                    "desired_judgment_or_action": "批准一期",
+                },
+            )
+            mission_confirmation = content.confirm_mission(
+                "confirm", 2, mission_draft_ref=mission_ref,
+                material_mode="no-materials-confirmed", material_inventory_ref="",
+                user_action_ref="test-user-action://identical-reset",
+                user_message_ref="",
+            )
+            framework_ref, confirmation_ref, authorization_ref = (
+                _save_confirm_authorize(kernel, mission_confirmation)
+            )
+            confirmation_payload = kernel.artifacts.resolve(
+                ArtifactReference.parse(confirmation_ref)
+            )["payload"]
+            authorization_payload = kernel.artifacts.resolve(
+                ArtifactReference.parse(authorization_ref)
+            )["payload"]
+            same_ref, _ = FrameworkDiscussionService(kernel).save_draft(
+                "identical-framework-reset", kernel.load().revision,
+                _framework_payload(mission_confirmation),
+            )
+            self.assertEqual(same_ref, framework_ref)
+            kernel.commit(
+                command_id="restore-old-confirmation-heads",
+                expected_revision=kernel.load().revision,
+                event_type="test.restore-old-confirmation-heads",
+                artifact_updates={
+                    "content/framework-confirmation": (
+                        "content-framework-confirmation", confirmation_payload
+                    ),
+                    "content/full-deck-expansion-authorization": (
+                        "full-deck-expansion-authorization", authorization_payload
+                    ),
+                },
+            )
+            before = kernel.load()
+            with self.assertRaises(ContentWorkflowError) as caught:
+                ProjectCommandService(kernel).request_agent_action(
+                    "replayed-old-authorization", before.revision,
+                    action_type="build-presales-strategy",
+                    target_refs=[kernel.load().artifact_heads["project/manifest"]],
+                    instructions="不应放行",
+                )
+            self.assertEqual(
+                caught.exception.code, "FULL_DECK_EXPANSION_NOT_AUTHORIZED"
+            )
+            self.assertEqual(kernel.load(), before)
 
     def test_project_id_accepts_unicode_letters_but_rejects_path_syntax(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

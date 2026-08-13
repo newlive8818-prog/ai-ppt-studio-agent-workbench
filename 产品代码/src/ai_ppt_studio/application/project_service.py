@@ -40,6 +40,7 @@ ACTION_ROLES = {
     "review-content-narrative": "argument-logic-reviewer",
     "review-content-editorial": "reading-experience-reviewer",
     "aggregate-content-reviews": "deck-coherence-editor",
+    "expand-full-content-blueprint": "deck-narrative-architect",
     "propose-content-batch-revision-plan": "deck-coherence-editor",
     "apply-content-batch-revision": "content-repair-specialist",
     "design-deck-system": "deck-designer",
@@ -70,6 +71,7 @@ FULL_DECK_CONTENT_ACTIONS = frozenset(
         "review-content-narrative",
         "review-content-editorial",
         "aggregate-content-reviews",
+        "expand-full-content-blueprint",
     }
 )
 
@@ -343,6 +345,7 @@ class ProjectCommandService:
             )
 
             MissionReadinessPolicy(self.kernel).require_ready()
+            self._validate_framework_targets(target_refs)
         elif action in CONTENT_ACTIONS:
             from ai_ppt_studio.application.mission_readiness import (
                 MissionReadinessPolicy,
@@ -353,6 +356,14 @@ class ProjectCommandService:
 
             MissionReadinessPolicy(self.kernel).require_ready()
             require_full_deck_expansion_authorization(self.kernel)
+            if action in BATCH_PLAN_ACTIONS | BATCH_APPLY_ACTIONS:
+                from ai_ppt_studio.errors import ContentWorkflowError
+
+                raise ContentWorkflowError(
+                    "CONTENT_REVIEW_CONFLICT",
+                    "Batch content actions are registered but unavailable until their governed contracts exist",
+                    {"action_type": action, "revision": self.kernel.load().revision},
+                )
         for value in target_refs:
             self.kernel.artifacts.resolve(ArtifactReference.parse(value))
         from ai_ppt_studio.context_compiler import ContextCompiler
@@ -393,6 +404,28 @@ class ProjectCommandService:
             },
         )
         return state.artifact_heads["agent/task/active"], task, state
+
+    def _validate_framework_targets(self, target_refs: list[str]) -> None:
+        from ai_ppt_studio.errors import ContentWorkflowError
+
+        state = self.kernel.load()
+        allowed = {
+            state.artifact_heads[slot]
+            for slot in (
+                "mission/draft",
+                "mission/confirmation",
+                "materials",
+                "content/framework-draft",
+            )
+            if state.artifact_heads.get(slot)
+        }
+        invalid = [value for value in target_refs if value not in allowed]
+        if invalid:
+            raise ContentWorkflowError(
+                "CONTENT_REVIEW_CONFLICT",
+                "Framework tasks may target only current Mission, material, or framework identities",
+                {"invalid_target_refs": invalid, "revision": state.revision},
+            )
 
     def require_active_agent_task(self, task_id: str) -> dict[str, Any]:
         """Resolve one exact active task before accepting its result."""

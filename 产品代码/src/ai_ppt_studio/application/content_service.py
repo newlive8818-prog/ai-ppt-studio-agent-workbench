@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import json
 import re
 
 from ai_ppt_studio.domains.content.contracts import (
@@ -135,6 +136,7 @@ def require_full_deck_expansion_authorization(
             != f"{FULL_DECK_EXPANSION_SCOPE}:{confirmation_ref}"
             or kernel.confirmation_artifact_binding(identities[0])
             != authorization_ref
+            or revision < _latest_framework_reset_revision(kernel)
         ):
             raise ValueError("authorization trust binding is invalid")
     except (
@@ -165,6 +167,25 @@ def require_full_deck_expansion_authorization(
         "framework_confirmation_ref": confirmation_ref,
         "full_deck_expansion_authorization_ref": authorization_ref,
     }
+
+
+def _latest_framework_reset_revision(kernel: ProjectKernel) -> int:
+    latest = -1
+    try:
+        for path in sorted(kernel.events_root.glob("r*.json")):
+            event = json.loads(path.read_text(encoding="utf-8"))
+            if event.get("event_type") == "content.framework-draft-saved":
+                revision = event.get("revision")
+                if isinstance(revision, bool) or not isinstance(revision, int):
+                    raise ValueError("framework reset revision is invalid")
+                latest = max(latest, revision)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        raise ContentWorkflowError(
+            "FULL_DECK_EXPANSION_NOT_AUTHORIZED",
+            "Framework reset history is unreadable",
+            {"revision": kernel.load().revision},
+        ) from None
+    return latest
 
 
 class ContentService:
@@ -361,11 +382,8 @@ class ContentService:
         MissionReadinessPolicy(self.kernel).require_ready()
         lineage = require_full_deck_expansion_authorization(self.kernel)
         state = self.kernel.load()
-        draft_ref = self._require_head("content/draft", "slide-draft-set")
-        draft = self.kernel.artifacts.resolve(
-            ArtifactReference.parse(draft_ref)
-        )["payload"]
-        self._require_exact_workflow_lineage(draft, lineage)
+        refs, payloads = self._validated_current_content_chain(lineage)
+        draft_ref = refs["draft_ref"]
         records: list[tuple[str, dict[str, Any]]] = []
         for role in REQUIRED_CONTENT_REVIEW_ROLES:
             value = state.artifact_heads.get(f"content/review/{role}")
@@ -380,7 +398,9 @@ class ContentService:
         acceptance_ref = str(
             self.kernel.artifacts.put("content-acceptance", acceptance)
         )
-        blueprint = self._build_blueprint(acceptance_ref, lineage)
+        blueprint = self._build_blueprint(
+            acceptance_ref, lineage, refs, payloads
+        )
         blueprint_ref = str(
             self.kernel.artifacts.put("content-blueprint", blueprint)
         )
@@ -615,25 +635,12 @@ class ContentService:
         )
 
     def _build_blueprint(
-        self, acceptance_ref: str, lineage: dict[str, str]
+        self,
+        acceptance_ref: str,
+        lineage: dict[str, str],
+        refs: dict[str, str],
+        payloads: dict[str, dict[str, Any]],
     ) -> dict[str, Any]:
-        state = self.kernel.load()
-        required = {
-            "strategy": "content/strategy",
-            "claim_evidence_map": "content/claim-map",
-            "argument_map": "content/argument-map",
-            "draft": "content/draft",
-        }
-        payloads: dict[str, Any] = {}
-        refs: dict[str, str] = {}
-        for label, slot in required.items():
-            value = state.artifact_heads.get(slot)
-            if not value:
-                raise GateBlockedError("G0", (f"missing:{slot}",))
-            refs[f"{label}_ref"] = value
-            payloads[label] = self.kernel.artifacts.resolve(
-                ArtifactReference.parse(value)
-            )["payload"]
         return {
             **refs,
             **lineage,
@@ -644,6 +651,39 @@ class ContentService:
             "slides": payloads["draft"]["slides"],
             "status": "user-reviewable",
         }
+
+    def _validated_current_content_chain(
+        self, lineage: dict[str, str]
+    ) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
+        readiness = MissionReadinessPolicy(self.kernel).require_ready()
+        required = {
+            "strategy": (
+                "content/strategy", "presales-content-strategy", "strategy"
+            ),
+            "claim_evidence_map": (
+                "content/claim-map", "claim-evidence-map", "claim-map"
+            ),
+            "argument_map": (
+                "content/argument-map", "deck-argument-map", "argument-map"
+            ),
+            "draft": (
+                "content/draft", "slide-draft-set", "slide-draft-set"
+            ),
+        }
+        refs: dict[str, str] = {}
+        payloads: dict[str, dict[str, Any]] = {}
+        for label, (slot, kind, stage) in required.items():
+            value = self._require_head(slot, kind)
+            payload = dict(
+                self.kernel.artifacts.resolve(
+                    ArtifactReference.parse(value)
+                )["payload"]
+            )
+            self._require_exact_workflow_lineage(payload, lineage)
+            self._validate_lineage(stage, payload, readiness)
+            refs[f"{label}_ref"] = value
+            payloads[label] = payload
+        return refs, payloads
 
     def _validate_lineage(
         self,
