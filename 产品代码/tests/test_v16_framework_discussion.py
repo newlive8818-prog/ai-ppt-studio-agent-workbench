@@ -23,7 +23,10 @@ from ai_ppt_studio.application.framework_discussion_service import (
 from ai_ppt_studio.application.scoped_confirmation import (
     HOST_CONFIRMATION_SECRET_ENV,
 )
-from ai_ppt_studio.errors import ContentWorkflowError
+from ai_ppt_studio.errors import (
+    ConfirmationTransactionError,
+    ContentWorkflowError,
+)
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.gates import issue_gate_mutation
 
@@ -166,6 +169,18 @@ class FrameworkDiscussionTests(unittest.TestCase):
                 identity_ref=identity_ref or None,
             ),
         )
+
+    def _filesystem_snapshot(self) -> dict[Path, bytes]:
+        return {
+            path.relative_to(self.kernel.project_root): path.read_bytes()
+            for root in (
+                self.kernel.artifacts.objects_root,
+                self.kernel.events_root,
+                self.kernel.state_path.parent,
+            )
+            if root.exists()
+            for path in (root.rglob("*.json") if root.is_dir() else (root,))
+        }
 
     def test_save_draft_keeps_g0_open_and_exposes_no_page_content(self) -> None:
         framework_ref, state = self._save()
@@ -501,6 +516,33 @@ class FrameworkDiscussionTests(unittest.TestCase):
             )
         self.assertEqual(self.kernel.load(), before)
 
+    def test_old_challenge_after_unrelated_commit_is_rejected_zero_write(self) -> None:
+        framework_ref, _state = self._save()
+        stale_context = self.service.confirmation_context()
+        stale_assertion = signed_assertion(stale_context)
+        advanced = self.kernel.commit(
+            command_id="unrelated-revision-advance",
+            expected_revision=self.kernel.load().revision,
+            event_type="test.unrelated-revision-advance",
+            artifact_updates={
+                "project/unrelated": ("project-unrelated", {"value": 1})
+            },
+        )
+        before = self._filesystem_snapshot()
+
+        with self.assertRaises(ContentWorkflowError) as raised:
+            self.service.confirm_framework(
+                command_id="stale-challenge-after-unrelated-commit",
+                expected_revision=advanced.revision,
+                source_version=framework_ref,
+                challenge_id=str(stale_context["challenge_id"]),
+                challenge_revision=int(stale_context["challenge_revision"]),
+                host_confirmation_assertion=stale_assertion,
+            )
+
+        self.assertEqual(raised.exception.code, "CONTENT_REVIEW_CONFLICT")
+        self.assertEqual(self._filesystem_snapshot(), before)
+
     def test_forged_framework_confirmation_head_cannot_authorize_expansion(self) -> None:
         framework_ref, _state = self._save()
         context = self.service.confirmation_context()
@@ -612,7 +654,7 @@ class FrameworkDiscussionTests(unittest.TestCase):
             "confirmed_at": "2026-08-14T00:00:00+00:00",
         }
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfirmationTransactionError):
             self.kernel.commit(
                 command_id="mismatched-confirmation-binding",
                 expected_revision=before.revision,
@@ -623,10 +665,24 @@ class FrameworkDiscussionTests(unittest.TestCase):
                         confirmation_payload,
                     )
                 },
-                confirmation_consumptions=((
-                    consumed_identity,
-                    f"content-framework-confirmation:{framework_ref}",
-                ),),
+                confirmation_consumptions=(
+                    self.service.confirmations.confirmation_payload(
+                        current=self.service.confirmation_context(),
+                        source_version=framework_ref,
+                        challenge_id=str(
+                            self.service.confirmation_context()["challenge_id"]
+                        ),
+                        challenge_revision=int(
+                            self.service.confirmation_context()[
+                                "challenge_revision"
+                            ]
+                        ),
+                        host_confirmation_assertion=signed_assertion(
+                            self.service.confirmation_context(),
+                            identity_ref=consumed_identity,
+                        ),
+                    )[1][0],
+                ),
             )
 
         self.assertEqual(self.kernel.load(), before)
@@ -645,6 +701,118 @@ class FrameworkDiscussionTests(unittest.TestCase):
             },
             before_events,
         )
+
+    def test_raw_fake_confirmation_consumption_is_rejected_zero_write(self) -> None:
+        framework_ref, _state = self._save()
+        before = self._filesystem_snapshot()
+        identity = "test-host-action://raw-forgery"
+        owner = f"content-framework-confirmation:{framework_ref}"
+        forged = {
+            "project_id": "p1",
+            "scope_kind": "content-framework-confirmation",
+            "scope_id": framework_ref,
+            "source_version": framework_ref,
+            "evidence_refs": [framework_ref, self.mission_confirmation_ref],
+            "challenge_id": "forged",
+            "challenge_revision": self.kernel.load().revision,
+            "user_action_ref": identity,
+            "user_message_ref": "",
+            "confirmation_identity_type": "host-action",
+            "host_assertion_sha256": "f" * 64,
+        }
+
+        with self.assertRaises(ConfirmationTransactionError):
+            self.kernel.commit(
+                command_id="raw-fake-confirmation-consumption",
+                expected_revision=self.kernel.load().revision,
+                event_type="test.raw-fake-confirmation-consumption",
+                artifact_updates={
+                    "content/framework-confirmation": (
+                        "content-framework-confirmation",
+                        forged,
+                    )
+                },
+                confirmation_consumptions=((identity, owner),),
+            )
+
+        self.assertEqual(self._filesystem_snapshot(), before)
+
+    def test_bare_framework_reset_is_rejected_zero_write(self) -> None:
+        before = self._filesystem_snapshot()
+        with self.assertRaises(ConfirmationTransactionError):
+            self.kernel.commit(
+                command_id="bare-framework-reset",
+                expected_revision=self.kernel.load().revision,
+                event_type="test.bare-framework-reset",
+                artifact_updates={},
+                content_framework_reset=True,
+            )
+        self.assertEqual(self._filesystem_snapshot(), before)
+
+    def test_corrupt_confirmation_history_fails_closed_zero_write(self) -> None:
+        old_ref = self.kernel.load().artifact_heads["mission/confirmation"]
+        content = ContentService(self.kernel)
+        new_draft_ref = content.save_mission_draft(
+            "corrupt-history-replacement-draft",
+            self.kernel.load().revision,
+            {
+                "topic": "经营一体化方案 v2",
+                "primary_audience": "客户决策者",
+                "desired_judgment_or_action": "批准二期联合验证",
+            },
+        )
+        self.mission_confirmation_ref = content.confirm_mission(
+            "corrupt-history-replacement-confirmation",
+            self.kernel.load().revision,
+            mission_draft_ref=new_draft_ref,
+            material_mode="no-materials-confirmed",
+            material_inventory_ref="",
+            user_action_ref="test-user-action://mission-confirmed-v2",
+            user_message_ref="",
+        )
+        framework_ref, _state = self._save()
+        old_path = self.kernel.artifacts.path_for(ArtifactReference.parse(old_ref))
+        old_path.write_text("{corrupt", encoding="utf-8")
+        before = self._filesystem_snapshot()
+        context = self.service.confirmation_context()
+
+        with self.assertRaises(ContentWorkflowError) as raised:
+            self.service.confirm_framework(
+                command_id="reuse-with-corrupt-history",
+                expected_revision=self.kernel.load().revision,
+                source_version=framework_ref,
+                challenge_id=str(context["challenge_id"]),
+                challenge_revision=int(context["challenge_revision"]),
+                host_confirmation_assertion=signed_assertion(context),
+            )
+
+        self.assertEqual(raised.exception.code, "CONTENT_REVIEW_CONFLICT")
+        self.assertEqual(self._filesystem_snapshot(), before)
+
+    def test_typed_kernel_confirmation_failure_maps_without_message_matching(self) -> None:
+        framework_ref, _state = self._save()
+        context = self.service.confirmation_context()
+        before = self._filesystem_snapshot()
+
+        with patch.object(
+            self.kernel,
+            "commit",
+            side_effect=ConfirmationTransactionError(
+                "CONFIRMATION_HISTORY_CORRUPT",
+                "opaque typed failure",
+            ),
+        ), self.assertRaises(ContentWorkflowError) as raised:
+            self.service.confirm_framework(
+                command_id="typed-confirmation-failure",
+                expected_revision=self.kernel.load().revision,
+                source_version=framework_ref,
+                challenge_id=str(context["challenge_id"]),
+                challenge_revision=int(context["challenge_revision"]),
+                host_confirmation_assertion=signed_assertion(context),
+            )
+
+        self.assertEqual(raised.exception.code, "CONTENT_REVIEW_CONFLICT")
+        self.assertEqual(self._filesystem_snapshot(), before)
 
     def test_consumed_identity_cannot_authenticate_a_replacement_artifact(self) -> None:
         framework_ref, _state = self._save()

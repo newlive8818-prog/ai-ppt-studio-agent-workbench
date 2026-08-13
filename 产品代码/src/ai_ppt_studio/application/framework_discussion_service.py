@@ -7,6 +7,7 @@ import re
 
 from ai_ppt_studio.application.mission_readiness import MissionReadinessPolicy
 from ai_ppt_studio.application.scoped_confirmation import (
+    ConfirmationConsumption,
     ScopedConfirmationPolicy,
 )
 from ai_ppt_studio.domains.content.framework import (
@@ -14,7 +15,10 @@ from ai_ppt_studio.domains.content.framework import (
     validate_framework_draft,
     validate_full_deck_expansion_authorization,
 )
-from ai_ppt_studio.errors import ContentWorkflowError
+from ai_ppt_studio.errors import (
+    ConfirmationTransactionError,
+    ContentWorkflowError,
+)
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.state import KernelState
 from ai_ppt_studio.kernel.transactions import ProjectKernel
@@ -75,7 +79,7 @@ class FrameworkDiscussionService:
             artifact_removals=(
                 *content_head_removals,
             ),
-            content_framework_reset=True,
+            content_framework_reset=self.confirmations.content_framework_reset(),
         )
         return state.artifact_heads["content/framework-draft"], state
 
@@ -221,7 +225,7 @@ class FrameworkDiscussionService:
         slot: str,
         kind: str,
         payload: dict[str, Any],
-        consumptions: tuple[tuple[str, str], ...],
+        consumptions: tuple[ConfirmationConsumption, ...],
     ) -> KernelState:
         try:
             return self.kernel.commit(
@@ -231,15 +235,14 @@ class FrameworkDiscussionService:
                 artifact_updates={slot: (kind, payload)},
                 confirmation_consumptions=consumptions,
             )
-        except ValueError as error:
-            if "Confirmation identity" not in str(error):
-                raise
+        except ConfirmationTransactionError as error:
             raise ContentWorkflowError(
                 "CONTENT_REVIEW_CONFLICT",
-                "The trusted confirmation identity was already consumed",
+                "The trusted confirmation transaction was rejected",
                 {
                     "scope_kind": payload["scope_kind"],
                     "scope_id": payload["scope_id"],
+                    "kernel_error_code": error.code,
                     "revision": self.kernel.load().revision,
                 },
             ) from None

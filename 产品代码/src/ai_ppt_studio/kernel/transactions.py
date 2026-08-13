@@ -13,6 +13,7 @@ from typing import Any, Iterator
 
 from ai_ppt_studio.errors import (
     ArtifactReferenceError,
+    ConfirmationTransactionError,
     ProjectIdentityError,
     RevisionConflictError,
 )
@@ -76,15 +77,16 @@ class ProjectKernel:
         event_type: str,
         artifact_updates: dict[str, tuple[str, dict[str, Any]]],
         artifact_removals: tuple[str, ...] = (),
-        confirmation_consumptions: tuple[tuple[str, str], ...] = (),
-        content_framework_reset: bool = False,
+        confirmation_consumptions: tuple[object, ...] = (),
+        content_framework_reset: object | None = None,
         gate_mutation: object | None = None,
     ) -> KernelState:
         with self._locked():
             state = self.load()
             if command_id in state.processed_commands:
                 if confirmation_consumptions:
-                    raise ValueError(
+                    raise ConfirmationTransactionError(
+                        "CONFIRMATION_COMMAND_REPLAYED",
                         "Confirmation identity cannot replay a processed command"
                     )
                 return state
@@ -101,23 +103,57 @@ class ProjectKernel:
                 CONFIRMATION_LEDGER_SLOT in artifact_removals
             ):
                 raise ValueError("The confirmation ledger is kernel-owned")
+            try:
+                from ai_ppt_studio.application.scoped_confirmation import (
+                    validate_confirmation_consumption,
+                    validate_content_framework_reset,
+                )
+
+                trusted_consumptions = tuple(
+                    validate_confirmation_consumption(value)
+                    for value in confirmation_consumptions
+                )
+                reset_mutation = (
+                    validate_content_framework_reset(content_framework_reset)
+                    if content_framework_reset is not None
+                    else None
+                )
+            except ValueError as error:
+                raise ConfirmationTransactionError(
+                    "CONFIRMATION_AUTHORITY_INVALID", str(error)
+                ) from None
+            for consumption in trusted_consumptions:
+                if consumption.challenge_revision != state.revision:
+                    raise ConfirmationTransactionError(
+                        "CONFIRMATION_CHALLENGE_STALE",
+                        "Confirmation challenge revision is stale",
+                    )
+            if reset_mutation is not None:
+                self._validate_framework_reset_contract(
+                    state=state,
+                    artifact_updates=artifact_updates,
+                    artifact_removals=artifact_removals,
+                    confirmation_consumptions=trusted_consumptions,
+                    reset_revision=reset_mutation.revision,
+                )
             authorized_gate = (
                 validate_gate_mutation(gate_mutation)
                 if gate_mutation is not None
                 else None
             )
-            if content_framework_reset and authorized_gate is not None:
+            if reset_mutation is not None and authorized_gate is not None:
                 raise ValueError(
                     "Content framework reset cannot include a gate mutation"
                 )
 
             consumed, artifact_bindings = self._confirmation_ledger(state, heads)
             consumption_updates: dict[str, str] = {}
-            for raw_identity, raw_owner in confirmation_consumptions:
-                identity = raw_identity.strip()
-                owner = raw_owner.strip()
+            for consumption in trusted_consumptions:
+                identity = consumption.identity.strip()
+                owner = consumption.owner.strip()
                 if not identity or not owner:
-                    raise ValueError(
+                    raise ConfirmationTransactionError(
+                        "CONFIRMATION_IDENTITY_INVALID",
                         "Confirmation consumption identity and owner are required"
                     )
                 identity_key = hashlib.sha256(
@@ -125,7 +161,8 @@ class ProjectKernel:
                 ).hexdigest()
                 previous = consumed.get(identity_key)
                 if previous is not None:
-                    raise ValueError(
+                    raise ConfirmationTransactionError(
+                        "CONFIRMATION_IDENTITY_REPLAYED",
                         "Confirmation identity was already consumed by "
                         f"{previous}"
                     )
@@ -135,7 +172,8 @@ class ProjectKernel:
                     max_revision=state.revision,
                 )
                 if historical_owner:
-                    raise ValueError(
+                    raise ConfirmationTransactionError(
+                        "CONFIRMATION_IDENTITY_REPLAYED",
                         "Confirmation identity was already consumed by "
                         f"{historical_owner}"
                     )
@@ -156,7 +194,7 @@ class ProjectKernel:
             binding_updates = self._confirmation_artifact_bindings(
                 artifact_updates=artifact_updates,
                 heads=heads,
-                confirmation_consumptions=confirmation_consumptions,
+                confirmation_consumptions=trusted_consumptions,
             )
             artifact_bindings.update(binding_updates)
             ledger_payload = (
@@ -187,7 +225,7 @@ class ProjectKernel:
                     "G3": "locked",
                     "G4": "locked",
                 }
-                if content_framework_reset
+                if reset_mutation is not None
                 else (
                     dict(authorized_gate.updates) if authorized_gate else {}
                 )
@@ -260,26 +298,41 @@ class ProjectKernel:
             return consumed, artifact_bindings
         from ai_ppt_studio.kernel.references import ArtifactReference
 
-        reference = ArtifactReference.parse(ledger_ref)
-        if reference.kind != CONFIRMATION_LEDGER_KIND:
-            raise ValueError("Confirmation ledger artifact kind is invalid")
-        payload = self.artifacts.resolve(reference)["payload"]
+        try:
+            reference = ArtifactReference.parse(ledger_ref)
+            if reference.kind != CONFIRMATION_LEDGER_KIND:
+                raise ValueError("Confirmation ledger artifact kind is invalid")
+            payload = self.artifacts.resolve(reference)["payload"]
+        except (ArtifactReferenceError, KeyError, TypeError, ValueError) as error:
+            raise ConfirmationTransactionError(
+                "CONFIRMATION_LEDGER_CORRUPT",
+                "Confirmation ledger is unreadable",
+            ) from error
         ledger_consumed = payload.get("consumed")
         ledger_bindings = payload.get("artifact_bindings", {})
         if not isinstance(ledger_consumed, dict) or any(
             not isinstance(key, str) or not isinstance(value, str)
             for key, value in ledger_consumed.items()
         ):
-            raise ValueError("Confirmation ledger payload is invalid")
+            raise ConfirmationTransactionError(
+                "CONFIRMATION_LEDGER_CORRUPT",
+                "Confirmation ledger payload is invalid",
+            )
         if not isinstance(ledger_bindings, dict) or any(
             not isinstance(key, str) or not isinstance(value, str)
             for key, value in ledger_bindings.items()
         ):
-            raise ValueError("Confirmation artifact binding ledger is invalid")
+            raise ConfirmationTransactionError(
+                "CONFIRMATION_LEDGER_CORRUPT",
+                "Confirmation artifact binding ledger is invalid",
+            )
         for key, value in ledger_consumed.items():
             previous = consumed.get(key)
             if previous is not None and previous != value:
-                raise ValueError("Confirmation consumption history conflicts")
+                raise ConfirmationTransactionError(
+                    "CONFIRMATION_LEDGER_CORRUPT",
+                    "Confirmation consumption history conflicts",
+                )
             consumed[key] = value
         artifact_bindings.update(ledger_bindings)
         return consumed, artifact_bindings
@@ -315,12 +368,12 @@ class ProjectKernel:
         *,
         artifact_updates: dict[str, tuple[str, dict[str, Any]]],
         heads: dict[str, str],
-        confirmation_consumptions: tuple[tuple[str, str], ...],
+        confirmation_consumptions: tuple[object, ...],
     ) -> dict[str, str]:
         bindings: dict[str, str] = {}
-        for raw_identity, raw_owner in confirmation_consumptions:
-            identity = raw_identity.strip()
-            owner = raw_owner.strip()
+        for consumption in confirmation_consumptions:
+            identity = str(getattr(consumption, "identity", "")).strip()
+            owner = str(getattr(consumption, "owner", "")).strip()
             candidates = [
                 heads[slot]
                 for slot, (_kind, payload) in artifact_updates.items()
@@ -334,13 +387,41 @@ class ProjectKernel:
                 }
             ]
             if len(candidates) != 1:
-                raise ValueError(
+                raise ConfirmationTransactionError(
+                    "CONFIRMATION_ARTIFACT_BINDING_INVALID",
                     "Confirmation consumption must bind one exact artifact"
                 )
             bindings[
                 hashlib.sha256(identity.encode("utf-8")).hexdigest()
             ] = candidates[0]
         return bindings
+
+    @staticmethod
+    def _validate_framework_reset_contract(
+        *,
+        state: KernelState,
+        artifact_updates: dict[str, tuple[str, dict[str, Any]]],
+        artifact_removals: tuple[str, ...],
+        confirmation_consumptions: tuple[object, ...],
+        reset_revision: int,
+    ) -> None:
+        current_content = {
+            slot for slot in state.artifact_heads if slot.startswith("content/")
+        }
+        expected_removals = current_content - {"content/framework-draft"}
+        valid = (
+            reset_revision == state.revision
+            and set(artifact_updates) == {"content/framework-draft"}
+            and artifact_updates["content/framework-draft"][0]
+            == "content-framework-draft"
+            and set(artifact_removals) == expected_removals
+            and not confirmation_consumptions
+        )
+        if not valid:
+            raise ConfirmationTransactionError(
+                "CONTENT_FRAMEWORK_RESET_INVALID",
+                "Content framework reset transaction contract is invalid",
+            )
 
     def _historical_confirmation_owner(
         self,
@@ -358,18 +439,21 @@ class ProjectKernel:
                     event = json.loads(event_path.read_text(encoding="utf-8"))
                     revision = int(event["revision"])
                     event_heads = event["artifact_heads"]
-                    if revision > max_revision or not isinstance(
-                        event_heads, dict
-                    ):
+                    if revision > max_revision:
                         continue
+                    if not isinstance(event_heads, dict):
+                        raise ValueError("event artifact_heads is invalid")
                 except (
                     OSError,
                     json.JSONDecodeError,
                     KeyError,
                     TypeError,
                     ValueError,
-                ):
-                    continue
+                ) as error:
+                    raise ConfirmationTransactionError(
+                        "CONFIRMATION_HISTORY_CORRUPT",
+                        f"Confirmation history is unreadable: {event_path.name}",
+                    ) from error
                 historical_heads.append(event_heads)
         seen: set[str] = set()
         for snapshot in historical_heads:
@@ -391,8 +475,11 @@ class ProjectKernel:
                     KeyError,
                     TypeError,
                     ValueError,
-                ):
-                    continue
+                ) as error:
+                    raise ConfirmationTransactionError(
+                        "CONFIRMATION_HISTORY_CORRUPT",
+                        "Historical confirmation artifact is unreadable",
+                    ) from error
                 if identity in {
                     str(payload.get("user_action_ref") or ""),
                     str(payload.get("user_message_ref") or ""),

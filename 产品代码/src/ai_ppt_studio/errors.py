@@ -75,6 +75,14 @@ class ContentWorkflowError(AiPptError):
         super().__init__(message)
 
 
+class ConfirmationTransactionError(AiPptError):
+    """Reject an untrusted, stale, replayed, or corrupt confirmation commit."""
+
+    def __init__(self, code: str, message: str) -> None:
+        self.code = code
+        super().__init__(message)
+
+
 class ExperienceValidationError(AiPptError):
     """Raised when personal experience data or an evolution action is invalid."""
 

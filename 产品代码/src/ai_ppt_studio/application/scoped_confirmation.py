@@ -8,17 +8,56 @@ import hmac
 import json
 import os
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ai_ppt_studio.errors import ContentWorkflowError
-from ai_ppt_studio.kernel.transactions import ProjectKernel
+
+if TYPE_CHECKING:
+    from ai_ppt_studio.kernel.transactions import ProjectKernel
 
 
 HOST_CONFIRMATION_SECRET_ENV = "AI_PPT_HOST_CONFIRMATION_SECRET"
 HOST_ASSERTION_VERSION = "v1"
 HOST_ASSERTION_MAX_LIFETIME_SECONDS = 300
 HOST_ASSERTION_CLOCK_SKEW_SECONDS = 30
+_CONFIRMATION_AUTHORITY = object()
+_FRAMEWORK_RESET_AUTHORITY = object()
+
+
+@dataclass(frozen=True)
+class ConfirmationConsumption:
+    identity: str
+    owner: str
+    challenge_revision: int
+    authority: object = field(repr=False, compare=False)
+
+
+@dataclass(frozen=True)
+class ContentFrameworkResetMutation:
+    revision: int
+    authority: object = field(repr=False, compare=False)
+
+
+def validate_confirmation_consumption(value: object) -> ConfirmationConsumption:
+    if (
+        not isinstance(value, ConfirmationConsumption)
+        or value.authority is not _CONFIRMATION_AUTHORITY
+    ):
+        raise ValueError("Confirmation consumption lacks trusted authority")
+    return value
+
+
+def validate_content_framework_reset(
+    value: object,
+) -> ContentFrameworkResetMutation:
+    if (
+        not isinstance(value, ContentFrameworkResetMutation)
+        or value.authority is not _FRAMEWORK_RESET_AUTHORITY
+    ):
+        raise ValueError("Content framework reset lacks trusted authority")
+    return value
 
 
 class HostConfirmationAssertionVerifier:
@@ -156,7 +195,7 @@ class ScopedConfirmationPolicy:
         challenge_id: str,
         challenge_revision: int,
         host_confirmation_assertion: str,
-    ) -> tuple[dict[str, Any], tuple[tuple[str, str], ...]]:
+    ) -> tuple[dict[str, Any], tuple[ConfirmationConsumption, ...]]:
         mismatches: dict[str, object] = {}
         if source_version != current["source_version"]:
             mismatches["source_version"] = source_version
@@ -209,4 +248,18 @@ class ScopedConfirmationPolicy:
             "confirmed_at": datetime.now(timezone.utc).isoformat(),
         }
         owner = f"{current['scope_kind']}:{current['scope_id']}"
-        return payload, tuple((value, owner) for value in identities)
+        return payload, tuple(
+            ConfirmationConsumption(
+                identity=value,
+                owner=owner,
+                challenge_revision=int(current["challenge_revision"]),
+                authority=_CONFIRMATION_AUTHORITY,
+            )
+            for value in identities
+        )
+
+    def content_framework_reset(self) -> ContentFrameworkResetMutation:
+        return ContentFrameworkResetMutation(
+            revision=self.kernel.load().revision,
+            authority=_FRAMEWORK_RESET_AUTHORITY,
+        )
