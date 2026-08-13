@@ -113,7 +113,7 @@ class ProjectKernel:
                     validate_confirmation_consumption(value)
                     for value in confirmation_consumptions
                 )
-                reset_mutation = (
+                reset_claim = (
                     validate_content_framework_reset(content_framework_reset)
                     if content_framework_reset is not None
                     else None
@@ -122,35 +122,50 @@ class ProjectKernel:
                 raise ConfirmationTransactionError(
                     "CONFIRMATION_AUTHORITY_INVALID", str(error)
                 ) from None
-            for consumption in trusted_consumptions:
-                if consumption.challenge_revision != state.revision:
+            for (
+                _identity,
+                _owner,
+                challenge_revision,
+                _payload_seal,
+            ) in trusted_consumptions:
+                if challenge_revision != state.revision:
                     raise ConfirmationTransactionError(
                         "CONFIRMATION_CHALLENGE_STALE",
                         "Confirmation challenge revision is stale",
                     )
-            if reset_mutation is not None:
+            if reset_claim is not None:
+                reset_revision, framework_ref, mission_confirmation_ref = (
+                    reset_claim
+                )
                 self._validate_framework_reset_contract(
                     state=state,
                     artifact_updates=artifact_updates,
                     artifact_removals=artifact_removals,
                     confirmation_consumptions=trusted_consumptions,
-                    reset_revision=reset_mutation.revision,
+                    reset_revision=reset_revision,
+                    framework_ref=framework_ref,
+                    mission_confirmation_ref=mission_confirmation_ref,
                 )
             authorized_gate = (
                 validate_gate_mutation(gate_mutation)
                 if gate_mutation is not None
                 else None
             )
-            if reset_mutation is not None and authorized_gate is not None:
+            if reset_claim is not None and authorized_gate is not None:
                 raise ValueError(
                     "Content framework reset cannot include a gate mutation"
                 )
 
             consumed, artifact_bindings = self._confirmation_ledger(state, heads)
             consumption_updates: dict[str, str] = {}
-            for consumption in trusted_consumptions:
-                identity = consumption.identity.strip()
-                owner = consumption.owner.strip()
+            for (
+                raw_identity,
+                raw_owner,
+                _challenge_revision,
+                _payload_seal,
+            ) in trusted_consumptions:
+                identity = raw_identity.strip()
+                owner = raw_owner.strip()
                 if not identity or not owner:
                     raise ConfirmationTransactionError(
                         "CONFIRMATION_IDENTITY_INVALID",
@@ -225,7 +240,7 @@ class ProjectKernel:
                     "G3": "locked",
                     "G4": "locked",
                 }
-                if reset_mutation is not None
+                if reset_claim is not None
                 else (
                     dict(authorized_gate.updates) if authorized_gate else {}
                 )
@@ -372,8 +387,9 @@ class ProjectKernel:
     ) -> dict[str, str]:
         bindings: dict[str, str] = {}
         for consumption in confirmation_consumptions:
-            identity = str(getattr(consumption, "identity", "")).strip()
-            owner = str(getattr(consumption, "owner", "")).strip()
+            identity = str(consumption[0]).strip()
+            owner = str(consumption[1]).strip()
+            sealed_payload = json.loads(str(consumption[3]))
             candidates = [
                 heads[slot]
                 for slot, (_kind, payload) in artifact_updates.items()
@@ -385,6 +401,10 @@ class ProjectKernel:
                     str(payload.get("user_action_ref") or ""),
                     str(payload.get("user_message_ref") or ""),
                 }
+                and all(
+                    payload.get(key) == value
+                    for key, value in sealed_payload.items()
+                )
             ]
             if len(candidates) != 1:
                 raise ConfirmationTransactionError(
@@ -404,16 +424,32 @@ class ProjectKernel:
         artifact_removals: tuple[str, ...],
         confirmation_consumptions: tuple[object, ...],
         reset_revision: int,
+        framework_ref: str,
+        mission_confirmation_ref: str,
     ) -> None:
         current_content = {
             slot for slot in state.artifact_heads if slot.startswith("content/")
         }
         expected_removals = current_content - {"content/framework-draft"}
+        candidate_ref = str(
+            ProjectKernel._framework_candidate_reference(
+                state.project_id,
+                artifact_updates,
+            )
+        )
+        payload = artifact_updates.get(
+            "content/framework-draft", ("", {})
+        )[1]
         valid = (
             reset_revision == state.revision
             and set(artifact_updates) == {"content/framework-draft"}
             and artifact_updates["content/framework-draft"][0]
             == "content-framework-draft"
+            and framework_ref == candidate_ref
+            and payload.get("mission_confirmation_ref")
+            == mission_confirmation_ref
+            and state.artifact_heads.get("mission/confirmation")
+            == mission_confirmation_ref
             and set(artifact_removals) == expected_removals
             and not confirmation_consumptions
         )
@@ -422,6 +458,27 @@ class ProjectKernel:
                 "CONTENT_FRAMEWORK_RESET_INVALID",
                 "Content framework reset transaction contract is invalid",
             )
+
+    @staticmethod
+    def _framework_candidate_reference(
+        project_id: str,
+        artifact_updates: dict[str, tuple[str, dict[str, Any]]],
+    ) -> object:
+        from ai_ppt_studio.kernel.artifacts import canonical_json
+        from ai_ppt_studio.kernel.references import ArtifactReference
+
+        kind, payload = artifact_updates.get(
+            "content/framework-draft", ("", {})
+        )
+        envelope = {
+            "project_id": project_id,
+            "kind": kind,
+            "payload": payload,
+        }
+        return ArtifactReference(
+            kind=kind,
+            sha256=hashlib.sha256(canonical_json(envelope)).hexdigest(),
+        )
 
     def _historical_confirmation_owner(
         self,

@@ -8,9 +8,9 @@ import hmac
 import json
 import os
 import time
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
+from weakref import WeakKeyDictionary
 
 from ai_ppt_studio.errors import ContentWorkflowError
 
@@ -22,42 +22,76 @@ HOST_CONFIRMATION_SECRET_ENV = "AI_PPT_HOST_CONFIRMATION_SECRET"
 HOST_ASSERTION_VERSION = "v1"
 HOST_ASSERTION_MAX_LIFETIME_SECONDS = 300
 HOST_ASSERTION_CLOCK_SKEW_SECONDS = 30
-_CONFIRMATION_AUTHORITY = object()
-_FRAMEWORK_RESET_AUTHORITY = object()
+_CAPABILITY_CONSTRUCTOR = object()
+_CONFIRMATION_CAPABILITIES: WeakKeyDictionary[
+    object, tuple[str, str, int, str]
+] = (
+    WeakKeyDictionary()
+)
+_FRAMEWORK_RESET_CAPABILITIES: WeakKeyDictionary[
+    object, tuple[int, str, str]
+] = WeakKeyDictionary()
 
 
-@dataclass(frozen=True)
 class ConfirmationConsumption:
-    identity: str
-    owner: str
-    challenge_revision: int
-    authority: object = field(repr=False, compare=False)
+    __slots__ = ("__weakref__",)
+
+    def __new__(cls, constructor: object = None) -> "ConfirmationConsumption":
+        if constructor is not _CAPABILITY_CONSTRUCTOR:
+            raise TypeError("Confirmation consumption is policy-issued only")
+        return super().__new__(cls)
 
 
-@dataclass(frozen=True)
 class ContentFrameworkResetMutation:
-    revision: int
-    authority: object = field(repr=False, compare=False)
+    __slots__ = ("__weakref__",)
+
+    def __new__(
+        cls, constructor: object = None
+    ) -> "ContentFrameworkResetMutation":
+        if constructor is not _CAPABILITY_CONSTRUCTOR:
+            raise TypeError("Framework reset is service-issued only")
+        return super().__new__(cls)
 
 
-def validate_confirmation_consumption(value: object) -> ConfirmationConsumption:
-    if (
-        not isinstance(value, ConfirmationConsumption)
-        or value.authority is not _CONFIRMATION_AUTHORITY
-    ):
+def validate_confirmation_consumption(
+    value: object,
+) -> tuple[str, str, int, str]:
+    if not isinstance(value, ConfirmationConsumption):
         raise ValueError("Confirmation consumption lacks trusted authority")
-    return value
+    try:
+        return _CONFIRMATION_CAPABILITIES[value]
+    except KeyError:
+        raise ValueError(
+            "Confirmation consumption lacks trusted authority"
+        ) from None
 
 
 def validate_content_framework_reset(
     value: object,
-) -> ContentFrameworkResetMutation:
-    if (
-        not isinstance(value, ContentFrameworkResetMutation)
-        or value.authority is not _FRAMEWORK_RESET_AUTHORITY
-    ):
+) -> tuple[int, str, str]:
+    if not isinstance(value, ContentFrameworkResetMutation):
         raise ValueError("Content framework reset lacks trusted authority")
-    return value
+    try:
+        return _FRAMEWORK_RESET_CAPABILITIES[value]
+    except KeyError:
+        raise ValueError(
+            "Content framework reset lacks trusted authority"
+        ) from None
+
+
+def issue_content_framework_reset(
+    *,
+    revision: int,
+    framework_ref: str,
+    mission_confirmation_ref: str,
+) -> ContentFrameworkResetMutation:
+    capability = ContentFrameworkResetMutation(_CAPABILITY_CONSTRUCTOR)
+    _FRAMEWORK_RESET_CAPABILITIES[capability] = (
+        revision,
+        framework_ref,
+        mission_confirmation_ref,
+    )
+    return capability
 
 
 class HostConfirmationAssertionVerifier:
@@ -248,18 +282,19 @@ class ScopedConfirmationPolicy:
             "confirmed_at": datetime.now(timezone.utc).isoformat(),
         }
         owner = f"{current['scope_kind']}:{current['scope_id']}"
-        return payload, tuple(
-            ConfirmationConsumption(
-                identity=value,
-                owner=owner,
-                challenge_revision=int(current["challenge_revision"]),
-                authority=_CONFIRMATION_AUTHORITY,
+        capabilities: list[ConfirmationConsumption] = []
+        for value in identities:
+            capability = ConfirmationConsumption(_CAPABILITY_CONSTRUCTOR)
+            _CONFIRMATION_CAPABILITIES[capability] = (
+                value,
+                owner,
+                int(current["challenge_revision"]),
+                json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
             )
-            for value in identities
-        )
-
-    def content_framework_reset(self) -> ContentFrameworkResetMutation:
-        return ContentFrameworkResetMutation(
-            revision=self.kernel.load().revision,
-            authority=_FRAMEWORK_RESET_AUTHORITY,
-        )
+            capabilities.append(capability)
+        return payload, tuple(capabilities)

@@ -9,6 +9,7 @@ from ai_ppt_studio.application.mission_readiness import MissionReadinessPolicy
 from ai_ppt_studio.application.scoped_confirmation import (
     ConfirmationConsumption,
     ScopedConfirmationPolicy,
+    issue_content_framework_reset,
 )
 from ai_ppt_studio.domains.content.framework import (
     validate_framework_confirmation,
@@ -60,6 +61,7 @@ class FrameworkDiscussionService:
                 },
             )
         current = self.kernel.load()
+        reset_mutation = self._framework_reset_mutation(normalized)
         content_head_removals = tuple(
             slot
             for slot in current.artifact_heads
@@ -79,9 +81,28 @@ class FrameworkDiscussionService:
             artifact_removals=(
                 *content_head_removals,
             ),
-            content_framework_reset=self.confirmations.content_framework_reset(),
+            content_framework_reset=reset_mutation,
         )
         return state.artifact_heads["content/framework-draft"], state
+
+    def _framework_reset_mutation(
+        self, normalized: dict[str, Any]
+    ) -> object:
+        current = self.kernel.load()
+        mission_confirmation_ref = str(
+            normalized["mission_confirmation_ref"]
+        )
+        framework_ref = str(
+            self.kernel.artifacts.reference_for(
+                "content-framework-draft",
+                normalized,
+            )
+        )
+        return issue_content_framework_reset(
+            revision=current.revision,
+            framework_ref=framework_ref,
+            mission_confirmation_ref=mission_confirmation_ref,
+        )
 
     def confirmation_context(self) -> dict[str, Any]:
         state = self.kernel.load()

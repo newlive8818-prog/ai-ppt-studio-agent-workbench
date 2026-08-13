@@ -10,6 +10,7 @@ import tempfile
 import time
 import unittest
 import uuid
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -733,6 +734,87 @@ class FrameworkDiscussionTests(unittest.TestCase):
                     )
                 },
                 confirmation_consumptions=((identity, owner),),
+            )
+
+        self.assertEqual(self._filesystem_snapshot(), before)
+
+    def test_valid_confirmation_capability_cannot_be_cloned_or_mutated(self) -> None:
+        framework_ref, _state = self._save()
+        context = self.service.confirmation_context()
+        _payload, consumptions = self.service.confirmations.confirmation_payload(
+            current=context,
+            source_version=framework_ref,
+            challenge_id=str(context["challenge_id"]),
+            challenge_revision=int(context["challenge_revision"]),
+            host_confirmation_assertion=signed_assertion(context),
+        )
+        capability = consumptions[0]
+        before = self._filesystem_snapshot()
+
+        with self.assertRaises((TypeError, AttributeError)):
+            replace(capability, identity="test-host-action://cloned-forgery")
+        with self.assertRaises((TypeError, AttributeError)):
+            capability.identity = "test-host-action://mutated-forgery"
+        self.assertEqual(self._filesystem_snapshot(), before)
+
+    def test_valid_capability_cannot_bind_a_tampered_scoped_payload(self) -> None:
+        framework_ref, _state = self._save()
+        context = self.service.confirmation_context()
+        payload, consumptions = self.service.confirmations.confirmation_payload(
+            current=context,
+            source_version=framework_ref,
+            challenge_id=str(context["challenge_id"]),
+            challenge_revision=int(context["challenge_revision"]),
+            host_confirmation_assertion=signed_assertion(context),
+        )
+        tampered = {**payload, "host_assertion_sha256": "f" * 64}
+        before = self._filesystem_snapshot()
+
+        with self.assertRaises(ConfirmationTransactionError):
+            self.kernel.commit(
+                command_id="tampered-scoped-payload",
+                expected_revision=self.kernel.load().revision,
+                event_type="test.tampered-scoped-payload",
+                artifact_updates={
+                    "content/framework-confirmation": (
+                        "content-framework-confirmation",
+                        tampered,
+                    )
+                },
+                confirmation_consumptions=consumptions,
+            )
+
+        self.assertEqual(self._filesystem_snapshot(), before)
+
+    def test_direct_policy_cannot_mint_framework_reset(self) -> None:
+        before = self._filesystem_snapshot()
+        with self.assertRaises(AttributeError):
+            self.service.confirmations.content_framework_reset()
+        self.assertEqual(self._filesystem_snapshot(), before)
+
+    def test_reset_capability_is_bound_to_exact_framework_payload(self) -> None:
+        normalized = valid_framework(self.mission_confirmation_ref)
+        reset = self.service._framework_reset_mutation(normalized)
+        before = self._filesystem_snapshot()
+        invalid_payload = {
+            **normalized,
+            "mission_confirmation_ref": (
+                "artifact://mission-confirmation/" + "f" * 64
+            ),
+        }
+
+        with self.assertRaises(ConfirmationTransactionError):
+            self.kernel.commit(
+                command_id="reset-with-wrong-framework-payload",
+                expected_revision=self.kernel.load().revision,
+                event_type="test.reset-with-wrong-framework-payload",
+                artifact_updates={
+                    "content/framework-draft": (
+                        "content-framework-draft",
+                        invalid_payload,
+                    )
+                },
+                content_framework_reset=reset,
             )
 
         self.assertEqual(self._filesystem_snapshot(), before)
