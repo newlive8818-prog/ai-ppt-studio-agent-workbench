@@ -101,6 +101,15 @@ class ProjectKernel:
                 CONFIRMATION_LEDGER_SLOT in artifact_removals
             ):
                 raise ValueError("The confirmation ledger is kernel-owned")
+            authorized_gate = (
+                validate_gate_mutation(gate_mutation)
+                if gate_mutation is not None
+                else None
+            )
+            if content_framework_reset and authorized_gate is not None:
+                raise ValueError(
+                    "Content framework reset cannot include a gate mutation"
+                )
 
             consumed, artifact_bindings = self._confirmation_ledger(state, heads)
             consumption_updates: dict[str, str] = {}
@@ -138,37 +147,38 @@ class ProjectKernel:
                 for slot in artifact_removals
                 if slot in heads
             }
-            for slot, (kind, payload) in artifact_updates.items():
-                heads[slot] = str(self.artifacts.put(kind, payload))
-            if consumption_updates:
-                binding_updates = self._confirmation_artifact_bindings(
-                    artifact_updates=artifact_updates,
-                    heads=heads,
-                    confirmation_consumptions=confirmation_consumptions,
-                )
-                artifact_bindings.update(binding_updates)
-                heads[CONFIRMATION_LEDGER_SLOT] = str(
-                    self.artifacts.put(
-                        CONFIRMATION_LEDGER_KIND,
-                        {
-                            "consumed": consumed,
-                            "artifact_bindings": artifact_bindings,
-                        },
-                    )
-                )
-            else:
-                binding_updates = {}
-
-            next_revision = state.revision + 1
-            authorized_gate = (
-                validate_gate_mutation(gate_mutation)
-                if gate_mutation is not None
+            candidate_references = {
+                slot: self.artifacts.reference_for(kind, payload)
+                for slot, (kind, payload) in artifact_updates.items()
+            }
+            for slot, reference in candidate_references.items():
+                heads[slot] = str(reference)
+            binding_updates = self._confirmation_artifact_bindings(
+                artifact_updates=artifact_updates,
+                heads=heads,
+                confirmation_consumptions=confirmation_consumptions,
+            )
+            artifact_bindings.update(binding_updates)
+            ledger_payload = (
+                {
+                    "consumed": consumed,
+                    "artifact_bindings": artifact_bindings,
+                }
+                if consumption_updates
                 else None
             )
-            if content_framework_reset and authorized_gate is not None:
-                raise ValueError(
-                    "Content framework reset cannot include a gate mutation"
+            ledger_reference = (
+                self.artifacts.reference_for(
+                    CONFIRMATION_LEDGER_KIND,
+                    ledger_payload,
                 )
+                if ledger_payload is not None
+                else None
+            )
+            if ledger_reference is not None:
+                heads[CONFIRMATION_LEDGER_SLOT] = str(ledger_reference)
+
+            next_revision = state.revision + 1
             gate_updates = (
                 {
                     "G0": "open",
@@ -182,6 +192,37 @@ class ProjectKernel:
                     dict(authorized_gate.updates) if authorized_gate else {}
                 )
             )
+            commands = dict(state.processed_commands)
+            commands[command_id] = next_revision
+            gate_status = dict(state.gate_status)
+            gate_status.update(gate_updates)
+            state_updates: dict[str, Any] = {
+                "revision": next_revision,
+                "artifact_heads": heads,
+                "gate_status": gate_status,
+                "processed_commands": commands,
+                "last_transaction_id": transaction_id,
+            }
+            if hasattr(state, "consumed_user_confirmations"):
+                state_updates["consumed_user_confirmations"] = consumed
+            committed = replace(state, **state_updates)
+
+            for slot, (kind, payload) in artifact_updates.items():
+                persisted = self.artifacts.put(kind, payload)
+                if persisted != candidate_references[slot]:
+                    raise RuntimeError(
+                        "Persisted artifact reference differs from candidate"
+                    )
+            if ledger_payload is not None:
+                persisted_ledger = self.artifacts.put(
+                    CONFIRMATION_LEDGER_KIND,
+                    ledger_payload,
+                )
+                if persisted_ledger != ledger_reference:
+                    raise RuntimeError(
+                        "Persisted confirmation ledger reference differs "
+                        "from candidate"
+                    )
             event = {
                 "transaction_id": transaction_id,
                 "command_id": command_id,
@@ -199,21 +240,6 @@ class ProjectKernel:
             atomic_write_json(
                 self.events_root / f"r{next_revision:08d}.json", event
             )
-
-            commands = dict(state.processed_commands)
-            commands[command_id] = next_revision
-            gate_status = dict(state.gate_status)
-            gate_status.update(gate_updates)
-            state_updates: dict[str, Any] = {
-                "revision": next_revision,
-                "artifact_heads": heads,
-                "gate_status": gate_status,
-                "processed_commands": commands,
-                "last_transaction_id": transaction_id,
-            }
-            if hasattr(state, "consumed_user_confirmations"):
-                state_updates["consumed_user_confirmations"] = consumed
-            committed = replace(state, **state_updates)
             atomic_write_json(self.state_path, committed.as_dict())
             return committed
 

@@ -580,6 +580,72 @@ class FrameworkDiscussionTests(unittest.TestCase):
             self.service.expansion_authorization_context()
         self.assertEqual(self.kernel.load(), before)
 
+    def test_mismatched_confirmation_binding_is_zero_write(self) -> None:
+        framework_ref, _state = self._save()
+        before = self.kernel.load()
+        before_state_bytes = self.kernel.state_path.read_bytes()
+        before_artifacts = {
+            path.relative_to(self.kernel.project_root): path.read_bytes()
+            for path in self.kernel.artifacts.objects_root.rglob("*.json")
+        }
+        before_events = {
+            path.relative_to(self.kernel.project_root): path.read_bytes()
+            for path in self.kernel.events_root.rglob("*.json")
+        }
+        payload_identity = "test-host-action://payload-identity"
+        consumed_identity = "test-host-action://different-consumed-identity"
+        confirmation_payload = {
+            "project_id": "p1",
+            "scope_kind": "content-framework-confirmation",
+            "scope_id": framework_ref,
+            "source_version": framework_ref,
+            "evidence_refs": [framework_ref, self.mission_confirmation_ref],
+            "challenge_id": "test-challenge",
+            "challenge_revision": before.revision,
+            "user_action_ref": payload_identity,
+            "user_message_ref": "",
+            "confirmation_identity_type": "host-action",
+            "host_assertion_sha256": "a" * 64,
+            "framework_ref": framework_ref,
+            "framework_revision": before.revision,
+            "challenge_identity": "test-challenge",
+            "confirmed_at": "2026-08-14T00:00:00+00:00",
+        }
+
+        with self.assertRaises(ValueError):
+            self.kernel.commit(
+                command_id="mismatched-confirmation-binding",
+                expected_revision=before.revision,
+                event_type="test.mismatched-confirmation-binding",
+                artifact_updates={
+                    "content/framework-confirmation": (
+                        "content-framework-confirmation",
+                        confirmation_payload,
+                    )
+                },
+                confirmation_consumptions=((
+                    consumed_identity,
+                    f"content-framework-confirmation:{framework_ref}",
+                ),),
+            )
+
+        self.assertEqual(self.kernel.load(), before)
+        self.assertEqual(self.kernel.state_path.read_bytes(), before_state_bytes)
+        self.assertEqual(
+            {
+                path.relative_to(self.kernel.project_root): path.read_bytes()
+                for path in self.kernel.artifacts.objects_root.rglob("*.json")
+            },
+            before_artifacts,
+        )
+        self.assertEqual(
+            {
+                path.relative_to(self.kernel.project_root): path.read_bytes()
+                for path in self.kernel.events_root.rglob("*.json")
+            },
+            before_events,
+        )
+
     def test_consumed_identity_cannot_authenticate_a_replacement_artifact(self) -> None:
         framework_ref, _state = self._save()
         confirmation_ref, _state = self._confirm(
