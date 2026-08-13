@@ -25,6 +25,7 @@ from ai_ppt_studio.application.scoped_confirmation import (
 )
 from ai_ppt_studio.errors import ContentWorkflowError
 from ai_ppt_studio.kernel.references import ArtifactReference
+from ai_ppt_studio.kernel.gates import issue_gate_mutation
 
 
 TEST_SECRET = "test-only-scoped-confirmation-secret-32-bytes-minimum"
@@ -348,6 +349,270 @@ class FrameworkDiscussionTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "CONTENT_REVIEW_CONFLICT")
         self.assertEqual(self.kernel.load(), before)
         self.assertNotIn("content/framework-confirmation", before.artifact_heads)
+
+    def test_superseded_mission_confirmation_identity_cannot_be_reused(self) -> None:
+        old_identity = "test-user-action://mission-confirmed"
+        content = ContentService(self.kernel)
+        new_draft_ref = content.save_mission_draft(
+            "replacement-mission-draft",
+            self.kernel.load().revision,
+            {
+                "topic": "经营一体化方案 v2",
+                "primary_audience": "客户决策者",
+                "desired_judgment_or_action": "批准二期联合验证",
+            },
+        )
+        self.mission_confirmation_ref = content.confirm_mission(
+            "replacement-mission-confirm",
+            self.kernel.load().revision,
+            mission_draft_ref=new_draft_ref,
+            material_mode="no-materials-confirmed",
+            material_inventory_ref="",
+            user_action_ref="test-user-action://mission-confirmed-v2",
+            user_message_ref="",
+        )
+        framework_ref, _state = self._save()
+        context = self.service.confirmation_context()
+        before = self.kernel.load()
+
+        with self.assertRaises(ContentWorkflowError):
+            self.service.confirm_framework(
+                command_id="reuse-superseded-mission-identity",
+                expected_revision=before.revision,
+                source_version=framework_ref,
+                challenge_id=str(context["challenge_id"]),
+                challenge_revision=int(context["challenge_revision"]),
+                host_confirmation_assertion=signed_assertion(
+                    context,
+                    identity_ref=old_identity,
+                ),
+            )
+        self.assertEqual(self.kernel.load(), before)
+
+    def test_current_and_superseded_gate_confirmation_identities_are_rejected(self) -> None:
+        old_identity = "chat://message/old-g0"
+        current_identity = "chat://message/current-g0"
+        self.kernel.commit(
+            command_id="old-gate-confirmation",
+            expected_revision=self.kernel.load().revision,
+            event_type="test.old-gate-confirmation",
+            artifact_updates={
+                "gate/G0/confirmation": (
+                    "g0-confirmation",
+                    {"gate": "G0", "user_message_ref": old_identity},
+                )
+            },
+        )
+        self.kernel.commit(
+            command_id="current-gate-confirmation",
+            expected_revision=self.kernel.load().revision,
+            event_type="test.current-gate-confirmation",
+            artifact_updates={
+                "gate/G0/confirmation": (
+                    "g0-confirmation",
+                    {"gate": "G0", "user_message_ref": current_identity},
+                )
+            },
+        )
+        framework_ref, _state = self._save()
+        for index, identity in enumerate((old_identity, current_identity)):
+            context = self.service.confirmation_context()
+            before = self.kernel.load()
+            with self.subTest(identity=identity), self.assertRaises(
+                ContentWorkflowError
+            ):
+                self.service.confirm_framework(
+                    command_id=f"reuse-gate-identity-{index}",
+                    expected_revision=before.revision,
+                    source_version=framework_ref,
+                    challenge_id=str(context["challenge_id"]),
+                    challenge_revision=int(context["challenge_revision"]),
+                    host_confirmation_assertion=signed_assertion(
+                        context,
+                        identity_type="verified-message",
+                        identity_ref=identity,
+                    ),
+                )
+            self.assertEqual(self.kernel.load(), before)
+
+    def test_duplicate_confirmation_command_cannot_bypass_identity_consumption(self) -> None:
+        framework_ref, _state = self._save()
+        identity = "test-host-action://shared-command"
+        context = self.service.confirmation_context()
+        self.service.confirm_framework(
+            command_id="shared-command",
+            expected_revision=self.kernel.load().revision,
+            source_version=framework_ref,
+            challenge_id=str(context["challenge_id"]),
+            challenge_revision=int(context["challenge_revision"]),
+            host_confirmation_assertion=signed_assertion(
+                context,
+                identity_ref=identity,
+            ),
+        )
+        expansion_context = self.service.expansion_authorization_context()
+        before = self.kernel.load()
+
+        with self.assertRaises(ContentWorkflowError):
+            self.service.authorize_full_deck_expansion(
+                command_id="shared-command",
+                expected_revision=before.revision,
+                source_version=framework_ref,
+                challenge_id=str(expansion_context["challenge_id"]),
+                challenge_revision=int(
+                    expansion_context["challenge_revision"]
+                ),
+                host_confirmation_assertion=signed_assertion(
+                    expansion_context,
+                    identity_ref=identity,
+                ),
+            )
+        self.assertEqual(self.kernel.load(), before)
+
+    def test_forged_framework_confirmation_head_cannot_authorize_expansion(self) -> None:
+        framework_ref, _state = self._save()
+        context = self.service.confirmation_context()
+        forged = {
+            "project_id": "wrong-project",
+            "scope_kind": "content-review-batch-submission",
+            "scope_id": "wrong-scope",
+            "source_version": framework_ref,
+            "evidence_refs": [framework_ref, self.mission_confirmation_ref],
+            "challenge_id": str(context["challenge_id"]),
+            "challenge_revision": int(context["challenge_revision"]),
+            "user_action_ref": "test-host-action://forged",
+            "user_message_ref": "",
+            "confirmation_identity_type": "host-action",
+            "host_assertion_sha256": "a" * 64,
+            "framework_ref": framework_ref,
+            "framework_revision": int(context["challenge_revision"]),
+            "challenge_identity": str(context["challenge_id"]),
+            "confirmed_at": "2026-08-14T00:00:00+00:00",
+        }
+        self.kernel.commit(
+            command_id="forge-framework-confirmation-head",
+            expected_revision=self.kernel.load().revision,
+            event_type="test.forged-framework-confirmation",
+            artifact_updates={
+                "content/framework-confirmation": (
+                    "content-framework-confirmation",
+                    forged,
+                )
+            },
+        )
+        before = self.kernel.load()
+
+        with self.assertRaises(ContentWorkflowError) as raised:
+            self.service.expansion_authorization_context()
+        self.assertEqual(
+            raised.exception.code,
+            "CONTENT_FRAMEWORK_NOT_CONFIRMED",
+        )
+        self.assertEqual(self.kernel.load(), before)
+
+    def test_confirmation_without_atomic_identity_consumption_is_not_trusted(self) -> None:
+        framework_ref, _state = self._save()
+        context = self.service.confirmation_context()
+        identity = "test-host-action://not-consumed"
+        forged = {
+            "project_id": "p1",
+            "scope_kind": "content-framework-confirmation",
+            "scope_id": framework_ref,
+            "source_version": framework_ref,
+            "evidence_refs": [framework_ref, self.mission_confirmation_ref],
+            "challenge_id": str(context["challenge_id"]),
+            "challenge_revision": int(context["challenge_revision"]),
+            "user_action_ref": identity,
+            "user_message_ref": "",
+            "confirmation_identity_type": "host-action",
+            "host_assertion_sha256": "a" * 64,
+            "framework_ref": framework_ref,
+            "framework_revision": int(context["challenge_revision"]),
+            "challenge_identity": str(context["challenge_id"]),
+            "confirmed_at": "2026-08-14T00:00:00+00:00",
+        }
+        self.kernel.commit(
+            command_id="forge-unconsumed-framework-confirmation",
+            expected_revision=self.kernel.load().revision,
+            event_type="test.forged-unconsumed-framework-confirmation",
+            artifact_updates={
+                "content/framework-confirmation": (
+                    "content-framework-confirmation",
+                    forged,
+                )
+            },
+        )
+        before = self.kernel.load()
+
+        with self.assertRaises(ContentWorkflowError):
+            self.service.expansion_authorization_context()
+        self.assertEqual(self.kernel.load(), before)
+
+    def test_new_framework_reopens_g0_and_removes_formal_page_content_heads(self) -> None:
+        state = self.kernel.load()
+        content_heads = {
+            "content/strategy": ("presales-content-strategy", {"old": True}),
+            "content/claim-map": ("claim-evidence-map", {"old": True}),
+            "content/argument-map": ("deck-argument-map", {"old": True}),
+            "content/draft": ("slide-draft-set", {"slides": [{"old": True}]}),
+            "content/review/presales-reviewer": (
+                "content-review-record",
+                {"old": True},
+            ),
+            "content/acceptance": ("content-acceptance", {"old": True}),
+            "content/blueprint": (
+                "content-blueprint",
+                {"slides": [{"old": True}]},
+            ),
+            "content/change-set": ("content-change-set", {"old": True}),
+            "content/page-decisions": (
+                "content-page-decision-set",
+                {"old": True},
+            ),
+            "content/review-batch": ("content-review-batch", {"old": True}),
+            "content/batch-revision-plan": (
+                "content-batch-revision-plan",
+                {"old": True},
+            ),
+            "content/batch-plan-confirmation": (
+                "content-batch-plan-confirmation",
+                {"old": True},
+            ),
+            "content/review-batch-withdrawal": (
+                "content-review-batch-withdrawal",
+                {"old": True},
+            ),
+        }
+        old_refs = {
+            slot: str(self.kernel.artifacts.put(kind, payload))
+            for slot, (kind, payload) in content_heads.items()
+        }
+        legacy_state = self.kernel.commit(
+            command_id="simulate-old-full-deck-state",
+            expected_revision=state.revision,
+            event_type="test.old-full-deck-state",
+            artifact_updates=content_heads,
+            gate_mutation=issue_gate_mutation(
+                {"G0": "passed", "G1": "open"},
+                tuple(old_refs.values()),
+            ),
+        )
+
+        _framework_ref, framework_state = self.service.save_draft(
+            command_id="transition-to-framework-discussion",
+            expected_revision=legacy_state.revision,
+            payload=valid_framework(self.mission_confirmation_ref),
+        )
+
+        self.assertEqual(framework_state.gate_status["G0"], "open")
+        self.assertEqual(framework_state.gate_status["G1"], "locked")
+        for slot, reference in old_refs.items():
+            self.assertNotIn(slot, framework_state.artifact_heads)
+            self.assertTrue(
+                self.kernel.artifacts.resolve(
+                    ArtifactReference.parse(reference)
+                )
+            )
 
     def test_new_draft_clears_current_confirmation_and_authorization_heads(self) -> None:
         framework_ref, _state = self._save()

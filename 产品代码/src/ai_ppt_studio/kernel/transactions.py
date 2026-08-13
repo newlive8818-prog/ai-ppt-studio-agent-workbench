@@ -11,7 +11,11 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Iterator
 
-from ai_ppt_studio.errors import ProjectIdentityError, RevisionConflictError
+from ai_ppt_studio.errors import (
+    ArtifactReferenceError,
+    ProjectIdentityError,
+    RevisionConflictError,
+)
 from ai_ppt_studio.json_io import atomic_write_json
 from ai_ppt_studio.kernel.artifacts import ArtifactRepository
 from ai_ppt_studio.kernel.gates import validate_gate_mutation
@@ -73,11 +77,16 @@ class ProjectKernel:
         artifact_updates: dict[str, tuple[str, dict[str, Any]]],
         artifact_removals: tuple[str, ...] = (),
         confirmation_consumptions: tuple[tuple[str, str], ...] = (),
+        content_framework_reset: bool = False,
         gate_mutation: object | None = None,
     ) -> KernelState:
         with self._locked():
             state = self.load()
             if command_id in state.processed_commands:
+                self._validate_idempotent_confirmation_replay(
+                    state,
+                    confirmation_consumptions,
+                )
                 return state
             if state.revision != expected_revision:
                 raise RevisionConflictError(expected_revision, state.revision)
@@ -112,7 +121,9 @@ class ProjectKernel:
                         f"{previous}"
                     )
                 historical_owner = self._historical_confirmation_owner(
-                    identity, heads
+                    identity,
+                    heads,
+                    max_revision=state.revision,
                 )
                 if historical_owner:
                     raise ValueError(
@@ -143,6 +154,23 @@ class ProjectKernel:
                 if gate_mutation is not None
                 else None
             )
+            if content_framework_reset and authorized_gate is not None:
+                raise ValueError(
+                    "Content framework reset cannot include a gate mutation"
+                )
+            gate_updates = (
+                {
+                    "G0": "open",
+                    "G1": "locked",
+                    "G2": "locked",
+                    "G3": "locked",
+                    "G4": "locked",
+                }
+                if content_framework_reset
+                else (
+                    dict(authorized_gate.updates) if authorized_gate else {}
+                )
+            )
             event = {
                 "transaction_id": transaction_id,
                 "command_id": command_id,
@@ -151,9 +179,7 @@ class ProjectKernel:
                 "artifact_heads": heads,
                 "artifact_head_removals": removed_heads,
                 "confirmation_consumptions": consumption_updates,
-                "gate_updates": (
-                    dict(authorized_gate.updates) if authorized_gate else {}
-                ),
+                "gate_updates": gate_updates,
                 "gate_evidence_refs": (
                     list(authorized_gate.evidence_refs) if authorized_gate else []
                 ),
@@ -165,8 +191,7 @@ class ProjectKernel:
             commands = dict(state.processed_commands)
             commands[command_id] = next_revision
             gate_status = dict(state.gate_status)
-            if authorized_gate:
-                gate_status.update(authorized_gate.updates)
+            gate_status.update(gate_updates)
             state_updates: dict[str, Any] = {
                 "revision": next_revision,
                 "artifact_heads": heads,
@@ -208,26 +233,103 @@ class ProjectKernel:
             consumed[key] = value
         return consumed
 
+    def confirmation_owner(self, identity: str) -> str:
+        """Return the atomic owner of a consumed trusted identity, if any."""
+
+        state = self.load()
+        consumed = self._confirmation_consumptions(
+            state,
+            dict(state.artifact_heads),
+        )
+        return consumed.get(
+            hashlib.sha256(identity.encode("utf-8")).hexdigest(),
+            "",
+        )
+
+    def _validate_idempotent_confirmation_replay(
+        self,
+        state: KernelState,
+        confirmation_consumptions: tuple[tuple[str, str], ...],
+    ) -> None:
+        if not confirmation_consumptions:
+            return
+        consumed = self._confirmation_consumptions(
+            state,
+            dict(state.artifact_heads),
+        )
+        for raw_identity, raw_owner in confirmation_consumptions:
+            identity = raw_identity.strip()
+            owner = raw_owner.strip()
+            if not identity or not owner:
+                raise ValueError(
+                    "Confirmation consumption identity and owner are required"
+                )
+            identity_key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+            previous = consumed.get(identity_key)
+            if previous is None:
+                raise ValueError(
+                    "Confirmation identity cannot be added to a processed command"
+                )
+            if previous != owner:
+                raise ValueError(
+                    "Confirmation identity was already consumed by "
+                    f"{previous}"
+                )
+
     def _historical_confirmation_owner(
-        self, identity: str, heads: dict[str, str]
+        self,
+        identity: str,
+        heads: dict[str, str],
+        *,
+        max_revision: int,
     ) -> str:
         from ai_ppt_studio.kernel.references import ArtifactReference
 
-        for slot, reference_value in heads.items():
-            if slot != "mission/confirmation" and not (
-                slot.startswith("gate/")
-                and slot.endswith("/confirmation")
-            ):
-                continue
-            try:
-                payload = self.artifacts.resolve(
-                    ArtifactReference.parse(reference_value)
-                )["payload"]
-            except (KeyError, TypeError, ValueError):
-                continue
-            if identity in {
-                str(payload.get("user_action_ref") or ""),
-                str(payload.get("user_message_ref") or ""),
-            }:
-                return slot
+        historical_heads = [heads]
+        if self.events_root.is_dir():
+            for event_path in sorted(self.events_root.glob("r*.json")):
+                try:
+                    event = json.loads(event_path.read_text(encoding="utf-8"))
+                    revision = int(event["revision"])
+                    event_heads = event["artifact_heads"]
+                    if revision > max_revision or not isinstance(
+                        event_heads, dict
+                    ):
+                        continue
+                except (
+                    OSError,
+                    json.JSONDecodeError,
+                    KeyError,
+                    TypeError,
+                    ValueError,
+                ):
+                    continue
+                historical_heads.append(event_heads)
+        seen: set[str] = set()
+        for snapshot in historical_heads:
+            for slot, reference_value in snapshot.items():
+                if slot != "mission/confirmation" and not (
+                    slot.startswith("gate/")
+                    and slot.endswith("/confirmation")
+                ):
+                    continue
+                if reference_value in seen:
+                    continue
+                seen.add(reference_value)
+                try:
+                    payload = self.artifacts.resolve(
+                        ArtifactReference.parse(reference_value)
+                    )["payload"]
+                except (
+                    ArtifactReferenceError,
+                    KeyError,
+                    TypeError,
+                    ValueError,
+                ):
+                    continue
+                if identity in {
+                    str(payload.get("user_action_ref") or ""),
+                    str(payload.get("user_message_ref") or ""),
+                }:
+                    return slot
         return ""

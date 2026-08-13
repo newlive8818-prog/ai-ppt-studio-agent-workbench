@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+import re
 
 from ai_ppt_studio.application.mission_readiness import MissionReadinessPolicy
 from ai_ppt_studio.application.scoped_confirmation import (
@@ -22,6 +23,25 @@ from ai_ppt_studio.kernel.transactions import ProjectKernel
 FRAMEWORK_CONFIRMATION_SCOPE = "content-framework-confirmation"
 FULL_DECK_EXPANSION_SCOPE = (
     "content-full-deck-expansion-authorization"
+)
+FORMAL_CONTENT_HEADS = (
+    "content/strategy",
+    "content/claim-map",
+    "content/argument-map",
+    "content/draft",
+    "content/review/presales-reviewer",
+    "content/review/decision-maker-reviewer",
+    "content/review/evidence-reviewer",
+    "content/review/narrative-reviewer",
+    "content/review/editorial-reviewer",
+    "content/acceptance",
+    "content/blueprint",
+    "content/change-set",
+    "content/page-decisions",
+    "content/review-batch",
+    "content/batch-revision-plan",
+    "content/batch-plan-confirmation",
+    "content/review-batch-withdrawal",
 )
 
 
@@ -69,7 +89,9 @@ class FrameworkDiscussionService:
             artifact_removals=(
                 "content/framework-confirmation",
                 "content/full-deck-expansion-authorization",
+                *FORMAL_CONTENT_HEADS,
             ),
+            content_framework_reset=True,
         )
         return state.artifact_heads["content/framework-draft"], state
 
@@ -143,20 +165,12 @@ class FrameworkDiscussionService:
                     "revision": state.revision,
                 },
             )
-        confirmation = self._resolve(
-            confirmation_ref,
-            "content-framework-confirmation",
+        self._validate_current_framework_confirmation(
+            state=state,
+            framework_ref=framework_ref,
+            confirmation_ref=confirmation_ref,
+            mission_confirmation_ref=mission_confirmation_ref,
         )
-        if confirmation.get("framework_ref") != framework_ref:
-            raise ContentWorkflowError(
-                "CONTENT_FRAMEWORK_NOT_CONFIRMED",
-                "The current content framework confirmation is stale",
-                {
-                    "framework_ref": framework_ref,
-                    "confirmation_ref": confirmation_ref,
-                    "revision": state.revision,
-                },
-            )
         return self.confirmations.context(
             scope_kind=FULL_DECK_EXPANSION_SCOPE,
             scope_id=confirmation_ref,
@@ -278,6 +292,93 @@ class FrameworkDiscussionService:
                 },
             )
         return readiness.mission_confirmation_ref
+
+    def _validate_current_framework_confirmation(
+        self,
+        *,
+        state: KernelState,
+        framework_ref: str,
+        confirmation_ref: str,
+        mission_confirmation_ref: str,
+    ) -> None:
+        confirmation = self._resolve(
+            confirmation_ref,
+            "content-framework-confirmation",
+        )
+        revision = confirmation.get("challenge_revision")
+        if isinstance(revision, bool) or not isinstance(revision, int):
+            self._raise_unconfirmed(state, framework_ref, confirmation_ref)
+        challenge_body = {
+            "project_id": state.project_id,
+            "project_root": str(self.kernel.project_root),
+            "scope_kind": FRAMEWORK_CONFIRMATION_SCOPE,
+            "scope_id": framework_ref,
+            "source_version": framework_ref,
+            "evidence_refs": [framework_ref, mission_confirmation_ref],
+            "challenge_revision": revision,
+        }
+        challenge_id = self.confirmations.challenge_id(challenge_body)
+        identity_type = confirmation.get("confirmation_identity_type")
+        action_ref = str(confirmation.get("user_action_ref") or "")
+        message_ref = str(confirmation.get("user_message_ref") or "")
+        identities = tuple(value for value in (action_ref, message_ref) if value)
+        expected = {
+            "project_id": state.project_id,
+            "scope_kind": FRAMEWORK_CONFIRMATION_SCOPE,
+            "scope_id": framework_ref,
+            "source_version": framework_ref,
+            "evidence_refs": [framework_ref, mission_confirmation_ref],
+            "challenge_id": challenge_id,
+            "framework_ref": framework_ref,
+            "framework_revision": revision,
+            "challenge_identity": challenge_id,
+        }
+        invalid = any(
+            confirmation.get(key) != value for key, value in expected.items()
+        )
+        invalid = invalid or revision < 0 or revision >= state.revision
+        invalid = invalid or len(identities) != 1
+        invalid = invalid or identity_type not in {
+            "host-action",
+            "verified-message",
+        }
+        invalid = invalid or (
+            identity_type == "host-action" and not action_ref
+        )
+        invalid = invalid or (
+            identity_type == "verified-message" and not message_ref
+        )
+        invalid = invalid or not re.fullmatch(
+            r"[0-9a-f]{64}",
+            str(confirmation.get("host_assertion_sha256") or ""),
+        )
+        invalid = invalid or not str(
+            confirmation.get("confirmed_at") or ""
+        ).strip()
+        expected_owner = (
+            f"{FRAMEWORK_CONFIRMATION_SCOPE}:{framework_ref}"
+        )
+        invalid = invalid or self.kernel.confirmation_owner(
+            identities[0] if identities else ""
+        ) != expected_owner
+        if invalid:
+            self._raise_unconfirmed(state, framework_ref, confirmation_ref)
+
+    @staticmethod
+    def _raise_unconfirmed(
+        state: KernelState,
+        framework_ref: str,
+        confirmation_ref: str,
+    ) -> None:
+        raise ContentWorkflowError(
+            "CONTENT_FRAMEWORK_NOT_CONFIRMED",
+            "The current content framework confirmation is invalid or stale",
+            {
+                "framework_ref": framework_ref,
+                "confirmation_ref": confirmation_ref,
+                "revision": state.revision,
+            },
+        )
 
     @staticmethod
     def _require_current_source(actual: str, expected: str) -> None:

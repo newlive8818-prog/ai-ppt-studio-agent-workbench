@@ -134,7 +134,12 @@ class ScopedConfirmationPolicy:
             "evidence_refs": list(evidence_refs),
             "challenge_revision": state.revision,
         }
-        challenge_id = hashlib.sha256(
+        challenge_id = self.challenge_id(challenge_body)
+        return {**challenge_body, "challenge_id": challenge_id}
+
+    @staticmethod
+    def challenge_id(challenge_body: dict[str, Any]) -> str:
+        return hashlib.sha256(
             json.dumps(
                 challenge_body,
                 ensure_ascii=False,
@@ -142,7 +147,6 @@ class ScopedConfirmationPolicy:
                 separators=(",", ":"),
             ).encode("utf-8")
         ).hexdigest()
-        return {**challenge_body, "challenge_id": challenge_id}
 
     def confirmation_payload(
         self,
