@@ -130,6 +130,43 @@ class AcceptanceLedgerTests(unittest.TestCase):
         ):
             self.assertEqual(by_id[requirement_id].status, "unproven")
 
+    def test_content_review_contract_boundaries_are_explicit(self) -> None:
+        index = (ROOT.parent / "00-唯一研发基线索引-v1.0.md").read_text(
+            encoding="utf-8"
+        )
+        sdd = (ROOT.parent / "02-系统详细设计-v1.0.md").read_text(
+            encoding="utf-8"
+        )
+        ui = (ROOT.parent / "03-UI设计与交互规范-v1.0.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("9–10. 保留既有专项编号位置", index)
+        self.assertIn("11. [内容蓝图侧边栏全稿审核与批次修改设计]", index)
+        self.assertIn("第 11 项仅取代旧 UI-03", index)
+
+        current_ui = ui.split("## 31. v1.6 变更记录", 1)[0]
+        self.assertIn("### 4.3 G3 视觉合同专业审阅页骨架", current_ui)
+        self.assertNotIn("完整内容蓝图或整套视觉合同", current_ui)
+        review_header = next(
+            line for line in current_ui.splitlines() if "UI-C01 | ReviewHeader" in line
+        )
+        self.assertNotIn("内容/视觉切换", review_header)
+        self.assertIn("仅用于 G3 视觉合同 Browser", review_header)
+        self.assertIn("UI-C43 | EvidenceViewerAction", current_ui)
+
+        for scope_kind in (
+            "content-framework-confirmation",
+            "content-full-deck-expansion-authorization",
+            "content-review-batch-submission",
+            "content-review-batch-withdrawal",
+            "content-batch-plan-confirmation",
+            "gate-G0",
+        ):
+            self.assertIn(scope_kind, sdd)
+        self.assertIn("跨 scope", sdd)
+        self.assertIn("一次性消费", sdd)
+        self.assertIn("六类 scope", sdd)
+        self.assertNotIn("-> professional review + optional saved ReviewMarkSet", sdd)
     def test_requirement_passes_only_when_every_proof_kind_resolves(self) -> None:
         markdown = "## 17. 标准\n### 17.1 闭环\n1. 恢复项目。\n"
         requirement = extract_numbered_requirements(

@@ -871,7 +871,7 @@
       "requirement_id": "SDD-21.3-04",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "两种 scope 分别确认后才发送 follow-up 一次生成完整全稿；"
+      "text": "六类 scope（content-framework-confirmation、content-full-deck-expansion-authorization、content-review-batch-submission、content-review-batch-withdrawal、content-batch-plan-confirmation、gate-G0）分别以 exact scope_id 一次性消费；每类成功后重放失败，任意跨 scope 复用均零写入拒绝；框架确认与独立展开授权完成后才发送 follow-up 一次生成完整全稿；"
     },
     {
       "missing_evidence": [
