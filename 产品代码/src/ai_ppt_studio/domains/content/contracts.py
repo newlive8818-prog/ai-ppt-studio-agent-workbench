@@ -125,6 +125,14 @@ def _validate_evidence_items(slide: dict[str, Any]) -> list[dict[str, str]]:
         else:
             evidence["material_ref"] = _boundary_text(item, "material_ref")
             evidence["asset_ref"] = _boundary_text(item, "asset_ref")
+            if evidence["treatment"] != "to-supply":
+                raise ContractValidationError(
+                    "planned-gap treatment must be to-supply"
+                )
+            if evidence["fact_identity"] != "joint-validation-required":
+                raise ContractValidationError(
+                    "planned-gap fact_identity must be joint-validation-required"
+                )
         normalized.append(
             {
                 field: evidence[field]

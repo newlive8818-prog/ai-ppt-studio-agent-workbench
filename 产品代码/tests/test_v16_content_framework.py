@@ -90,6 +90,7 @@ class FrameworkDraftContractTests(unittest.TestCase):
             ("chapters", "not-a-list"),
             ("chapters", []),
             ("structural_risks", "not-a-list"),
+            ("structural_risks", []),
             ("status", "confirmed"),
         )
         for field, value in cases:
@@ -245,6 +246,30 @@ class ReadingFirstSlideContractTests(unittest.TestCase):
         self.assertEqual(validate_content_stage("slide-draft-set", payload), payload)
         payload["slides"][0]["evidence_items"][0]["evidence_kind"] = "internet"
         with self.assertRaises(ContractValidationError):
+            validate_content_stage("slide-draft-set", payload)
+
+    def test_planned_gap_requires_to_supply_treatment(self) -> None:
+        payload = complete_slide_draft_payload()
+        payload["slides"][0]["evidence_items"] = [
+            complete_planned_gap_evidence()
+        ]
+        payload["slides"][0]["evidence_items"][0]["treatment"] = "crop"
+        with self.assertRaisesRegex(
+            ContractValidationError, "planned-gap.*to-supply"
+        ):
+            validate_content_stage("slide-draft-set", payload)
+
+    def test_planned_gap_requires_joint_validation_identity(self) -> None:
+        payload = complete_slide_draft_payload()
+        payload["slides"][0]["evidence_items"] = [
+            complete_planned_gap_evidence()
+        ]
+        payload["slides"][0]["evidence_items"][0][
+            "fact_identity"
+        ] = "customer-fact"
+        with self.assertRaisesRegex(
+            ContractValidationError, "planned-gap.*joint-validation-required"
+        ):
             validate_content_stage("slide-draft-set", payload)
 
     def test_requires_readability_quality_invariants(self) -> None:

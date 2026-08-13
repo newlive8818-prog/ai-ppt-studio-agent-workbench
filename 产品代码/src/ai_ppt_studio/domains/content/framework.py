@@ -71,9 +71,7 @@ def validate_framework_draft(payload: dict[str, Any]) -> dict[str, Any]:
         }
         for chapter in raw_chapters
     ]
-    normalized["structural_risks"] = _strings(
-        payload, "structural_risks", allow_empty=True
-    )
+    normalized["structural_risks"] = _strings(payload, "structural_risks")
     normalized["highest_impact_question"] = _text(
         payload, "highest_impact_question"
     )
