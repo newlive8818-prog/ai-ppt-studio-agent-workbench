@@ -46,7 +46,7 @@
       "requirement_id": "PRD-17.1-03",
       "source_section": "17.1",
       "status": "unproven",
-      "text": "侧边栏工作台只在 Codex 内置浏览器打开内容/视觉专业审阅；宿主能力失败时明确提示并允许重试，不回退为聊天 UI；"
+      "text": "UI-03 直接在侧边栏进入框架态或全稿态；内容 Browser 只按材料/页/区域只读查看/比较证据，G3 视觉合同才打开专业 Browser；宿主失败明确提示且不回退聊天 UI；"
     },
     {
       "missing_evidence": [
@@ -61,7 +61,7 @@
       "requirement_id": "PRD-17.1-04",
       "source_section": "17.1",
       "status": "unproven",
-      "text": "内容页 PageDecision 与 G3 ReviewMarkSet 分别绑定版本持久化；保存失败、刷新或 revision 冲突不丢输入，内容单页保存不触发 Codex、治理、ContentChangeSet 或改稿；"
+      "text": "内容 PageDecision 与 G3 ReviewMarkSet 分别绑定版本持久化，保存失败、刷新或 revision 冲突不丢输入；内容单页保存无下游副作用；"
     },
     {
       "missing_evidence": [
@@ -154,7 +154,7 @@
       "requirement_id": "PRD-17.2-03",
       "source_section": "17.2",
       "status": "unproven",
-      "text": "任务书与目录框架先在 Codex 对话讨论；框架未确认且未取得独立全稿展开授权前，不生成、不展示逐页内容，内容蓝图先于视觉设计且场景能力包不强制固定章节模板；"
+      "text": "任务书与目录框架先在 Codex 对话讨论；框架未确认且未取得独立全稿展开授权前，不生成、不展示逐页内容，内容蓝图先于视觉设计且不强制固定章节模板；"
     },
     {
       "missing_evidence": [
@@ -169,7 +169,7 @@
       "requirement_id": "PRD-17.2-04",
       "source_section": "17.2",
       "status": "unproven",
-      "text": "用户首次看到的完整全稿已经过售前、决策者、证据、叙事和表达角色隔离审查，并在最大宽度侧边栏按最终顺序连续展示全部页面；"
+      "text": "用户首次看到的完整全稿已经过隔离审查，并在最大宽度侧边栏按最终顺序连续展示全部页面；"
     },
     {
       "missing_evidence": [
@@ -184,7 +184,7 @@
       "requirement_id": "PRD-17.2-05",
       "source_section": "17.2",
       "status": "unproven",
-      "text": "每页直接展示真实材料本体、文件与页码/区域、使用内容、支撑主张、处理方式和证据身份/缺口，不用文字描述或通用占位图冒充证据；"
+      "text": "每页直接展示真实材料本体、文件与页码/区域、使用内容、支撑主张、处理方式和证据身份/缺口，不用通用占位图冒充证据；"
     },
     {
       "missing_evidence": [
@@ -199,7 +199,7 @@
       "requirement_id": "PRD-17.2-06",
       "source_section": "17.2",
       "status": "unproven",
-      "text": "每页的存在原因、客户判断、全部实际文字、完整逐字稿、阅读质量、信息密度和前后关系齐全；无材料模式下身份治理贯穿全链，虚构内容硬失败；"
+      "text": "每页存在原因、客户判断、全部实际文字、完整逐字稿、阅读质量、信息密度和前后关系齐全；无材料模式身份治理贯穿全链，虚构内容硬失败；"
     },
     {
       "missing_evidence": [
@@ -214,7 +214,7 @@
       "requirement_id": "PRD-17.2-07",
       "source_section": "17.2",
       "status": "unproven",
-      "text": "页面全文无摘要、截断、省略号、hover 全文或逐页切换依赖；AI 补充不伪装来源事实，MissionConfirmation、材料身份和展开授权都由 Python 前置校验；"
+      "text": "页面全文无摘要、截断、省略号、hover 全文或逐页切换依赖；AI 补充不伪装来源事实，MissionConfirmation、材料身份和展开授权都由服务端前置校验；"
     },
     {
       "missing_evidence": [
@@ -229,7 +229,7 @@
       "requirement_id": "PRD-17.2-08",
       "source_section": "17.2",
       "status": "unproven",
-      "text": "任一适用硬规则或最低内容质量失败即返工；每页去掉逐字稿后仍形成主张—理由—证据—边界闭环，不使用评分或多数票；"
+      "text": "任一适用硬规则或最低质量失败即返工；去掉逐字稿后仍形成主张—理由—证据—边界闭环；"
     },
     {
       "missing_evidence": [
@@ -244,7 +244,7 @@
       "requirement_id": "PRD-17.2-09",
       "source_section": "17.2",
       "status": "unproven",
-      "text": "全部 PageDecision 完成后才能提交冻结批次；Codex 先形成整套修改方案，用户确认后才允许 FeedbackGovernanceRecord、ContentChangeSet 和新版蓝图；"
+      "text": "全部 PageDecision 完成后才提交冻结批次；整套方案确认后，全部认可且无需修改可直接 applied，其他判断必须治理、ContentChangeSet 和新版；"
     },
     {
       "missing_evidence": [
@@ -259,7 +259,7 @@
       "requirement_id": "PRD-17.2-10",
       "source_section": "17.2",
       "status": "unproven",
-      "text": "新版本不继承旧版认可状态，内部通过后全篇复审；只有当前版本审核完成、批次已 applied 且无未处理批次/方案时才能在 Codex 确认 G0。"
+      "text": "新版本不继承旧认可，必须全篇复审；当前版本有 applied 批次且无新未处理批次/方案后才能确认 G0。"
     },
     {
       "missing_evidence": [
@@ -379,7 +379,7 @@
       "requirement_id": "PRD-17.3-06",
       "source_section": "17.3",
       "status": "unproven",
-      "text": "开发渲染仅作预检；G2 锚点页与 G4 整套均有当前发布策略全部必需目标对同一 PPTX 哈希的实机导出证据；当前 v1.6 只要求 macOS PowerPoint；"
+      "text": "开发渲染仅作预检；G2 锚点页与 G4 整套均有 macOS PowerPoint、macOS WPS、Windows PowerPoint 和 Windows WPS 对同一 PPTX 哈希的实机导出证据；"
     },
     {
       "missing_evidence": [
@@ -439,7 +439,7 @@
       "requirement_id": "PRD-17.3-09",
       "source_section": "17.3",
       "status": "unproven",
-      "text": "交付物在当前全部必需桌面目标中保持可编辑；每个必需目标必须分别提供证据，不从开发预检、延期目标或其他目标推断兼容。"
+      "text": "交付物能在四个强制桌面目标中继续修改；四个目标必须分别提供证据，不从其他目标推断兼容。"
     },
     {
       "missing_evidence": [
@@ -459,7 +459,7 @@
       "requirement_id": "PRD-17.3-10",
       "source_section": "17.3",
       "status": "unproven",
-      "text": "替代字体、字宽/换行风险和必需目标复验均有证据；任一必需目标缺失或失败时 G2/G4 不得通过，延期目标不得显示为通过或兼容。"
+      "text": "替代字体、字宽/换行风险和四目标复验均有证据；任一目标缺失或失败时 G2/G4 不得通过。"
     },
     {
       "missing_evidence": [
@@ -539,7 +539,7 @@
       "requirement_id": "PRD-17.3-14",
       "source_section": "17.3",
       "status": "unproven",
-      "text": "内容/视觉专业审阅页只提供连续阅读、精确标记和右上角保存，不显示返回聊天、顶部版本历史、G0/G3/G4 按钮或 PPTX 下载。"
+      "text": "内容全稿侧边栏提供连续阅读、PageDecision 与冻结批次，内容 Browser 只读证据；G3 视觉专业审阅页提供连续阅读、精确标记和右上保存，且不显示返回聊天、版本历史、Gate 按钮或 PPTX 下载。"
     },
     {
       "missing_evidence": [
@@ -800,7 +800,7 @@
       "requirement_id": "PRD-17.5-07",
       "source_section": "17.5",
       "status": "unproven",
-      "text": "内容侧边栏在 10/24/60 页与全部页面状态下无横向溢出，目录仅紧凑定位且不长期占宽；900px+ 为 43%/57% 双栏，窄屏单栏。G3 专业审阅原三视口合同保持。"
+      "text": "内容侧边栏在 10/24/60 页和全部页面状态下无横向溢出，目录只紧凑定位且不长期占宽；900px+ 为 43%/57% 双栏，窄屏单栏。G3 专业审阅原合同保持。"
     },
     {
       "missing_evidence": [
@@ -836,7 +836,7 @@
       "requirement_id": "SDD-21.3-02",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "侧边栏只在 Codex 内置浏览器打开内容/视觉专业审阅；失败时明确阻断且不回退聊天 UI；"
+      "text": "UI-03 直接在侧边栏显示框架/全稿；内容 Browser 仅只读材料证据，G3 视觉才打开完整专业审阅；"
     },
     {
       "missing_evidence": [
@@ -854,7 +854,7 @@
       "requirement_id": "SDD-21.3-03",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "任务卡字段完整后保持 confirmable；任务确认后只进入目录框架讨论，框架未确认且未取得独立展开授权时侧边栏与 Browser 均无逐页内容；"
+      "text": "任务确认后只进入目录框架讨论；框架未确认/未独立授权时无逐页内容；"
     },
     {
       "missing_evidence": [
@@ -871,7 +871,7 @@
       "requirement_id": "SDD-21.3-04",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "框架确认与全稿展开授权使用不同用户动作 scope，授权后才发送 follow-up 生成一次完整全稿；"
+      "text": "两种 scope 分别确认后才发送 follow-up 一次生成完整全稿；"
     },
     {
       "missing_evidence": [
@@ -907,7 +907,7 @@
       "requirement_id": "SDD-21.3-06",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "最大宽度侧边栏读取内部通过的新版本，全部页面按顺序连续显示完整文字、真实材料/来源/用途、逐字稿、阅读质量和跨页关系；"
+      "text": "最大宽度侧边栏读取内部通过的新版本，全部页面连续显示完整图文、逐字稿、质量和关系；"
     },
     {
       "missing_evidence": [
@@ -925,7 +925,7 @@
       "requirement_id": "SDD-21.3-07",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "单页保存 PageDecision 只持久化，不触发 Codex、治理、ContentChangeSet、蓝图或 sourceVersion 变化；并发修改产生冲突而非覆盖；"
+      "text": "单页保存只持久化；并发修改产生冲突而非覆盖；"
     },
     {
       "missing_evidence": [
@@ -943,7 +943,7 @@
       "requirement_id": "SDD-21.3-08",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "全部判断完成后提交冻结批次；预方案撤回保留原批次、创建 withdrawal/superseded 血缘、新 batch/decisions 且不启动 Codex；侧边栏重挂载恢复；"
+      "text": "全部完成后冻结；预方案撤回保留原批次并创建新血缘且不启动 Codex；重挂载恢复；"
     },
     {
       "missing_evidence": [
@@ -1032,7 +1032,7 @@
       "requirement_id": "SDD-21.3-13",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "提交批次后 Codex 先生成整套修改方案；用户确认修改方案前不得治理、ContentChangeSet 或改稿，确认后按 requires_blueprint_revision 与复审路由执行；"
+      "text": "Codex 先生成整套修改方案；全部认可且无需修改只能走 requires_blueprint_revision=false 并直接 applied，任何其他判断必须 true 且确认后才治理/ContentChangeSet/新蓝图；"
     },
     {
       "missing_evidence": [
@@ -1068,7 +1068,7 @@
       "requirement_id": "SDD-21.3-15",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "新 ContentBlueprint 不继承旧 PageDecision，必须全部页面重新审核；G3 Browser HTML 仍连续展示完整视觉合同并支持标记，内容 Browser 只辅助证据；"
+      "text": "true 路径的新蓝图不继承旧判断并全篇重审；G3 Browser 仍连续展示完整视觉合同并支持标记，内容 Browser 只读证据；"
     },
     {
       "missing_evidence": [
@@ -1212,7 +1212,7 @@
       "requirement_id": "SDD-21.3-23",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "G2 锚点页在当前发布策略全部必需目标对同一 PPTX 哈希实机导出；开发预检无法替代 TargetRenderEvidence。"
+      "text": "G2 锚点页在 macOS/Windows 上 PowerPoint/WPS 四目标对同一 PPTX 哈希实机导出；开发预检无法替代 TargetRenderEvidence。"
     },
     {
       "missing_evidence": [
@@ -1230,7 +1230,7 @@
       "requirement_id": "SDD-21.3-24",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "G4 整套在当前发布策略全部必需目标对同一 PPTX 哈希分别实机导出；对象、字体、裁切、换行或设计意图任一失败均触发定向返工并保留上一有效版本；通过后由聊天发送 PPTX 并记录用户接受/修改。"
+      "text": "G4 整套在 macOS/Windows 上 PowerPoint/WPS 四目标对同一 PPTX 哈希分别实机导出；对象、字体、裁切、换行或设计意图任一失败均触发定向返工并保留上一有效版本；通过后由聊天发送 PPTX 并记录用户接受/修改。"
     },
     {
       "missing_evidence": [
@@ -1248,7 +1248,7 @@
       "requirement_id": "SDD-21.3-25",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "`ReleaseTargetPolicy.requiredTargetIds[]` 始终是当前强制阻断条件；当前 v1.6 只要求 macOS PowerPoint。无对应同哈希实机证据时不得通过 G2/G4，延期目标不得声明兼容。"
+      "text": "四目标始终是一期强制阻断条件；无对应同哈希实机证据时不得通过 G2/G4 或声明兼容。"
     },
     {
       "missing_evidence": [
@@ -1266,7 +1266,7 @@
       "requirement_id": "SDD-21.3-26",
       "source_section": "21.3",
       "status": "unproven",
-      "text": "G3 专业审阅页不存在返回聊天、顶部版本历史、Gate 确认、样张画廊和 PPTX 下载入口；视觉保存标记不能误触发 G3，内容 Browser 只读辅助不能误触发 G0。"
+      "text": "G3 视觉审阅页无返回聊天、历史、Gate、画廊和下载；视觉保存不能误触 G3，内容只读 Browser 不能误触 G0。"
     },
     {
       "missing_evidence": [
@@ -1423,7 +1423,7 @@
       "requirement_id": "UI-23.2-04",
       "source_section": "23.2",
       "status": "unproven",
-      "text": "授权后在最大宽度侧边栏连续查看全稿；900px+ 使用 43%/57%，正文 `width:100%` 且无居中 max-width，窄屏单栏，目录紧凑覆盖定位、不持久占宽；"
+      "text": "授权后在最大宽度侧边栏查看全稿；900px+ 43%/57%、width 100%、无居中 max-width，窄屏单栏，目录不持久占宽；"
     },
     {
       "missing_evidence": [
@@ -1440,7 +1440,7 @@
       "requirement_id": "UI-23.2-05",
       "source_section": "23.2",
       "status": "unproven",
-      "text": "在 Codex 讨论任务书和目录框架；框架未确认且未取得独立展开授权时，侧边栏与 Browser 完全无逐页标题、文案、材料计划、逐字稿和判断；"
+      "text": "在 Codex 讨论任务书和目录框架；框架未确认/未独立授权时，侧边栏与 Browser 完全无逐页内容；"
     },
     {
       "missing_evidence": [
@@ -1458,7 +1458,7 @@
       "requirement_id": "UI-23.2-06",
       "source_section": "23.2",
       "status": "unproven",
-      "text": "每页查看全部实际文字、存在原因、客户判断、真实材料本体、文件/页码/区域、用途/主张/处理方式、事实身份/缺口、完整逐字稿、质量/密度和跨页关系；不得摘要、截断、省略号或通用占位图；"
+      "text": "每页查看全部实际文字、存在原因、客户判断、真实材料本体及文件/页码/区域/用途/主张/处理方式、证据身份/缺口、逐字稿、质量和关系；无摘要截断/占位图；"
     },
     {
       "missing_evidence": [
@@ -1475,7 +1475,7 @@
       "requirement_id": "UI-23.2-07",
       "source_section": "23.2",
       "status": "unproven",
-      "text": "对全部页面逐一选择四种判断；后三种点击后调出意见编辑器，空白或超过 1200 字不能保存；"
+      "text": "对全部页面选择四种判断；后三种调出意见编辑器，空白或超过 1200 字不能保存；"
     },
     {
       "missing_evidence": [
@@ -1492,7 +1492,7 @@
       "requirement_id": "UI-23.2-08",
       "source_section": "23.2",
       "status": "unproven",
-      "text": "刷新后 decisions 存在；保存失败或 revision 冲突时草稿不丢失，单页保存不触发 Codex、治理、ContentChangeSet、蓝图或 sourceVersion；"
+      "text": "刷新后 decisions 存在；保存失败/冲突草稿不丢，单页保存不触发 Codex、治理、ChangeSet、蓝图或 sourceVersion；"
     },
     {
       "missing_evidence": [
@@ -1509,7 +1509,7 @@
       "requirement_id": "UI-23.2-09",
       "source_section": "23.2",
       "status": "unproven",
-      "text": "全部页面完成前批次按钮禁用并显示准确缺口；全部完成后提交冻结批次，允许的预方案撤回创建新批次而不改写原批次；"
+      "text": "全部页面完成前批次按钮禁用；全部完成后冻结提交；允许撤回创建新批次而不改写原批次；"
     },
     {
       "missing_evidence": [
@@ -1526,7 +1526,7 @@
       "requirement_id": "UI-23.2-10",
       "source_section": "23.2",
       "status": "unproven",
-      "text": "在聊天查看整套修改方案并确认；确认前无治理/改稿，确认后新版本全部页面重新判断，最终当前版本完成后才确认 G0；"
+      "text": "聊天确认整套方案；全部认可且无需修改走 false 直接 applied，任何其他判断走 true 生成新版并全部重审；最终当前版本完成后才确认 G0；"
     },
     {
       "missing_evidence": [
@@ -1630,7 +1630,7 @@
       "requirement_id": "UI-23.2-16",
       "source_section": "23.2",
       "status": "unproven",
-      "text": "验证锚点页按严格路线 B 形成 Presentations 原生首版，Image 2 只在首版后生成可替换非语义资产，当前必需目标同哈希实机证据与开发预检身份清楚，延期目标不冒充兼容；"
+      "text": "验证锚点页按严格路线 B 形成 Presentations 原生首版，Image 2 只在首版后生成可替换非语义资产，四目标软件同哈希实机证据与开发预检身份清楚；"
     },
     {
       "missing_evidence": [
@@ -1682,7 +1682,7 @@
       "requirement_id": "UI-23.2-19",
       "source_section": "23.2",
       "status": "unproven",
-      "text": "验证 G4 前整套已有当前发布策略全部必需目标对同一 PPTX 哈希的实机导出、字体和逐页证据；当前 v1.6 为 macOS PowerPoint，WPS/Windows 显示延期且不阻断、不声明兼容；"
+      "text": "验证 G4 前整套已有 macOS PowerPoint、macOS WPS、Windows PowerPoint 和 Windows WPS 对同一 PPTX 哈希的实机导出、字体和逐页证据；任一目标缺失即阻断；"
     },
     {
       "missing_evidence": [

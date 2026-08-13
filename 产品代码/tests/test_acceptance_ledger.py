@@ -98,15 +98,9 @@ class AcceptanceLedgerTests(unittest.TestCase):
         self.assertIn("最大宽度侧边栏", by_id["UI-23.2-04"].text)
         self.assertIn("全部页面", by_id["UI-23.2-07"].text)
         self.assertIn("修改方案", by_id["SDD-21.3-13"].text)
-        self.assertIn("当前发布策略", by_id["PRD-17.3-06"].text)
-        self.assertIn("只要求 macOS PowerPoint", by_id["PRD-17.3-06"].text)
-        self.assertNotIn("四目标始终是一期强制", by_id["SDD-21.3-25"].text)
-        self.assertIn("ReleaseTargetPolicy", by_id["SDD-21.3-25"].text)
-        self.assertIn("延期目标不得声明兼容", by_id["SDD-21.3-25"].text)
-        self.assertEqual(by_id["PRD-17.3-06"].status, "unproven")
-        self.assertIn(
-            "target-evidence", by_id["PRD-17.3-06"].missing_evidence
-        )
+        self.assertIn("requires_blueprint_revision", by_id["SDD-21.3-13"].text)
+        self.assertIn("全部认可", by_id["SDD-21.3-13"].text)
+        self.assertIn("无需修改", by_id["SDD-21.3-13"].text)
         for requirement_id in (
             "PRD-17.1-01",
             "PRD-17.1-03",
