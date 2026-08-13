@@ -14,6 +14,7 @@ from typing import Any, Iterator
 from ai_ppt_studio.errors import (
     ArtifactReferenceError,
     ConfirmationTransactionError,
+    ContractValidationError,
     ProjectIdentityError,
     RevisionConflictError,
 )
@@ -441,6 +442,10 @@ class ProjectKernel:
             "content/framework-draft", ("", {})
         )[1]
         try:
+            from ai_ppt_studio.domains.mission.contracts import (
+                validate_mission_confirmation,
+                validate_mission_draft,
+            )
             from ai_ppt_studio.domains.content.framework import (
                 validate_framework_draft,
             )
@@ -454,14 +459,79 @@ class ProjectKernel:
                 "mission/confirmation", ""
             )
             mission_envelope = self.artifacts.resolve(mission_reference)
+            mission_confirmation = dict(mission_envelope["payload"])
+            normalized_confirmation = validate_mission_confirmation(
+                mission_confirmation
+            )
+            mission_draft_ref = state.artifact_heads.get(
+                "mission/draft", ""
+            )
+            draft_reference = ArtifactReference.parse(mission_draft_ref)
+            draft_envelope = self.artifacts.resolve(draft_reference)
+            mission_draft = dict(draft_envelope["payload"])
+            normalized_draft = validate_mission_draft(mission_draft)
+            action_ref = str(
+                mission_confirmation.get("user_action_ref") or ""
+            ).strip()
+            message_ref = str(
+                mission_confirmation.get("user_message_ref") or ""
+            ).strip()
+            identities = tuple(
+                value for value in (action_ref, message_ref) if value
+            )
+            material_mode = str(
+                mission_confirmation.get("material_mode") or ""
+            )
+            current_materials = state.artifact_heads.get("materials", "")
+            if material_mode == "materials-provided":
+                material_reference = ArtifactReference.parse(current_materials)
+                material_envelope = self.artifacts.resolve(material_reference)
+                material_binding_valid = (
+                    bool(current_materials)
+                    and material_reference.kind == "material-inventory"
+                    and material_envelope.get("project_id") == state.project_id
+                    and mission_confirmation.get("material_inventory_ref")
+                    == current_materials
+                )
+            else:
+                expected_empty = (
+                    "empty-materials:"
+                    + hashlib.sha256(
+                        f"{state.project_id}\0{mission_draft_ref}".encode(
+                            "utf-8"
+                        )
+                    ).hexdigest()
+                )
+                material_binding_valid = (
+                    material_mode == "no-materials-confirmed"
+                    and not current_materials
+                    and mission_confirmation.get("empty_material_identity")
+                    == expected_empty
+                )
             domain_valid = (
                 normalized == payload
                 and mission_reference.kind == "mission-confirmation"
                 and current_mission_ref == mission_confirmation_ref
                 and mission_envelope.get("project_id") == state.project_id
                 and mission_envelope.get("kind") == "mission-confirmation"
+                and normalized_confirmation == mission_confirmation
+                and draft_reference.kind == "mission-draft"
+                and draft_envelope.get("project_id") == state.project_id
+                and draft_envelope.get("kind") == "mission-draft"
+                and normalized_draft == mission_draft
+                and mission_draft.get("status") == "confirmable"
+                and mission_confirmation.get("mission_draft_ref")
+                == mission_draft_ref
+                and len(identities) == 1
+                and material_binding_valid
             )
-        except (ArtifactReferenceError, KeyError, TypeError, ValueError):
+        except (
+            ArtifactReferenceError,
+            ContractValidationError,
+            KeyError,
+            TypeError,
+            ValueError,
+        ):
             domain_valid = False
         valid = (
             domain_valid

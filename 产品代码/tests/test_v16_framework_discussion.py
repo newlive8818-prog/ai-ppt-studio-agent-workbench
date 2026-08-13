@@ -903,6 +903,60 @@ class FrameworkDiscussionTests(unittest.TestCase):
 
         self.assertEqual(self._filesystem_snapshot(), before)
 
+    def test_forged_current_mission_confirmation_cannot_authorize_reset(self) -> None:
+        draft_ref = self.kernel.load().artifact_heads["mission/draft"]
+        forged_mission_ref = str(
+            self.kernel.artifacts.put(
+                "mission-confirmation",
+                {"forged": True},
+            )
+        )
+        state = self.kernel.commit(
+            command_id="install-forged-mission-confirmation",
+            expected_revision=self.kernel.load().revision,
+            event_type="test.install-forged-mission-confirmation",
+            artifact_updates={
+                "mission/confirmation": (
+                    "mission-confirmation",
+                    {"forged": True},
+                )
+            },
+        )
+        self.assertEqual(
+            state.artifact_heads["mission/confirmation"], forged_mission_ref
+        )
+        framework = valid_framework(forged_mission_ref)
+        framework_ref = str(
+            self.kernel.artifacts.reference_for(
+                "content-framework-draft", framework
+            )
+        )
+        reset = issue_content_framework_reset(
+            revision=state.revision,
+            framework_ref=framework_ref,
+            mission_confirmation_ref=forged_mission_ref,
+        )
+        before = self._filesystem_snapshot()
+
+        with self.assertRaises(ConfirmationTransactionError):
+            self.kernel.commit(
+                command_id="reset-with-forged-mission-confirmation",
+                expected_revision=state.revision,
+                event_type="test.reset-with-forged-mission-confirmation",
+                artifact_updates={
+                    "content/framework-draft": (
+                        "content-framework-draft",
+                        framework,
+                    )
+                },
+                content_framework_reset=reset,
+            )
+
+        self.assertEqual(self._filesystem_snapshot(), before)
+        self.assertEqual(
+            self.kernel.load().artifact_heads["mission/draft"], draft_ref
+        )
+
     def test_bare_framework_reset_is_rejected_zero_write(self) -> None:
         before = self._filesystem_snapshot()
         with self.assertRaises(ConfirmationTransactionError):
