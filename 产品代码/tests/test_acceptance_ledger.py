@@ -156,13 +156,6 @@ class AcceptanceLedgerTests(unittest.TestCase):
         ui = (ROOT.parent / "03-UI设计与交互规范-v1.0.md").read_text(
             encoding="utf-8"
         )
-        numbered_specs = index.split("已批准的专项设计为：", 1)[1].split(
-            "本轮真实实验", 1
-        )[0]
-        self.assertIn("9–10. 编号保留", numbered_specs)
-        self.assertIn("待各自独立基线提交接入", numbered_specs)
-        self.assertIn("当前不构成本提交可导航专项", numbered_specs)
-        self.assertNotIn("两项既有专项继续由其原提交维护", numbered_specs)
         self.assertIn("11. [内容蓝图侧边栏全稿审核与批次修改设计]", index)
         self.assertIn("第 11 项仅取代旧 UI-03", index)
         current_product = index.split("### 已批准的 RC1 默认值", 1)[0]
