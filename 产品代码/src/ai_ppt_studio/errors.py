@@ -61,6 +61,20 @@ class FeedbackGovernanceError(AiPptError):
     """Raised when feedback bypasses its required governance state."""
 
 
+class ContentWorkflowError(AiPptError):
+    """Raised when the content-review workflow cannot safely advance."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        self.code = code
+        self.details = dict(details or {})
+        super().__init__(message)
+
+
 class ExperienceValidationError(AiPptError):
     """Raised when personal experience data or an evolution action is invalid."""
 

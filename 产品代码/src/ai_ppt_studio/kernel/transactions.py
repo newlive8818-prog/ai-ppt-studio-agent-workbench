@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import uuid
 from contextlib import contextmanager
@@ -15,6 +16,10 @@ from ai_ppt_studio.json_io import atomic_write_json
 from ai_ppt_studio.kernel.artifacts import ArtifactRepository
 from ai_ppt_studio.kernel.gates import validate_gate_mutation
 from ai_ppt_studio.kernel.state import KernelState
+
+
+CONFIRMATION_LEDGER_SLOT = "kernel/confirmation-consumptions"
+CONFIRMATION_LEDGER_KIND = "confirmation-consumption-ledger"
 
 
 class ProjectKernel:
@@ -66,6 +71,8 @@ class ProjectKernel:
         expected_revision: int,
         event_type: str,
         artifact_updates: dict[str, tuple[str, dict[str, Any]]],
+        artifact_removals: tuple[str, ...] = (),
+        confirmation_consumptions: tuple[tuple[str, str], ...] = (),
         gate_mutation: object | None = None,
     ) -> KernelState:
         with self._locked():
@@ -77,8 +84,58 @@ class ProjectKernel:
 
             transaction_id = str(uuid.uuid4())
             heads = dict(state.artifact_heads)
+            if set(artifact_updates).intersection(artifact_removals):
+                raise ValueError(
+                    "A transaction cannot update and remove the same artifact head"
+                )
+            if CONFIRMATION_LEDGER_SLOT in artifact_updates or (
+                CONFIRMATION_LEDGER_SLOT in artifact_removals
+            ):
+                raise ValueError("The confirmation ledger is kernel-owned")
+
+            consumed = self._confirmation_consumptions(state, heads)
+            consumption_updates: dict[str, str] = {}
+            for raw_identity, raw_owner in confirmation_consumptions:
+                identity = raw_identity.strip()
+                owner = raw_owner.strip()
+                if not identity or not owner:
+                    raise ValueError(
+                        "Confirmation consumption identity and owner are required"
+                    )
+                identity_key = hashlib.sha256(
+                    identity.encode("utf-8")
+                ).hexdigest()
+                previous = consumed.get(identity_key)
+                if previous is not None:
+                    raise ValueError(
+                        "Confirmation identity was already consumed by "
+                        f"{previous}"
+                    )
+                historical_owner = self._historical_confirmation_owner(
+                    identity, heads
+                )
+                if historical_owner:
+                    raise ValueError(
+                        "Confirmation identity was already consumed by "
+                        f"{historical_owner}"
+                    )
+                consumed[identity_key] = owner
+                consumption_updates[identity_key] = owner
+
+            removed_heads = {
+                slot: heads.pop(slot)
+                for slot in artifact_removals
+                if slot in heads
+            }
             for slot, (kind, payload) in artifact_updates.items():
                 heads[slot] = str(self.artifacts.put(kind, payload))
+            if consumption_updates:
+                heads[CONFIRMATION_LEDGER_SLOT] = str(
+                    self.artifacts.put(
+                        CONFIRMATION_LEDGER_KIND,
+                        {"consumed": consumed},
+                    )
+                )
 
             next_revision = state.revision + 1
             authorized_gate = (
@@ -92,6 +149,8 @@ class ProjectKernel:
                 "event_type": event_type,
                 "revision": next_revision,
                 "artifact_heads": heads,
+                "artifact_head_removals": removed_heads,
+                "confirmation_consumptions": consumption_updates,
                 "gate_updates": (
                     dict(authorized_gate.updates) if authorized_gate else {}
                 ),
@@ -108,13 +167,67 @@ class ProjectKernel:
             gate_status = dict(state.gate_status)
             if authorized_gate:
                 gate_status.update(authorized_gate.updates)
-            committed = replace(
-                state,
-                revision=next_revision,
-                artifact_heads=heads,
-                gate_status=gate_status,
-                processed_commands=commands,
-                last_transaction_id=transaction_id,
-            )
+            state_updates: dict[str, Any] = {
+                "revision": next_revision,
+                "artifact_heads": heads,
+                "gate_status": gate_status,
+                "processed_commands": commands,
+                "last_transaction_id": transaction_id,
+            }
+            if hasattr(state, "consumed_user_confirmations"):
+                state_updates["consumed_user_confirmations"] = consumed
+            committed = replace(state, **state_updates)
             atomic_write_json(self.state_path, committed.as_dict())
             return committed
+
+    def _confirmation_consumptions(
+        self, state: KernelState, heads: dict[str, str]
+    ) -> dict[str, str]:
+        consumed = dict(
+            getattr(state, "consumed_user_confirmations", {})
+        )
+        ledger_ref = heads.get(CONFIRMATION_LEDGER_SLOT, "")
+        if not ledger_ref:
+            return consumed
+        from ai_ppt_studio.kernel.references import ArtifactReference
+
+        reference = ArtifactReference.parse(ledger_ref)
+        if reference.kind != CONFIRMATION_LEDGER_KIND:
+            raise ValueError("Confirmation ledger artifact kind is invalid")
+        payload = self.artifacts.resolve(reference)["payload"]
+        ledger_consumed = payload.get("consumed")
+        if not isinstance(ledger_consumed, dict) or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in ledger_consumed.items()
+        ):
+            raise ValueError("Confirmation ledger payload is invalid")
+        for key, value in ledger_consumed.items():
+            previous = consumed.get(key)
+            if previous is not None and previous != value:
+                raise ValueError("Confirmation consumption history conflicts")
+            consumed[key] = value
+        return consumed
+
+    def _historical_confirmation_owner(
+        self, identity: str, heads: dict[str, str]
+    ) -> str:
+        from ai_ppt_studio.kernel.references import ArtifactReference
+
+        for slot, reference_value in heads.items():
+            if slot != "mission/confirmation" and not (
+                slot.startswith("gate/")
+                and slot.endswith("/confirmation")
+            ):
+                continue
+            try:
+                payload = self.artifacts.resolve(
+                    ArtifactReference.parse(reference_value)
+                )["payload"]
+            except (KeyError, TypeError, ValueError):
+                continue
+            if identity in {
+                str(payload.get("user_action_ref") or ""),
+                str(payload.get("user_message_ref") or ""),
+            }:
+                return slot
+        return ""
