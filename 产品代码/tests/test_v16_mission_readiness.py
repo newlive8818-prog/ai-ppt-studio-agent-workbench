@@ -1,20 +1,29 @@
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.application.content_service import ContentService
 from ai_ppt_studio.application.project_service import ProjectCommandService
+from ai_ppt_studio.application.scoped_confirmation import (
+    HOST_CONFIRMATION_SECRET_ENV,
+)
 from ai_ppt_studio.errors import (
     MaterialModeUnconfirmedError,
     MissionNotConfirmedError,
 )
 from ai_ppt_studio.kernel.references import ArtifactReference
+from tests.test_v16_content_acceptance import (
+    TEST_SECRET,
+    authorize_current_framework,
+)
 
 
 MISSION = {
@@ -75,9 +84,16 @@ class MissionReadinessTests(unittest.TestCase):
             self.assertEqual(confirmation["revision"], 2)
             self.assertTrue(confirmation["confirmed_at"].endswith("+00:00"))
 
+            with patch.dict(
+                os.environ,
+                {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET},
+                clear=False,
+            ):
+                authorize_current_framework(service, confirmation_ref)
+
             strategy_ref = service.register_content_stage(
                 "strategy",
-                3,
+                service.kernel.load().revision,
                 "strategy",
                 {
                     "mission_ref": draft_ref,
@@ -174,10 +190,16 @@ class MissionReadinessTests(unittest.TestCase):
                 ArtifactReference.parse(confirmation_ref)
             )["payload"]
             empty_identity = confirmation["empty_material_identity"]
+            with patch.dict(
+                os.environ,
+                {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET},
+                clear=False,
+            ):
+                authorize_current_framework(service, confirmation_ref)
 
             strategy_ref = service.register_content_stage(
                 "proposal-strategy",
-                2,
+                service.kernel.load().revision,
                 "strategy",
                 {
                     "mission_ref": draft_ref,

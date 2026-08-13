@@ -28,6 +28,7 @@ from ai_ppt_studio.paths import PathPolicy
 SAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 ACTION_ROLES = {
+    "build-content-framework": "presales-content-strategist",
     "build-presales-strategy": "presales-content-strategist",
     "build-claim-evidence-map": "claim-evidence-analyst",
     "build-deck-argument-map": "deck-narrative-architect",
@@ -39,6 +40,8 @@ ACTION_ROLES = {
     "review-content-narrative": "argument-logic-reviewer",
     "review-content-editorial": "reading-experience-reviewer",
     "aggregate-content-reviews": "deck-coherence-editor",
+    "propose-content-batch-revision-plan": "deck-coherence-editor",
+    "apply-content-batch-revision": "content-repair-specialist",
     "design-deck-system": "deck-designer",
     "design-slide-visuals": "slide-visual-designer",
     "build-native-first": "native-first-engineer",
@@ -52,7 +55,9 @@ ACTION_ROLES = {
     "coordinate-delivery": "delivery-coordinator",
 }
 
-CONTENT_ACTIONS = frozenset(
+FRAMEWORK_ACTIONS = frozenset({"build-content-framework"})
+
+FULL_DECK_CONTENT_ACTIONS = frozenset(
     {
         "build-presales-strategy",
         "build-claim-evidence-map",
@@ -67,6 +72,10 @@ CONTENT_ACTIONS = frozenset(
         "aggregate-content-reviews",
     }
 )
+
+BATCH_PLAN_ACTIONS = frozenset({"propose-content-batch-revision-plan"})
+BATCH_APPLY_ACTIONS = frozenset({"apply-content-batch-revision"})
+CONTENT_ACTIONS = FULL_DECK_CONTENT_ACTIONS | BATCH_PLAN_ACTIONS | BATCH_APPLY_ACTIONS
 
 
 def _normalize_project_id(value: str) -> str:
@@ -328,12 +337,22 @@ class ProjectCommandService:
             )
         if not target_refs:
             raise ContractValidationError("Agent task requires target_refs")
-        if action in CONTENT_ACTIONS:
+        if action in FRAMEWORK_ACTIONS:
             from ai_ppt_studio.application.mission_readiness import (
                 MissionReadinessPolicy,
             )
 
             MissionReadinessPolicy(self.kernel).require_ready()
+        elif action in CONTENT_ACTIONS:
+            from ai_ppt_studio.application.mission_readiness import (
+                MissionReadinessPolicy,
+            )
+            from ai_ppt_studio.application.content_service import (
+                require_full_deck_expansion_authorization,
+            )
+
+            MissionReadinessPolicy(self.kernel).require_ready()
+            require_full_deck_expansion_authorization(self.kernel)
         for value in target_refs:
             self.kernel.artifacts.resolve(ArtifactReference.parse(value))
         from ai_ppt_studio.context_compiler import ContextCompiler

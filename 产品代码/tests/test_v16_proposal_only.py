@@ -1,17 +1,26 @@
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.application.content_service import ContentService
+from ai_ppt_studio.application.scoped_confirmation import (
+    HOST_CONFIRMATION_SECRET_ENV,
+)
 from ai_ppt_studio.errors import ProposalOnlyIdentityViolationError
 from ai_ppt_studio.kernel.references import ArtifactReference
 from tests.v16_content_fixtures import complete_proposal_only_draft_payload
+from tests.test_v16_content_acceptance import (
+    TEST_SECRET,
+    authorize_current_framework,
+)
 
 
 MISSION = {
@@ -38,7 +47,11 @@ def confirmed_no_materials(service: ContentService) -> tuple[int, str, str]:
         user_action_ref="test-user-action://confirmed-proposal-only-fixture",
         user_message_ref="",
     )
-    return 2, draft_ref, confirmation_ref
+    with patch.dict(
+        os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
+    ):
+        authorize_current_framework(service, confirmation_ref)
+    return service.kernel.load().revision, draft_ref, confirmation_ref
 
 
 class ProposalOnlyContentTests(unittest.TestCase):

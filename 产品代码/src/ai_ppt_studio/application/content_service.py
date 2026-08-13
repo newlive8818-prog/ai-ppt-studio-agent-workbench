@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import re
+
 from ai_ppt_studio.domains.content.contracts import (
     CONTENT_STAGES,
     REQUIRED_CONTENT_REVIEW_ROLES,
@@ -28,6 +30,7 @@ from ai_ppt_studio.domains.feedback.contracts import (
 )
 from ai_ppt_studio.errors import (
     ArtifactReferenceError,
+    ContentWorkflowError,
     FeedbackGovernanceError,
     GateBlockedError,
 )
@@ -46,6 +49,122 @@ class ContentAcceptanceResult:
     acceptance_ref: str
     blueprint_ref: str
     state: KernelState
+
+
+CONTENT_WORKFLOW_LINEAGE_FIELDS = (
+    "framework_ref",
+    "framework_confirmation_ref",
+    "full_deck_expansion_authorization_ref",
+)
+
+
+def require_full_deck_expansion_authorization(
+    kernel: ProjectKernel,
+) -> dict[str, str]:
+    """Return the exact trusted framework lineage or reject before any write."""
+
+    from ai_ppt_studio.application.framework_discussion_service import (
+        FULL_DECK_EXPANSION_SCOPE,
+        FrameworkDiscussionService,
+    )
+
+    state = kernel.load()
+    try:
+        context = FrameworkDiscussionService(
+            kernel
+        ).expansion_authorization_context()
+        framework_ref = str(context["source_version"])
+        confirmation_ref = str(context["scope_id"])
+        authorization_ref = state.artifact_heads.get(
+            "content/full-deck-expansion-authorization", ""
+        )
+        if not authorization_ref:
+            raise ValueError("authorization head is missing")
+        reference = ArtifactReference.parse(authorization_ref)
+        if reference.kind != "full-deck-expansion-authorization":
+            raise ValueError("authorization kind is invalid")
+        authorization = dict(kernel.artifacts.resolve(reference)["payload"])
+        revision = authorization.get("challenge_revision")
+        if isinstance(revision, bool) or not isinstance(revision, int):
+            raise ValueError("authorization revision is invalid")
+        evidence_refs = list(context["evidence_refs"])
+        challenge_body = {
+            "project_id": state.project_id,
+            "project_root": str(kernel.project_root),
+            "scope_kind": FULL_DECK_EXPANSION_SCOPE,
+            "scope_id": confirmation_ref,
+            "source_version": framework_ref,
+            "evidence_refs": evidence_refs,
+            "challenge_revision": revision,
+        }
+        challenge_id = FrameworkDiscussionService(
+            kernel
+        ).confirmations.challenge_id(challenge_body)
+        expected = {
+            "project_id": state.project_id,
+            "scope_kind": FULL_DECK_EXPANSION_SCOPE,
+            "scope_id": confirmation_ref,
+            "source_version": framework_ref,
+            "evidence_refs": evidence_refs,
+            "challenge_id": challenge_id,
+            "framework_ref": framework_ref,
+            "framework_confirmation_ref": confirmation_ref,
+            "framework_revision": revision,
+            "challenge_identity": challenge_id,
+        }
+        if any(
+            authorization.get(key) != value
+            for key, value in expected.items()
+        ):
+            raise ValueError("authorization binding is stale")
+        action_ref = str(authorization.get("user_action_ref") or "")
+        message_ref = str(authorization.get("user_message_ref") or "")
+        identities = tuple(value for value in (action_ref, message_ref) if value)
+        if (
+            revision < 1
+            or revision >= state.revision
+            or len(identities) != 1
+            or authorization.get("confirmation_identity_type")
+            not in {"host-action", "verified-message"}
+            or not re.fullmatch(
+                r"[0-9a-f]{64}",
+                str(authorization.get("host_assertion_sha256") or ""),
+            )
+            or not str(authorization.get("confirmed_at") or "").strip()
+            or kernel.confirmation_owner(identities[0])
+            != f"{FULL_DECK_EXPANSION_SCOPE}:{confirmation_ref}"
+            or kernel.confirmation_artifact_binding(identities[0])
+            != authorization_ref
+        ):
+            raise ValueError("authorization trust binding is invalid")
+    except (
+        ArtifactReferenceError,
+        ContentWorkflowError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ):
+        raise ContentWorkflowError(
+            "FULL_DECK_EXPANSION_NOT_AUTHORIZED",
+            "The exact current framework is not authorized for full-deck expansion",
+            {
+                "framework_ref": state.artifact_heads.get(
+                    "content/framework-draft", ""
+                ),
+                "framework_confirmation_ref": state.artifact_heads.get(
+                    "content/framework-confirmation", ""
+                ),
+                "full_deck_expansion_authorization_ref": state.artifact_heads.get(
+                    "content/full-deck-expansion-authorization", ""
+                ),
+                "revision": state.revision,
+            },
+        ) from None
+    return {
+        "framework_ref": framework_ref,
+        "framework_confirmation_ref": confirmation_ref,
+        "full_deck_expansion_authorization_ref": authorization_ref,
+    }
 
 
 class ContentService:
@@ -186,7 +305,10 @@ class ContentService:
         payload: dict[str, Any],
     ) -> str:
         readiness = MissionReadinessPolicy(self.kernel).require_ready()
-        governed_payload = self._govern_content_identity(payload, readiness)
+        lineage = require_full_deck_expansion_authorization(self.kernel)
+        governed_payload = self._govern_content_identity(
+            {**payload, **lineage}, readiness
+        )
         normalized = validate_content_stage(stage, governed_payload)
         self._validate_lineage(stage, normalized, readiness)
         slot, kind = CONTENT_STAGES[stage]
@@ -205,7 +327,8 @@ class ContentService:
         payload: dict[str, Any],
     ) -> str:
         MissionReadinessPolicy(self.kernel).require_ready()
-        normalized = validate_content_review(payload)
+        lineage = require_full_deck_expansion_authorization(self.kernel)
+        normalized = validate_content_review({**payload, **lineage})
         draft_ref = self._require_head("content/draft", "slide-draft-set")
         if (
             normalized["target_ref"] != draft_ref
@@ -214,6 +337,11 @@ class ContentService:
             raise ArtifactReferenceError(
                 "Content review must target the current slide draft"
             )
+        self._require_exact_workflow_lineage(normalized, lineage)
+        draft = self.kernel.artifacts.resolve(
+            ArtifactReference.parse(draft_ref)
+        )["payload"]
+        self._require_exact_workflow_lineage(draft, lineage)
         for check in normalized["checks"]:
             for value in check.get("evidence_refs") or []:
                 self.kernel.artifacts.resolve(ArtifactReference.parse(value))
@@ -231,21 +359,28 @@ class ContentService:
         self, command_id: str, expected_revision: int
     ) -> ContentAcceptanceResult:
         MissionReadinessPolicy(self.kernel).require_ready()
+        lineage = require_full_deck_expansion_authorization(self.kernel)
         state = self.kernel.load()
         draft_ref = self._require_head("content/draft", "slide-draft-set")
+        draft = self.kernel.artifacts.resolve(
+            ArtifactReference.parse(draft_ref)
+        )["payload"]
+        self._require_exact_workflow_lineage(draft, lineage)
         records: list[tuple[str, dict[str, Any]]] = []
         for role in REQUIRED_CONTENT_REVIEW_ROLES:
             value = state.artifact_heads.get(f"content/review/{role}")
             if not value:
                 continue
             envelope = self.kernel.artifacts.resolve(ArtifactReference.parse(value))
+            self._require_exact_workflow_lineage(envelope["payload"], lineage)
             records.append((value, envelope["payload"]))
         acceptance = aggregate_content_reviews(draft_ref, records)
+        acceptance.update(lineage)
         acceptance["passed_at"] = datetime.now(timezone.utc).isoformat()
         acceptance_ref = str(
             self.kernel.artifacts.put("content-acceptance", acceptance)
         )
-        blueprint = self._build_blueprint(acceptance_ref)
+        blueprint = self._build_blueprint(acceptance_ref, lineage)
         blueprint_ref = str(
             self.kernel.artifacts.put("content-blueprint", blueprint)
         )
@@ -479,7 +614,9 @@ class ContentService:
             "content payload needs a recognized schema 3 artifact_type"
         )
 
-    def _build_blueprint(self, acceptance_ref: str) -> dict[str, Any]:
+    def _build_blueprint(
+        self, acceptance_ref: str, lineage: dict[str, str]
+    ) -> dict[str, Any]:
         state = self.kernel.load()
         required = {
             "strategy": "content/strategy",
@@ -499,6 +636,7 @@ class ContentService:
             )["payload"]
         return {
             **refs,
+            **lineage,
             "acceptance_ref": acceptance_ref,
             "strategy": payloads["strategy"],
             "claim_evidence_map": payloads["claim_evidence_map"],
@@ -513,6 +651,8 @@ class ContentService:
         payload: dict[str, Any],
         readiness: MissionReadiness,
     ) -> None:
+        current_lineage = require_full_deck_expansion_authorization(self.kernel)
+        self._require_exact_workflow_lineage(payload, current_lineage)
         if stage == "strategy":
             self._require_exact_ref(
                 payload["mission_ref"], "mission/draft", "mission-draft"
@@ -569,6 +709,26 @@ class ContentService:
                         self._require_exact_ref(
                             ref, "materials", "material-inventory"
                         )
+
+    @staticmethod
+    def _require_exact_workflow_lineage(
+        payload: dict[str, Any], lineage: dict[str, str]
+    ) -> None:
+        if any(
+            payload.get(field) != lineage[field]
+            for field in CONTENT_WORKFLOW_LINEAGE_FIELDS
+        ):
+            raise ContentWorkflowError(
+                "FULL_DECK_EXPANSION_NOT_AUTHORIZED",
+                "Formal content is not bound to the exact current framework authorization",
+                {
+                    "expected": dict(lineage),
+                    "actual": {
+                        field: str(payload.get(field) or "")
+                        for field in CONTENT_WORKFLOW_LINEAGE_FIELDS
+                    },
+                },
+            )
 
     @staticmethod
     def _govern_content_identity(

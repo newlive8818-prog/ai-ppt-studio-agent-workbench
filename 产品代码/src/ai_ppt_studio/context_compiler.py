@@ -11,6 +11,12 @@ from ai_ppt_studio.kernel.transactions import ProjectKernel
 from ai_ppt_studio.role_registry import RoleRegistry
 from ai_ppt_studio.scenario_packs import ScenarioPackRegistry
 from ai_ppt_studio.application.mission_readiness import MissionReadinessPolicy
+from ai_ppt_studio.application.project_service import (
+    BATCH_APPLY_ACTIONS,
+    BATCH_PLAN_ACTIONS,
+    FRAMEWORK_ACTIONS,
+    FULL_DECK_CONTENT_ACTIONS,
+)
 
 
 FOUR_TARGETS = (
@@ -19,7 +25,6 @@ FOUR_TARGETS = (
     "windows-powerpoint",
     "windows-wps",
 )
-
 
 class ContextCompiler:
     """Build the minimum governed context required by one formal role task."""
@@ -46,6 +51,18 @@ class ContextCompiler:
                 "Context Pack project_revision must equal the current revision"
             )
         role = RoleRegistry.default().get(role_id)
+        if task_type in FRAMEWORK_ACTIONS:
+            MissionReadinessPolicy(self.kernel).require_ready()
+        elif task_type in (
+            FULL_DECK_CONTENT_ACTIONS
+            | BATCH_PLAN_ACTIONS
+            | BATCH_APPLY_ACTIONS
+        ):
+            from ai_ppt_studio.application.content_service import (
+                require_full_deck_expansion_authorization,
+            )
+
+            require_full_deck_expansion_authorization(self.kernel)
         pack = ScenarioPackRegistry.default().resolve(
             scene="presales", task_type="reading-first"
         )
@@ -92,6 +109,31 @@ class ContextCompiler:
             "last_valid_result_refs": list(last_valid_result_refs or []),
             "whole_project_rewrite_forbidden": repair,
         }
+        content_workflow = {
+            "framework_ref": state.artifact_heads.get(
+                "content/framework-draft", ""
+            ),
+            "framework_confirmation_ref": state.artifact_heads.get(
+                "content/framework-confirmation", ""
+            ),
+            "full_deck_expansion_authorization_ref": state.artifact_heads.get(
+                "content/full-deck-expansion-authorization", ""
+            ),
+            "review_batch_ref": state.artifact_heads.get(
+                "content/review-batch", ""
+            ),
+            "batch_revision_plan_ref": state.artifact_heads.get(
+                "content/batch-revision-plan", ""
+            ),
+            "batch_plan_confirmation_ref": state.artifact_heads.get(
+                "content/batch-plan-confirmation", ""
+            ),
+        }
+        allowed_content_heads = (
+            {"content/framework-draft"}
+            if task_type in FRAMEWORK_ACTIONS
+            else None
+        )
         return {
             "schema_version": "3.0",
             "project_id": state.project_id,
@@ -149,7 +191,13 @@ class ContextCompiler:
                             "materials",
                             "human/decision/latest",
                         }
-                        or key.startswith("content/")
+                        or (
+                            key.startswith("content/")
+                            and (
+                                allowed_content_heads is None
+                                or key in allowed_content_heads
+                            )
+                        )
                         or key.startswith("visual/")
                         or key.startswith("delivery/")
                     },
@@ -183,6 +231,7 @@ class ContextCompiler:
                         ],
                     },
                 },
+                "content_workflow": content_workflow,
                 "experience_slice": experience_slice,
                 "repair_contract": repair_contract,
                 "target_render_contract": target_contract,

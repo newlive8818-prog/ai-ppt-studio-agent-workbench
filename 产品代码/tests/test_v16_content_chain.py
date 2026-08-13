@@ -1,15 +1,24 @@
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.application.content_service import ContentService
+from ai_ppt_studio.application.scoped_confirmation import (
+    HOST_CONFIRMATION_SECRET_ENV,
+)
 from ai_ppt_studio.errors import ArtifactReferenceError
+from tests.test_v16_content_acceptance import (
+    TEST_SECRET,
+    authorize_current_framework,
+)
 from tests.v16_content_fixtures import complete_slide_draft_payload
 
 
@@ -41,7 +50,7 @@ def build_ready_draft(
 ) -> tuple[int, str, dict[str, str]]:
     mission = service.save_mission_draft("c1", 0, valid_mission())
     materials = service.register_materials("c2", 1, valid_materials())
-    service.confirm_mission(
+    mission_confirmation = service.confirm_mission(
         "c3-confirm",
         2,
         mission_draft_ref=mission,
@@ -50,9 +59,14 @@ def build_ready_draft(
         user_action_ref="test-user-action://confirmed-content-fixture",
         user_message_ref="",
     )
+    with patch.dict(
+        os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
+    ):
+        authorize_current_framework(service, mission_confirmation)
+    revision = service.kernel.load().revision
     strategy = service.register_content_stage(
         "c4",
-        3,
+        revision,
         "strategy",
         {
             "mission_ref": mission,
@@ -64,7 +78,7 @@ def build_ready_draft(
     )
     claim_map = service.register_content_stage(
         "c5",
-        4,
+        revision + 1,
         "claim-map",
         {
             "strategy_ref": strategy,
@@ -79,7 +93,7 @@ def build_ready_draft(
     )
     argument = service.register_content_stage(
         "c6",
-        5,
+        revision + 2,
         "argument-map",
         {
             "strategy_ref": strategy,
@@ -91,7 +105,7 @@ def build_ready_draft(
     )
     draft = service.register_content_stage(
         "c7",
-        6,
+        revision + 3,
         "slide-draft-set",
         complete_slide_draft_payload(
             argument_map_ref=argument,
@@ -100,7 +114,7 @@ def build_ready_draft(
             slide_id_prefix="s",
         ),
     )
-    return 7, draft, {
+    return revision + 4, draft, {
         "mission": mission,
         "materials": materials,
         "strategy": strategy,

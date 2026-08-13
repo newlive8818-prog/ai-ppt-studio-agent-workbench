@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.config import RuntimeConfig  # noqa: E402
+from ai_ppt_studio.application.content_service import ContentService  # noqa: E402
 from ai_ppt_studio.application.project_service import ProjectService  # noqa: E402
 from ai_ppt_studio.context_compiler import ContextCompiler  # noqa: E402
 from ai_ppt_studio.errors import WorkbenchValidationError  # noqa: E402
@@ -23,6 +24,69 @@ def make_project(base: Path, name: str = "测试项目"):
 
 
 class ContextCompilerGovernanceTests(unittest.TestCase):
+    def test_content_workflow_layer_is_total_without_fabricated_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = make_project(Path(temp))
+            pack = ContextCompiler(project).compile_role_task(
+                role_id="presales-content-strategist",
+                task_type="build-strategy",
+                project_revision=project.load().revision,
+                target_refs=[],
+                instructions="先讨论框架",
+            )
+            self.assertEqual(pack["layers"]["content_workflow"], {
+                "framework_ref": "",
+                "framework_confirmation_ref": "",
+                "full_deck_expansion_authorization_ref": "",
+                "review_batch_ref": "",
+                "batch_revision_plan_ref": "",
+                "batch_plan_confirmation_ref": "",
+            })
+
+    def test_framework_context_excludes_all_formal_page_content_heads(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = make_project(Path(temp))
+            content = ContentService(project)
+            mission_ref = content.save_mission_draft(
+                "mission", project.load().revision, {
+                    "topic": "经营一体化", "primary_audience": "决策者",
+                    "desired_judgment_or_action": "批准一期",
+                }
+            )
+            content.confirm_mission(
+                "mission-confirm", project.load().revision,
+                mission_draft_ref=mission_ref,
+                material_mode="no-materials-confirmed",
+                material_inventory_ref="",
+                user_action_ref="test-user-action://framework-context",
+                user_message_ref="",
+            )
+            project.commit(
+                command_id="seed-formal-content",
+                expected_revision=project.load().revision,
+                event_type="test.seed-formal-content",
+                artifact_updates={
+                    "content/draft": ("slide-draft-set", {"slides": ["secret"]}),
+                    "content/blueprint": ("content-blueprint", {"pages": ["secret"]}),
+                    "content/page-decisions": ("page-decisions", {"pages": ["secret"]}),
+                },
+            )
+            pack = ContextCompiler(project).compile_role_task(
+                role_id="presales-content-strategist",
+                task_type="build-content-framework",
+                project_revision=project.load().revision,
+                target_refs=[], instructions="只讨论框架",
+            )
+            active = pack["layers"]["current_state"]["active_head_refs"]
+            self.assertFalse(any(slot.startswith("content/") for slot in active))
+            self.assertNotIn("secret", json.dumps(pack, ensure_ascii=False))
+            self.assertIn(
+                "mission_identity", pack["layers"]["project_facts"]
+            )
+            self.assertIn(
+                "material_summary", pack["layers"]["project_facts"]
+            )
+
     def test_compile_role_task_produces_layered_pack(self) -> None:
         """分层 Context Pack 包含治理、场景、项目事实、角色、任务、工具、经验、输出、排除层。"""
         with tempfile.TemporaryDirectory() as temp:
