@@ -31,6 +31,10 @@ from ai_ppt_studio.errors import (
 )
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.gates import issue_gate_mutation
+from ai_ppt_studio.kernel.transactions import (
+    CONFIRMATION_LEDGER_KIND,
+    CONFIRMATION_LEDGER_SLOT,
+)
 
 
 TEST_SECRET = "test-only-scoped-confirmation-secret-32-bytes-minimum"
@@ -212,6 +216,104 @@ class FrameworkDiscussionTests(unittest.TestCase):
                 for slot in state.artifact_heads
             )
         )
+
+    def test_framework_reset_epoch_survives_confirmation_and_identical_reset(self) -> None:
+        framework_ref, first_reset = self._save()
+
+        self.assertIn(CONFIRMATION_LEDGER_SLOT, first_reset.artifact_heads)
+        first_epoch = self.kernel.current_framework_reset_revision()
+        self.assertEqual(first_epoch, first_reset.revision)
+
+        self._confirm(framework_ref)
+        self.assertEqual(
+            self.kernel.current_framework_reset_revision(),
+            first_epoch,
+        )
+        self._authorize(framework_ref)
+        self.assertEqual(
+            self.kernel.current_framework_reset_revision(),
+            first_epoch,
+        )
+
+        same_ref, second_reset = self.service.save_draft(
+            command_id="identical-framework-reset-epoch",
+            expected_revision=self.kernel.load().revision,
+            payload=valid_framework(self.mission_confirmation_ref),
+        )
+
+        self.assertEqual(same_ref, framework_ref)
+        self.assertEqual(
+            self.kernel.current_framework_reset_revision(),
+            second_reset.revision,
+        )
+        self.assertGreater(second_reset.revision, first_epoch)
+
+    def test_business_commit_cannot_update_or_remove_confirmation_ledger(self) -> None:
+        self._save()
+        before = self._filesystem_snapshot()
+        state = self.kernel.load()
+
+        attempts = (
+            {
+                "artifact_updates": {
+                    CONFIRMATION_LEDGER_SLOT: (
+                        "confirmation-consumption-ledger",
+                        {
+                            "consumed": {},
+                            "artifact_bindings": {},
+                            "framework_reset_revision": 0,
+                        },
+                    )
+                }
+            },
+            {"artifact_updates": {}, "artifact_removals": (CONFIRMATION_LEDGER_SLOT,)},
+        )
+        for index, changes in enumerate(attempts):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                self.kernel.commit(
+                    command_id=f"tamper-kernel-ledger-{index}",
+                    expected_revision=state.revision,
+                    event_type="test.tamper-kernel-ledger",
+                    **changes,
+                )
+            self.assertEqual(self._filesystem_snapshot(), before)
+
+    def test_missing_or_malformed_framework_epoch_fails_closed(self) -> None:
+        self._save()
+        state = self.kernel.load()
+        without_ledger = replace(
+            state,
+            artifact_heads={
+                slot: reference
+                for slot, reference in state.artifact_heads.items()
+                if slot != CONFIRMATION_LEDGER_SLOT
+            },
+        )
+        malformed_ref = str(
+            self.kernel.artifacts.put(
+                CONFIRMATION_LEDGER_KIND,
+                [],  # type: ignore[arg-type]
+            )
+        )
+        malformed_ledger = replace(
+            state,
+            artifact_heads={
+                **state.artifact_heads,
+                CONFIRMATION_LEDGER_SLOT: malformed_ref,
+            },
+        )
+
+        for corrupted in (without_ledger, malformed_ledger):
+            with self.subTest(heads=corrupted.artifact_heads), patch.object(
+                self.kernel,
+                "load",
+                return_value=corrupted,
+            ), self.assertRaises(ConfirmationTransactionError) as raised:
+                self.kernel.current_framework_reset_revision()
+            self.assertEqual(
+                raised.exception.code,
+                "CONFIRMATION_LEDGER_CORRUPT",
+            )
 
     def test_draft_must_bind_the_current_mission_confirmation(self) -> None:
         before = self.kernel.load()

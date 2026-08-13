@@ -362,7 +362,7 @@ class V16ProjectServiceTests(unittest.TestCase):
             )
             self.assertEqual(kernel.load(), before)
 
-    def test_missing_latest_framework_reset_event_fails_closed(self) -> None:
+    def test_missing_latest_framework_reset_event_cannot_reenable_old_chain(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             config, _profile = runtime_config(Path(temp))
             kernel = ProjectService(config).create_project("missing reset event")
@@ -378,7 +378,36 @@ class V16ProjectServiceTests(unittest.TestCase):
                 material_mode="no-materials-confirmed", material_inventory_ref="",
                 user_action_ref="test-user-action://missing-event", user_message_ref="",
             )
-            _save_confirm_authorize(kernel, mission_confirmation)
+            framework_ref, confirmation_ref, authorization_ref = (
+                _save_confirm_authorize(kernel, mission_confirmation)
+            )
+            confirmation_payload = kernel.artifacts.resolve(
+                ArtifactReference.parse(confirmation_ref)
+            )["payload"]
+            authorization_payload = kernel.artifacts.resolve(
+                ArtifactReference.parse(authorization_ref)
+            )["payload"]
+            FrameworkDiscussionService(kernel).save_draft(
+                "identical-reset-before-event-gap", kernel.load().revision,
+                _framework_payload(mission_confirmation),
+            )
+            kernel.commit(
+                command_id="restore-old-chain-before-event-gap",
+                expected_revision=kernel.load().revision,
+                event_type="test.restore-old-chain-before-event-gap",
+                artifact_updates={
+                    "content/framework-confirmation": (
+                        "content-framework-confirmation", confirmation_payload
+                    ),
+                    "content/full-deck-expansion-authorization": (
+                        "full-deck-expansion-authorization", authorization_payload
+                    ),
+                },
+            )
+            self.assertEqual(
+                kernel.load().artifact_heads["content/framework-draft"],
+                framework_ref,
+            )
             latest_event = kernel.events_root / f"r{kernel.load().revision:08d}.json"
             latest_event.unlink()
             before = kernel.load()

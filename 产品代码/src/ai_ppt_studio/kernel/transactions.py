@@ -21,6 +21,7 @@ from ai_ppt_studio.errors import (
 from ai_ppt_studio.json_io import atomic_write_json
 from ai_ppt_studio.kernel.artifacts import ArtifactRepository
 from ai_ppt_studio.kernel.gates import validate_gate_mutation
+from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.state import KernelState
 
 
@@ -158,6 +159,9 @@ class ProjectKernel:
                 )
 
             consumed, artifact_bindings = self._confirmation_ledger(state, heads)
+            current_reset_revision = self._framework_reset_revision(
+                state, heads
+            )
             consumption_updates: dict[str, str] = {}
             for (
                 raw_identity,
@@ -213,12 +217,19 @@ class ProjectKernel:
                 confirmation_consumptions=trusted_consumptions,
             )
             artifact_bindings.update(binding_updates)
+            next_revision = state.revision + 1
+            framework_reset_revision = (
+                next_revision
+                if reset_claim is not None
+                else current_reset_revision
+            )
             ledger_payload = (
                 {
                     "consumed": consumed,
                     "artifact_bindings": artifact_bindings,
+                    "framework_reset_revision": framework_reset_revision,
                 }
-                if consumption_updates
+                if consumption_updates or reset_claim is not None
                 else None
             )
             ledger_reference = (
@@ -232,7 +243,6 @@ class ProjectKernel:
             if ledger_reference is not None:
                 heads[CONFIRMATION_LEDGER_SLOT] = str(ledger_reference)
 
-            next_revision = state.revision + 1
             gate_updates = (
                 {
                     "G0": "open",
@@ -312,13 +322,13 @@ class ProjectKernel:
         ledger_ref = heads.get(CONFIRMATION_LEDGER_SLOT, "")
         if not ledger_ref:
             return consumed, artifact_bindings
-        from ai_ppt_studio.kernel.references import ArtifactReference
-
         try:
             reference = ArtifactReference.parse(ledger_ref)
             if reference.kind != CONFIRMATION_LEDGER_KIND:
                 raise ValueError("Confirmation ledger artifact kind is invalid")
             payload = self.artifacts.resolve(reference)["payload"]
+            if not isinstance(payload, dict):
+                raise TypeError("Confirmation ledger payload is invalid")
         except (ArtifactReferenceError, KeyError, TypeError, ValueError) as error:
             raise ConfirmationTransactionError(
                 "CONFIRMATION_LEDGER_CORRUPT",
@@ -326,6 +336,21 @@ class ProjectKernel:
             ) from error
         ledger_consumed = payload.get("consumed")
         ledger_bindings = payload.get("artifact_bindings", {})
+        framework_reset_revision = payload.get("framework_reset_revision", 0)
+        if (
+            isinstance(framework_reset_revision, bool)
+            or not isinstance(framework_reset_revision, int)
+            or framework_reset_revision < 0
+            or framework_reset_revision > state.revision
+            or (
+                bool(heads.get("content/framework-draft"))
+                and framework_reset_revision < 1
+            )
+        ):
+            raise ConfirmationTransactionError(
+                "CONFIRMATION_LEDGER_CORRUPT",
+                "Framework reset epoch is invalid",
+            )
         if not isinstance(ledger_consumed, dict) or any(
             not isinstance(key, str) or not isinstance(value, str)
             for key, value in ledger_consumed.items()
@@ -352,6 +377,49 @@ class ProjectKernel:
             consumed[key] = value
         artifact_bindings.update(ledger_bindings)
         return consumed, artifact_bindings
+
+    def _framework_reset_revision(
+        self, state: KernelState, heads: dict[str, str]
+    ) -> int:
+        ledger_ref = heads.get(CONFIRMATION_LEDGER_SLOT, "")
+        if not ledger_ref:
+            if heads.get("content/framework-draft"):
+                raise ConfirmationTransactionError(
+                    "CONFIRMATION_LEDGER_CORRUPT",
+                    "Framework reset epoch is missing",
+                )
+            return 0
+        try:
+            reference = ArtifactReference.parse(ledger_ref)
+            if reference.kind != CONFIRMATION_LEDGER_KIND:
+                raise ValueError("Confirmation ledger kind is invalid")
+            payload = self.artifacts.resolve(reference)["payload"]
+            if not isinstance(payload, dict):
+                raise TypeError("Confirmation ledger payload is invalid")
+            value = payload.get("framework_reset_revision", 0)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 0
+                or value > state.revision
+            ):
+                raise ValueError("Framework reset epoch is invalid")
+            if heads.get("content/framework-draft") and value < 1:
+                raise ValueError("Framework reset epoch is missing")
+            return value
+        except (ArtifactReferenceError, KeyError, TypeError, ValueError) as error:
+            raise ConfirmationTransactionError(
+                "CONFIRMATION_LEDGER_CORRUPT",
+                "Framework reset epoch is unreadable",
+            ) from error
+
+    def current_framework_reset_revision(self) -> int:
+        """Return the kernel-owned irreversible framework reset epoch."""
+
+        state = self.load()
+        return self._framework_reset_revision(
+            state, dict(state.artifact_heads)
+        )
 
     def confirmation_owner(self, identity: str) -> str:
         """Return the atomic owner of a consumed trusted identity, if any."""

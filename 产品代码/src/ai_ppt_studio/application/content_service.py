@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import json
 import re
 
 from ai_ppt_studio.domains.content.contracts import (
@@ -31,6 +30,7 @@ from ai_ppt_studio.domains.feedback.contracts import (
 )
 from ai_ppt_studio.errors import (
     ArtifactReferenceError,
+    ConfirmationTransactionError,
     ContentWorkflowError,
     FeedbackGovernanceError,
     GateBlockedError,
@@ -148,12 +148,13 @@ def require_full_deck_expansion_authorization(
             != f"{FULL_DECK_EXPANSION_SCOPE}:{confirmation_ref}"
             or kernel.confirmation_artifact_binding(identities[0])
             != authorization_ref
-            or confirmation_revision < _latest_framework_reset_revision(kernel)
+            or confirmation_revision < kernel.current_framework_reset_revision()
             or revision <= confirmation_revision
         ):
             raise ValueError("authorization trust binding is invalid")
     except (
         ArtifactReferenceError,
+        ConfirmationTransactionError,
         ContentWorkflowError,
         KeyError,
         TypeError,
@@ -180,50 +181,6 @@ def require_full_deck_expansion_authorization(
         "framework_confirmation_ref": confirmation_ref,
         "full_deck_expansion_authorization_ref": authorization_ref,
     }
-
-
-def _latest_framework_reset_revision(kernel: ProjectKernel) -> int:
-    latest = -1
-    state = kernel.load()
-    try:
-        expected_paths = [
-            kernel.events_root / f"r{revision:08d}.json"
-            for revision in range(1, state.revision + 1)
-        ]
-        actual_paths = sorted(kernel.events_root.glob("r*.json"))
-        if actual_paths != expected_paths:
-            raise ValueError("event history is incomplete or non-contiguous")
-        final_transaction = ""
-        for expected_revision, path in enumerate(expected_paths, start=1):
-            event = json.loads(path.read_text(encoding="utf-8"))
-            if (
-                event.get("revision") != expected_revision
-                or not isinstance(event.get("transaction_id"), str)
-                or not event["transaction_id"].strip()
-                or not isinstance(event.get("command_id"), str)
-                or not event["command_id"].strip()
-                or not isinstance(event.get("event_type"), str)
-                or not event["event_type"].strip()
-                or not isinstance(event.get("artifact_heads"), dict)
-            ):
-                raise ValueError("event history entry is malformed")
-            final_transaction = event["transaction_id"]
-            if event.get("event_type") == "content.framework-draft-saved":
-                revision = event.get("revision")
-                if isinstance(revision, bool) or not isinstance(revision, int):
-                    raise ValueError("framework reset revision is invalid")
-                latest = max(latest, revision)
-        if final_transaction != state.last_transaction_id:
-            raise ValueError("event history does not match current state")
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
-        raise ContentWorkflowError(
-            "FULL_DECK_EXPANSION_NOT_AUTHORIZED",
-            "Framework reset history is unreadable",
-            {"revision": kernel.load().revision},
-        ) from None
-    return latest
-
-
 class ContentService:
     """Persist and validate the formal content artifact chain."""
 
