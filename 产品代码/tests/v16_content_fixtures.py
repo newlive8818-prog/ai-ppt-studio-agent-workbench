@@ -48,7 +48,7 @@ def complete_proposal_only_slide(
         {
             "used_region": "待补联合澄清的现状证据",
             "supports_claim": "诊断假设：流程可能存在重复录入",
-            "evidence_gap": "需补材料，或将主张降级为诊断假设。",
+            "evidence_gap": "G0 前需补材料，或将主张降级为诊断假设。",
         }
     )
     slide = complete_reading_first_slide(

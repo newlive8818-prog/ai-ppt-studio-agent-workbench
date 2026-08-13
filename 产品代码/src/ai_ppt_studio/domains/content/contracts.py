@@ -49,6 +49,7 @@ PROHIBITED_PROPOSAL_PATTERNS = (
     (re.compile(r"客户(?:已经|已|现有|确认|明确|当前)"), "unsourced-customer-fact"),
     (re.compile(r"保证|承诺|必然|一定能够|确保.{0,12}(?:提升|实现|达到)"), "unsupported-promise"),
 )
+GATE_TOKEN_PATTERN = re.compile(r"(?<![A-Za-z0-9])G[0-4](?![A-Za-z0-9])")
 READING_DENSITY_LEVELS = frozenset({"low", "moderate", "high"})
 EVIDENCE_KINDS = frozenset({"material", "planned-gap"})
 
@@ -306,7 +307,12 @@ def validate_proposal_only_identity(
     semantic = _semantic_proposal_text(stage, payload)
     semantic_for_checks = semantic.replace("不代表客户已确认事实", "")
     for pattern, reason in PROHIBITED_PROPOSAL_PATTERNS:
-        if pattern.search(semantic_for_checks):
+        pattern_input = (
+            GATE_TOKEN_PATTERN.sub("GATE", semantic_for_checks)
+            if reason == "unsourced-number"
+            else semantic_for_checks
+        )
+        if pattern.search(pattern_input):
             raise ProposalOnlyIdentityViolationError(
                 f"PROPOSAL_ONLY_IDENTITY_VIOLATION: {reason}"
             )

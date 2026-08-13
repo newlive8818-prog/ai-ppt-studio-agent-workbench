@@ -258,6 +258,22 @@ class ReadingFirstSlideContractTests(unittest.TestCase):
         with self.assertRaises(ProposalOnlyIdentityViolationError):
             validate_content_stage("slide-draft-set", payload)
 
+    def test_proposal_only_accepts_canonical_g0_planned_gap(self) -> None:
+        payload = self._proposal_only_payload()
+        self.assertEqual(
+            payload["slides"][0]["evidence_items"][0]["evidence_gap"],
+            "G0 前需补材料，或将主张降级为诊断假设。",
+        )
+        self.assertEqual(validate_content_stage("slide-draft-set", payload), payload)
+
+    def test_g0_token_does_not_hide_real_unsourced_numbers(self) -> None:
+        payload = self._proposal_only_payload()
+        payload["slides"][0]["evidence_items"][0]["evidence_gap"] = (
+            "G0 前需证明客户现有 5 套系统。"
+        )
+        with self.assertRaises(ProposalOnlyIdentityViolationError):
+            validate_content_stage("slide-draft-set", payload)
+
     def test_proposal_only_scans_all_new_user_visible_semantics(self) -> None:
         fields = (
             "page_purpose",
