@@ -143,6 +143,24 @@ class AcceptanceLedgerTests(unittest.TestCase):
         self.assertIn("9–10. 保留既有专项编号位置", index)
         self.assertIn("11. [内容蓝图侧边栏全稿审核与批次修改设计]", index)
         self.assertIn("第 11 项仅取代旧 UI-03", index)
+        current_product = index.split("### 已批准的 RC1 默认值", 1)[0]
+        prototype_contract = index.split("## 6. 原型清单与正式性", 1)[1].split(
+            "### 尚未确认", 1
+        )[0]
+        v15_history = index.split("## 11. v1.5 变更记录", 1)[1].split(
+            "## 12. v1.6 变更记录", 1
+        )[0]
+        self.assertIn("UI-03 在真实侧边栏先显示框架", current_product)
+        self.assertIn("内容 Browser 仅按 materialRef、slideId、页码或区域", current_product)
+        self.assertIn("只有 G3 视觉 Browser", current_product)
+        self.assertNotIn("内容蓝图与视觉合同共用一份", current_product)
+        self.assertIn("原型 06 | G3 视觉合同 Browser", prototype_contract)
+        self.assertNotIn("06 是当前内容/视觉专业审阅交互的研发参考", prototype_contract)
+        self.assertIn("UI-03 使用宿主最大宽度", prototype_contract)
+        self.assertIn("专业审阅 Header、视觉标记抽屉和右上保存仅属于 G3", prototype_contract)
+        self.assertIn("视觉专业审阅部分继续有效", v15_history)
+        self.assertIn("内容专业审阅部分已被第 11 项取代", v15_history)
+        self.assertNotIn("原型 06 成为内容/视觉专业审阅的交互参考", v15_history)
 
         current_ui = ui.split("## 31. v1.6 变更记录", 1)[0]
         self.assertIn("### 4.3 G3 视觉合同专业审阅页骨架", current_ui)
