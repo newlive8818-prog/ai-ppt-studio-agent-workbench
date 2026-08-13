@@ -320,6 +320,7 @@ class ContentService:
     ) -> str:
         readiness = MissionReadinessPolicy(self.kernel).require_ready()
         lineage = require_full_deck_expansion_authorization(self.kernel)
+        self._reject_supplied_stale_workflow_lineage(payload, lineage)
         governed_payload = self._govern_content_identity(
             {**payload, **lineage}, readiness
         )
@@ -342,6 +343,7 @@ class ContentService:
     ) -> str:
         MissionReadinessPolicy(self.kernel).require_ready()
         lineage = require_full_deck_expansion_authorization(self.kernel)
+        self._reject_supplied_stale_workflow_lineage(payload, lineage)
         normalized = validate_content_review({**payload, **lineage})
         draft_ref = self._require_head("content/draft", "slide-draft-set")
         if (
@@ -766,6 +768,25 @@ class ContentService:
                         for field in CONTENT_WORKFLOW_LINEAGE_FIELDS
                     },
                 },
+            )
+
+    @staticmethod
+    def _reject_supplied_stale_workflow_lineage(
+        payload: dict[str, Any], lineage: dict[str, str]
+    ) -> None:
+        mismatches = {
+            field: {
+                "expected": lineage[field],
+                "actual": str(payload.get(field) or ""),
+            }
+            for field in CONTENT_WORKFLOW_LINEAGE_FIELDS
+            if field in payload and payload.get(field) != lineage[field]
+        }
+        if mismatches:
+            raise ContentWorkflowError(
+                "CONTENT_REVIEW_CONFLICT",
+                "Caller-supplied content lineage is stale or inconsistent",
+                {"mismatches": mismatches},
             )
 
     @staticmethod

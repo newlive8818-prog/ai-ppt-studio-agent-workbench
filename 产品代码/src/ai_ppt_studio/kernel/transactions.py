@@ -158,6 +158,9 @@ class ProjectKernel:
                     "Content framework reset cannot include a gate mutation"
                 )
 
+            migrate_framework_epoch = self._needs_framework_epoch_migration(
+                state, heads
+            )
             consumed, artifact_bindings = self._confirmation_ledger(state, heads)
             current_reset_revision = self._framework_reset_revision(
                 state, heads
@@ -229,7 +232,11 @@ class ProjectKernel:
                     "artifact_bindings": artifact_bindings,
                     "framework_reset_revision": framework_reset_revision,
                 }
-                if consumption_updates or reset_claim is not None
+                if (
+                    consumption_updates
+                    or reset_claim is not None
+                    or migrate_framework_epoch
+                )
                 else None
             )
             ledger_reference = (
@@ -321,6 +328,21 @@ class ProjectKernel:
         artifact_bindings: dict[str, str] = {}
         ledger_ref = heads.get(CONFIRMATION_LEDGER_SLOT, "")
         if not ledger_ref:
+            if heads.get("content/framework-draft"):
+                _epoch, legacy_consumed, legacy_bindings = (
+                    self._infer_legacy_framework_history(
+                        state, heads, artifact_bindings={}
+                    )
+                )
+                for key, value in legacy_consumed.items():
+                    previous = consumed.get(key)
+                    if previous is not None and previous != value:
+                        raise ConfirmationTransactionError(
+                            "CONFIRMATION_HISTORY_CORRUPT",
+                            "Legacy confirmation consumption history conflicts",
+                        )
+                    consumed[key] = value
+                artifact_bindings.update(legacy_bindings)
             return consumed, artifact_bindings
         try:
             reference = ArtifactReference.parse(ledger_ref)
@@ -336,6 +358,7 @@ class ProjectKernel:
             ) from error
         ledger_consumed = payload.get("consumed")
         ledger_bindings = payload.get("artifact_bindings", {})
+        has_framework_epoch = "framework_reset_revision" in payload
         framework_reset_revision = payload.get("framework_reset_revision", 0)
         if (
             isinstance(framework_reset_revision, bool)
@@ -344,6 +367,7 @@ class ProjectKernel:
             or framework_reset_revision > state.revision
             or (
                 bool(heads.get("content/framework-draft"))
+                and has_framework_epoch
                 and framework_reset_revision < 1
             )
         ):
@@ -376,6 +400,12 @@ class ProjectKernel:
                 )
             consumed[key] = value
         artifact_bindings.update(ledger_bindings)
+        if heads.get("content/framework-draft") and not has_framework_epoch:
+            self._infer_legacy_framework_reset_revision(
+                state,
+                heads,
+                artifact_bindings=artifact_bindings,
+            )
         return consumed, artifact_bindings
 
     def _framework_reset_revision(
@@ -384,9 +414,8 @@ class ProjectKernel:
         ledger_ref = heads.get(CONFIRMATION_LEDGER_SLOT, "")
         if not ledger_ref:
             if heads.get("content/framework-draft"):
-                raise ConfirmationTransactionError(
-                    "CONFIRMATION_LEDGER_CORRUPT",
-                    "Framework reset epoch is missing",
+                return self._infer_legacy_framework_reset_revision(
+                    state, heads, artifact_bindings={}
                 )
             return 0
         try:
@@ -396,7 +425,17 @@ class ProjectKernel:
             payload = self.artifacts.resolve(reference)["payload"]
             if not isinstance(payload, dict):
                 raise TypeError("Confirmation ledger payload is invalid")
-            value = payload.get("framework_reset_revision", 0)
+            if "framework_reset_revision" not in payload:
+                consumed = payload.get("consumed")
+                bindings = payload.get("artifact_bindings", {})
+                if not isinstance(consumed, dict) or not isinstance(bindings, dict):
+                    raise ValueError("Legacy confirmation ledger is invalid")
+                return self._infer_legacy_framework_reset_revision(
+                    state,
+                    heads,
+                    artifact_bindings=bindings,
+                )
+            value = payload["framework_reset_revision"]
             if (
                 isinstance(value, bool)
                 or not isinstance(value, int)
@@ -412,6 +451,223 @@ class ProjectKernel:
                 "CONFIRMATION_LEDGER_CORRUPT",
                 "Framework reset epoch is unreadable",
             ) from error
+
+    def _needs_framework_epoch_migration(
+        self, state: KernelState, heads: dict[str, str]
+    ) -> bool:
+        if not heads.get("content/framework-draft"):
+            return False
+        ledger_ref = heads.get(CONFIRMATION_LEDGER_SLOT, "")
+        if not ledger_ref:
+            self._infer_legacy_framework_reset_revision(
+                state, heads, artifact_bindings={}
+            )
+            return True
+        try:
+            reference = ArtifactReference.parse(ledger_ref)
+            if reference.kind != CONFIRMATION_LEDGER_KIND:
+                raise ValueError("Confirmation ledger kind is invalid")
+            payload = self.artifacts.resolve(reference)["payload"]
+            if not isinstance(payload, dict):
+                raise TypeError("Confirmation ledger payload is invalid")
+        except (ArtifactReferenceError, KeyError, TypeError, ValueError) as error:
+            raise ConfirmationTransactionError(
+                "CONFIRMATION_LEDGER_CORRUPT",
+                "Confirmation ledger is unreadable",
+            ) from error
+        if "framework_reset_revision" in payload:
+            return False
+        self._infer_legacy_framework_reset_revision(
+            state,
+            heads,
+            artifact_bindings=payload.get("artifact_bindings", {}),
+        )
+        return True
+
+    def _infer_legacy_framework_reset_revision(
+        self,
+        state: KernelState,
+        heads: dict[str, str],
+        *,
+        artifact_bindings: object,
+    ) -> int:
+        return self._infer_legacy_framework_history(
+            state,
+            heads,
+            artifact_bindings=artifact_bindings,
+        )[0]
+
+    def _infer_legacy_framework_history(
+        self,
+        state: KernelState,
+        heads: dict[str, str],
+        *,
+        artifact_bindings: object,
+    ) -> tuple[int, dict[str, str], dict[str, str]]:
+        """Infer a pre-epoch framework generation from immutable history.
+
+        Legacy schema-3 projects did not persist a framework epoch.  They are
+        accepted only when the complete event chain is continuous, internally
+        identified, and ends at the exact current state.  Any ambiguity remains
+        fail-closed.
+        """
+
+        framework_ref = heads.get("content/framework-draft", "")
+        if not framework_ref:
+            return 0, {}, {}
+        if not isinstance(artifact_bindings, dict) or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in artifact_bindings.items()
+        ):
+            raise ConfirmationTransactionError(
+                "CONFIRMATION_LEDGER_CORRUPT",
+                "Legacy confirmation bindings are invalid",
+            )
+        try:
+            framework_reference = ArtifactReference.parse(framework_ref)
+            if framework_reference.kind != "content-framework-draft":
+                raise ValueError("Current framework kind is invalid")
+            self.artifacts.resolve(framework_reference)
+            event_paths = sorted(self.events_root.glob("r*.json"))
+            if len(event_paths) != state.revision:
+                raise ValueError("Event history is incomplete")
+            events: list[dict[str, Any]] = []
+            transaction_ids: set[str] = set()
+            historical_consumed: dict[str, str] = {}
+            historical_bindings: dict[str, str] = {}
+            for expected_revision, event_path in enumerate(event_paths, start=1):
+                if event_path.name != f"r{expected_revision:08d}.json":
+                    raise ValueError("Event filename is not continuous")
+                event = json.loads(event_path.read_text(encoding="utf-8"))
+                if event.get("revision") != expected_revision:
+                    raise ValueError("Event revision is not continuous")
+                transaction_id = str(event.get("transaction_id") or "")
+                uuid.UUID(transaction_id)
+                if transaction_id in transaction_ids:
+                    raise ValueError("Event transaction identity is duplicated")
+                transaction_ids.add(transaction_id)
+                command_id = str(event.get("command_id") or "")
+                if (
+                    not command_id
+                    or state.processed_commands.get(command_id)
+                    != expected_revision
+                ):
+                    raise ValueError("Event command identity is invalid")
+                event_heads = event.get("artifact_heads")
+                if not isinstance(event_heads, dict) or any(
+                    not isinstance(slot, str) or not isinstance(value, str)
+                    for slot, value in event_heads.items()
+                ):
+                    raise ValueError("Event artifact heads are invalid")
+                event_consumed = event.get("confirmation_consumptions", {})
+                event_bindings = event.get(
+                    "confirmation_artifact_bindings", {}
+                )
+                if (
+                    not isinstance(event_consumed, dict)
+                    or not isinstance(event_bindings, dict)
+                    or any(
+                        not isinstance(key, str) or not isinstance(value, str)
+                        for mapping in (event_consumed, event_bindings)
+                        for key, value in mapping.items()
+                    )
+                ):
+                    raise ValueError("Event confirmation history is invalid")
+                for key, value in event_consumed.items():
+                    previous = historical_consumed.get(key)
+                    if previous is not None and previous != value:
+                        raise ValueError("Confirmation consumption history conflicts")
+                    historical_consumed[key] = value
+                for key, value in event_bindings.items():
+                    previous = historical_bindings.get(key)
+                    if previous is not None and previous != value:
+                        raise ValueError("Confirmation binding history conflicts")
+                    historical_bindings[key] = value
+                events.append(event)
+            if (
+                not events
+                or events[-1]["transaction_id"] != state.last_transaction_id
+                or events[-1]["artifact_heads"] != heads
+            ):
+                raise ValueError("Event history does not terminate at current state")
+
+            reset_revisions = [
+                int(event["revision"])
+                for event in events
+                if event.get("event_type") == "content.framework-draft-saved"
+                and event["artifact_heads"].get("content/framework-draft")
+                == framework_ref
+            ]
+            if not reset_revisions:
+                raise ValueError("Current framework installation is not provable")
+            reset_revision = reset_revisions[-1]
+
+            if artifact_bindings and artifact_bindings != historical_bindings:
+                raise ValueError("Legacy ledger bindings conflict with event history")
+
+            confirmation_ref = heads.get("content/framework-confirmation", "")
+            authorization_ref = heads.get(
+                "content/full-deck-expansion-authorization", ""
+            )
+            confirmation_revision = self._legacy_binding_revision(
+                events,
+                slot="content/framework-confirmation",
+                reference=confirmation_ref,
+                event_type="content.framework-confirmed",
+                artifact_bindings=historical_bindings,
+            )
+            authorization_revision = self._legacy_binding_revision(
+                events,
+                slot="content/full-deck-expansion-authorization",
+                reference=authorization_ref,
+                event_type="content.full-deck-expansion-authorized",
+                artifact_bindings=historical_bindings,
+            )
+            if confirmation_ref and confirmation_revision <= reset_revision:
+                raise ValueError("Framework confirmation predates current reset")
+            if authorization_ref and (
+                not confirmation_ref
+                or authorization_revision <= confirmation_revision
+            ):
+                raise ValueError("Expansion authorization chronology is invalid")
+            return reset_revision, historical_consumed, historical_bindings
+        except ConfirmationTransactionError:
+            raise
+        except (
+            ArtifactReferenceError,
+            KeyError,
+            OSError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as error:
+            raise ConfirmationTransactionError(
+                "CONFIRMATION_HISTORY_CORRUPT",
+                "Legacy framework history cannot be proven",
+            ) from error
+
+    @staticmethod
+    def _legacy_binding_revision(
+        events: list[dict[str, Any]],
+        *,
+        slot: str,
+        reference: str,
+        event_type: str,
+        artifact_bindings: dict[str, str],
+    ) -> int:
+        if not reference:
+            return 0
+        revisions = [
+            int(event["revision"])
+            for event in events
+            if event.get("event_type") == event_type
+            and event["artifact_heads"].get(slot) == reference
+            and reference
+            in dict(event.get("confirmation_artifact_bindings") or {}).values()
+        ]
+        if not revisions or reference not in artifact_bindings.values():
+            raise ValueError(f"Current {slot} binding is not provable")
+        return revisions[-1]
 
     def current_framework_reset_revision(self) -> int:
         """Return the kernel-owned irreversible framework reset epoch."""

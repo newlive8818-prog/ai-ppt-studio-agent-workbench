@@ -165,6 +165,105 @@ def register_reviews(
 
 
 class V16ContentAcceptanceTests(unittest.TestCase):
+    def test_stage_and_review_reject_supplied_stale_framework_lineage_zero_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
+        ):
+            service = ContentService.initialize(Path(temp), project_id="stale-lineage")
+            revision, draft_ref, old_lineage_tuple = build_authorized_draft(service)
+            old_lineage = dict(zip(
+                (
+                    "framework_ref",
+                    "framework_confirmation_ref",
+                    "full_deck_expansion_authorization_ref",
+                ),
+                old_lineage_tuple,
+            ))
+            mission_confirmation = service.kernel.load().artifact_heads[
+                "mission/confirmation"
+            ]
+            authorize_current_framework(service, mission_confirmation, version=2)
+            current = service.kernel.load()
+            strategy_ref = service.register_content_stage(
+                "v2-strategy", current.revision, "strategy", {
+                    "mission_ref": current.artifact_heads["mission/draft"],
+                    "material_inventory_ref": current.artifact_heads["materials"],
+                    "content_identity_mode": "material-backed",
+                    "decision_stage": "立项", "core_tension": "系统割裂",
+                }
+            )
+            claim_ref = service.register_content_stage(
+                "v2-claim", service.kernel.load().revision, "claim-map", {
+                    "strategy_ref": strategy_ref,
+                    "claims": [{
+                        "claim_id": "v2-c1", "status": "supported",
+                        "evidence_refs": [current.artifact_heads["materials"]],
+                    }],
+                }
+            )
+            argument_ref = service.register_content_stage(
+                "v2-argument", service.kernel.load().revision, "argument-map", {
+                    "strategy_ref": strategy_ref,
+                    "claim_evidence_map_ref": claim_ref,
+                    "chapters": [{"chapter_id": "ch1", "task": "建立问题共识"}],
+                }
+            )
+            current_draft_ref = service.register_content_stage(
+                "v2-draft", service.kernel.load().revision, "slide-draft-set",
+                complete_slide_draft_payload(
+                    argument_map_ref=argument_ref,
+                    material_ref=current.artifact_heads["materials"],
+                ),
+            )
+            current = service.kernel.load()
+
+            stale_strategy = {
+                "mission_ref": current.artifact_heads["mission/draft"],
+                "material_inventory_ref": current.artifact_heads["materials"],
+                "content_identity_mode": "material-backed",
+                "decision_stage": "立项",
+                "core_tension": "系统割裂",
+                **old_lineage,
+            }
+            stale_review = {
+                **review_payload(
+                    current_draft_ref, REQUIRED_CONTENT_REVIEW_ROLES[0]
+                ),
+                **old_lineage,
+            }
+            for command_id, operation in (
+                (
+                    "reject-stale-stage-lineage",
+                    lambda: service.register_content_stage(
+                        "reject-stale-stage-lineage",
+                        service.kernel.load().revision,
+                        "strategy",
+                        stale_strategy,
+                    ),
+                ),
+                (
+                    "reject-stale-review-lineage",
+                    lambda: service.register_review(
+                        "reject-stale-review-lineage",
+                        service.kernel.load().revision,
+                        stale_review,
+                    ),
+                ),
+            ):
+                with self.subTest(command_id=command_id):
+                    before = service.kernel.load()
+                    events = tuple(service.kernel.events_root.iterdir())
+                    objects = tuple(service.kernel.artifacts.objects_root.rglob("*"))
+                    with self.assertRaises(ContentWorkflowError) as caught:
+                        operation()
+                    self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+                    self.assertEqual(service.kernel.load(), before)
+                    self.assertEqual(tuple(service.kernel.events_root.iterdir()), events)
+                    self.assertEqual(
+                        tuple(service.kernel.artifacts.objects_root.rglob("*")),
+                        objects,
+                    )
+
     def test_acceptance_revalidates_every_current_content_chain_head_zero_write(self) -> None:
         stages = {
             "content/strategy": "presales-content-strategy",

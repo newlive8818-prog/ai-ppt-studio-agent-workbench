@@ -35,6 +35,7 @@ from ai_ppt_studio.kernel.transactions import (
     CONFIRMATION_LEDGER_KIND,
     CONFIRMATION_LEDGER_SLOT,
 )
+from ai_ppt_studio.json_io import atomic_write_json
 
 
 TEST_SECRET = "test-only-scoped-confirmation-secret-32-bytes-minimum"
@@ -188,6 +189,39 @@ class FrameworkDiscussionTests(unittest.TestCase):
             for path in (root.rglob("*.json") if root.is_dir() else (root,))
         }
 
+    def _rewrite_as_legacy_epoch_state(self, *, keep_legacy_ledger: bool) -> None:
+        """Rewrite modern fixtures into the exact pre-epoch on-disk shape."""
+
+        state = self.kernel.load()
+        rewritten_heads = dict(state.artifact_heads)
+        for event_path in sorted(self.kernel.events_root.glob("r*.json")):
+            event = json.loads(event_path.read_text(encoding="utf-8"))
+            heads = dict(event["artifact_heads"])
+            ledger_ref = heads.get(CONFIRMATION_LEDGER_SLOT, "")
+            if ledger_ref and keep_legacy_ledger:
+                payload = dict(
+                    self.kernel.artifacts.resolve(
+                        ArtifactReference.parse(ledger_ref)
+                    )["payload"]
+                )
+                payload.pop("framework_reset_revision", None)
+                legacy_ref = str(
+                    self.kernel.artifacts.put(CONFIRMATION_LEDGER_KIND, payload)
+                )
+                heads[CONFIRMATION_LEDGER_SLOT] = legacy_ref
+                if event["revision"] == state.revision:
+                    rewritten_heads[CONFIRMATION_LEDGER_SLOT] = legacy_ref
+            else:
+                heads.pop(CONFIRMATION_LEDGER_SLOT, None)
+                if event["revision"] == state.revision:
+                    rewritten_heads.pop(CONFIRMATION_LEDGER_SLOT, None)
+            event["artifact_heads"] = heads
+            atomic_write_json(event_path, event)
+        atomic_write_json(
+            self.kernel.state_path,
+            replace(state, artifact_heads=rewritten_heads).as_dict(),
+        )
+
     def test_save_draft_keeps_g0_open_and_exposes_no_page_content(self) -> None:
         framework_ref, state = self._save()
 
@@ -248,6 +282,131 @@ class FrameworkDiscussionTests(unittest.TestCase):
         )
         self.assertGreater(second_reset.revision, first_epoch)
 
+    def test_legacy_framework_without_ledger_migrates_on_save_draft(self) -> None:
+        self._save()
+        self._rewrite_as_legacy_epoch_state(keep_legacy_ledger=False)
+        legacy = self.kernel.load()
+        self.assertNotIn(CONFIRMATION_LEDGER_SLOT, legacy.artifact_heads)
+
+        _ref, migrated = self.service.save_draft(
+            command_id="migrate-legacy-framework-without-ledger",
+            expected_revision=legacy.revision,
+            payload=valid_framework(self.mission_confirmation_ref, version=2),
+        )
+
+        self.assertEqual(
+            self.kernel.current_framework_reset_revision(), migrated.revision
+        )
+        ledger = self.kernel.artifacts.resolve(
+            ArtifactReference.parse(
+                migrated.artifact_heads[CONFIRMATION_LEDGER_SLOT]
+            )
+        )["payload"]
+        self.assertEqual(ledger["framework_reset_revision"], migrated.revision)
+
+    def test_legacy_authorized_chain_without_ledger_migrates_trust_history(self) -> None:
+        framework_ref, _state = self._save()
+        confirmation_ref, _state = self._confirm(framework_ref)
+        authorization_ref, _state = self._authorize(framework_ref)
+        self._rewrite_as_legacy_epoch_state(keep_legacy_ledger=False)
+        legacy = self.kernel.load()
+
+        migrated = self.kernel.commit(
+            command_id="migrate-authorized-chain-without-ledger",
+            expected_revision=legacy.revision,
+            event_type="test.authorized-legacy-chain-migrated",
+            artifact_updates={
+                "test/migration-marker": ("migration-marker", {"ok": True})
+            },
+        )
+
+        ledger = self.kernel.artifacts.resolve(
+            ArtifactReference.parse(
+                migrated.artifact_heads[CONFIRMATION_LEDGER_SLOT]
+            )
+        )["payload"]
+        self.assertIn(confirmation_ref, ledger["artifact_bindings"].values())
+        self.assertIn(authorization_ref, ledger["artifact_bindings"].values())
+        from ai_ppt_studio.application.content_service import (
+            require_full_deck_expansion_authorization,
+        )
+        self.assertEqual(
+            require_full_deck_expansion_authorization(self.kernel),
+            {
+                "framework_ref": framework_ref,
+                "framework_confirmation_ref": confirmation_ref,
+                "full_deck_expansion_authorization_ref": authorization_ref,
+            },
+        )
+
+    def test_legacy_ledger_without_epoch_migrates_on_ordinary_commit(self) -> None:
+        framework_ref, _state = self._save()
+        self._confirm(framework_ref)
+        self._authorize(framework_ref)
+        self._rewrite_as_legacy_epoch_state(keep_legacy_ledger=True)
+        legacy = self.kernel.load()
+        legacy_revision = legacy.revision
+
+        migrated = self.kernel.commit(
+            command_id="migrate-legacy-ledger-on-ordinary-commit",
+            expected_revision=legacy_revision,
+            event_type="test.legacy-ledger-migrated",
+            artifact_updates={
+                "test/migration-marker": ("migration-marker", {"ok": True})
+            },
+        )
+
+        self.assertEqual(
+            self.kernel.current_framework_reset_revision(),
+            3,
+        )
+        ledger = self.kernel.artifacts.resolve(
+            ArtifactReference.parse(
+                migrated.artifact_heads[CONFIRMATION_LEDGER_SLOT]
+            )
+        )["payload"]
+        self.assertEqual(ledger["framework_reset_revision"], 3)
+
+    def test_legacy_epoch_inference_rejects_ambiguous_history_zero_write(self) -> None:
+        self._save()
+        self._rewrite_as_legacy_epoch_state(keep_legacy_ledger=False)
+        latest = self.kernel.events_root / f"r{self.kernel.load().revision:08d}.json"
+        event = json.loads(latest.read_text(encoding="utf-8"))
+        event["transaction_id"] = "not-the-state-transaction"
+        atomic_write_json(latest, event)
+        before = self._filesystem_snapshot()
+
+        with self.assertRaises(ConfirmationTransactionError) as raised:
+            self.kernel.commit(
+                command_id="reject-ambiguous-legacy-history",
+                expected_revision=self.kernel.load().revision,
+                event_type="test.must-not-write",
+                artifact_updates={"test/no-write": ("marker", {"x": 1})},
+            )
+
+        self.assertEqual(raised.exception.code, "CONFIRMATION_HISTORY_CORRUPT")
+        self.assertEqual(self._filesystem_snapshot(), before)
+
+    def test_legacy_epoch_inference_rejects_tampered_reset_event_type(self) -> None:
+        self._save()
+        self._rewrite_as_legacy_epoch_state(keep_legacy_ledger=False)
+        reset_event = self.kernel.events_root / "r00000003.json"
+        event = json.loads(reset_event.read_text(encoding="utf-8"))
+        event["event_type"] = "test.disguised-framework-reset"
+        atomic_write_json(reset_event, event)
+        before = self._filesystem_snapshot()
+
+        with self.assertRaises(ConfirmationTransactionError) as raised:
+            self.kernel.commit(
+                command_id="reject-tampered-legacy-reset-type",
+                expected_revision=self.kernel.load().revision,
+                event_type="test.must-not-write",
+                artifact_updates={"test/no-write": ("marker", {"x": 1})},
+            )
+
+        self.assertEqual(raised.exception.code, "CONFIRMATION_HISTORY_CORRUPT")
+        self.assertEqual(self._filesystem_snapshot(), before)
+
     def test_business_commit_cannot_update_or_remove_confirmation_ledger(self) -> None:
         self._save()
         before = self._filesystem_snapshot()
@@ -303,7 +462,10 @@ class FrameworkDiscussionTests(unittest.TestCase):
             },
         )
 
-        for corrupted in (without_ledger, malformed_ledger):
+        for corrupted, expected_code in (
+            (without_ledger, "CONFIRMATION_HISTORY_CORRUPT"),
+            (malformed_ledger, "CONFIRMATION_LEDGER_CORRUPT"),
+        ):
             with self.subTest(heads=corrupted.artifact_heads), patch.object(
                 self.kernel,
                 "load",
@@ -312,7 +474,7 @@ class FrameworkDiscussionTests(unittest.TestCase):
                 self.kernel.current_framework_reset_revision()
             self.assertEqual(
                 raised.exception.code,
-                "CONFIRMATION_LEDGER_CORRUPT",
+                expected_code,
             )
 
     def test_draft_must_bind_the_current_mission_confirmation(self) -> None:

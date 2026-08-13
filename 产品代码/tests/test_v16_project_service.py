@@ -166,9 +166,13 @@ class V16ProjectServiceTests(unittest.TestCase):
             framework_ref, confirmation_ref, authorization_ref = (
                 _save_confirm_authorize(kernel, mission_confirmation_ref)
             )
+            strategy_targets = [
+                mission_ref, mission_confirmation_ref, framework_ref,
+                confirmation_ref, authorization_ref,
+            ]
             _ref, _task, authorized = command.request_agent_action(
                 "full-deck-authorized", kernel.load().revision,
-                action_type="build-presales-strategy", target_refs=[target],
+                action_type="build-presales-strategy", target_refs=strategy_targets,
                 instructions="展开逐页内容",
             )
             context_ref = authorized.artifact_heads[
@@ -219,7 +223,8 @@ class V16ProjectServiceTests(unittest.TestCase):
                 command.request_agent_action(
                     "expand-authorized-blueprint", kernel.load().revision,
                     action_type="expand-full-content-blueprint",
-                    target_refs=[target], instructions="按已授权框架展开全篇",
+                    target_refs=[framework_ref, confirmation_ref, authorization_ref],
+                    instructions="按已授权框架展开全篇",
                 )
             )
             self.assertEqual(
@@ -237,6 +242,63 @@ class V16ProjectServiceTests(unittest.TestCase):
                     instructions="不应放行",
                 )
             self.assertEqual(stale.exception.code, "FULL_DECK_EXPANSION_NOT_AUTHORIZED")
+
+    def test_content_action_requires_exact_current_policy_targets_zero_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config, _profile = runtime_config(Path(temp))
+            kernel = ProjectService(config).create_project("exact targets")
+            content = ContentService(kernel)
+            mission_ref = content.save_mission_draft(
+                "target-mission", kernel.load().revision, {
+                    "topic": "经营一体化", "primary_audience": "决策者",
+                    "desired_judgment_or_action": "批准一期",
+                }
+            )
+            mission_confirmation_ref = content.confirm_mission(
+                "target-confirm", kernel.load().revision,
+                mission_draft_ref=mission_ref,
+                material_mode="no-materials-confirmed",
+                material_inventory_ref="",
+                user_action_ref="test-user-action://exact-targets",
+                user_message_ref="",
+            )
+            framework_ref, confirmation_ref, authorization_ref = (
+                _save_confirm_authorize(kernel, mission_confirmation_ref)
+            )
+            commands = ProjectCommandService(kernel)
+            exact = [
+                mission_ref, mission_confirmation_ref, framework_ref,
+                confirmation_ref, authorization_ref,
+            ]
+            manifest_ref = kernel.load().artifact_heads["project/manifest"]
+            for label, invalid_targets in (
+                ("missing", exact[:-1]),
+                ("extra", [*exact, manifest_ref]),
+                ("historical", [*exact[:2], "artifact://content-framework-draft/" + "f" * 64, *exact[-2:]]),
+            ):
+                with self.subTest(label=label):
+                    before = kernel.load()
+                    events = tuple(kernel.events_root.iterdir())
+                    objects = tuple(kernel.artifacts.objects_root.rglob("*"))
+                    with self.assertRaises(ContentWorkflowError) as caught:
+                        commands.request_agent_action(
+                            f"invalid-targets:{label}", before.revision,
+                            action_type="build-presales-strategy",
+                            target_refs=invalid_targets,
+                            instructions="展开内容策略",
+                        )
+                    self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+                    self.assertEqual(kernel.load(), before)
+                    self.assertEqual(tuple(kernel.events_root.iterdir()), events)
+                    self.assertEqual(tuple(kernel.artifacts.objects_root.rglob("*")), objects)
+
+            _task_ref, task, _state = commands.request_agent_action(
+                "valid-exact-targets", kernel.load().revision,
+                action_type="build-presales-strategy",
+                target_refs=exact,
+                instructions="展开内容策略",
+            )
+            self.assertEqual(set(task["target_refs"]), set(exact))
 
     def test_expand_full_blueprint_is_registered_but_requires_authorization(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -663,7 +725,9 @@ class V16ProjectServiceTests(unittest.TestCase):
                     "project_root": project_root,
                     "expected_revision": 4,
                     "action_type": "build-content-framework",
-                    "target_refs": [mission_ref, material_ref],
+                    "target_refs": [
+                        mission_ref, confirmation["artifact_ref"], material_ref
+                    ],
                     "instructions": "先构建售前策略，不讨论视觉。",
                 }
             )["result"]
@@ -747,14 +811,20 @@ class V16ProjectServiceTests(unittest.TestCase):
             mission_confirmation_ref = kernel.load().artifact_heads[
                 "mission/confirmation"
             ]
-            _save_confirm_authorize(kernel, mission_confirmation_ref)
+            framework_ref, framework_confirmation_ref, authorization_ref = (
+                _save_confirm_authorize(kernel, mission_confirmation_ref)
+            )
             requested = dispatch_v16(
                 {
                     "operation": "request-agent-action",
                     "project_root": project_root,
                     "expected_revision": 7,
                     "action_type": "build-presales-strategy",
-                    "target_refs": [mission_ref, material_ref],
+                    "target_refs": [
+                        mission_ref, mission_confirmation_ref, material_ref,
+                        framework_ref, framework_confirmation_ref,
+                        authorization_ref,
+                    ],
                     "instructions": "只依据用户材料形成策略。",
                 }
             )["result"]
@@ -799,6 +869,70 @@ class V16ProjectServiceTests(unittest.TestCase):
             self.assertEqual(
                 active_task["result_refs"], [committed["artifact_ref"]]
             )
+
+    def test_stale_agent_result_after_framework_reset_is_rejected_zero_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config, _profile = runtime_config(Path(temp))
+            kernel = ProjectService(config).create_project("stale result")
+            content = ContentService(kernel)
+            mission_ref = content.save_mission_draft("sr-mission", 1, {
+                "topic": "经营一体化", "primary_audience": "决策者",
+                "desired_judgment_or_action": "批准一期",
+            })
+            materials_ref = content.register_materials("sr-materials", 2, {"sources": [{
+                "source_id": "s1", "origin": "user-provided", "kind": "text",
+                "locator": "inline://s1", "sha256": "a" * 64,
+            }]})
+            mission_confirmation_ref = content.confirm_mission(
+                "sr-confirm", 3, mission_draft_ref=mission_ref,
+                material_mode="materials-provided",
+                material_inventory_ref=materials_ref,
+                user_action_ref="test-user-action://stale-result", user_message_ref="",
+            )
+            framework_ref, confirmation_ref, authorization_ref = (
+                _save_confirm_authorize(kernel, mission_confirmation_ref)
+            )
+            requested = dispatch_v16({
+                "operation": "request-agent-action",
+                "project_root": str(kernel.project_root),
+                "expected_revision": kernel.load().revision,
+                "command_id": "stale-v1-task",
+                "action_type": "build-presales-strategy",
+                "target_refs": [
+                    mission_ref, mission_confirmation_ref, materials_ref,
+                    framework_ref, confirmation_ref, authorization_ref,
+                ],
+                "instructions": "生成 v1 策略",
+            })["result"]
+            task_id = requested["task"]["task_id"]
+            FrameworkDiscussionService(kernel).save_draft(
+                "sr-framework-v2", kernel.load().revision,
+                _framework_payload(mission_confirmation_ref, 2),
+            )
+            before = kernel.load()
+            events = tuple(kernel.events_root.iterdir())
+            objects = tuple(kernel.artifacts.objects_root.rglob("*"))
+
+            with self.assertRaises(ContentWorkflowError) as caught:
+                dispatch_v16({
+                    "operation": "commit-artifact",
+                    "project_root": str(kernel.project_root),
+                    "expected_revision": before.revision,
+                    "command_id": "commit-stale-v1-result",
+                    "kind": "content-blueprint",
+                    "task_id": task_id,
+                    "payload": {
+                        "artifact_type": "presales-content-strategy",
+                        "mission_ref": mission_ref,
+                        "material_inventory_ref": materials_ref,
+                        "content_identity_mode": "material-backed",
+                        "decision_stage": "立项", "core_tension": "系统割裂",
+                    },
+                })
+            self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+            self.assertEqual(kernel.load(), before)
+            self.assertEqual(tuple(kernel.events_root.iterdir()), events)
+            self.assertEqual(tuple(kernel.artifacts.objects_root.rglob("*")), objects)
 
     def test_public_artifact_route_reaches_every_content_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -960,8 +1094,35 @@ class V16ProjectServiceTests(unittest.TestCase):
                 user_action_ref="test-user-action://reviewer-binding-contract",
                 user_message_ref="",
             )
-            _save_confirm_authorize(kernel, mission_confirmation_ref)
-            target_ref = kernel.load().artifact_heads["project/manifest"]
+            framework_ref, framework_confirmation_ref, authorization_ref = (
+                _save_confirm_authorize(kernel, mission_confirmation_ref)
+            )
+            strategy_ref = content.register_content_stage(
+                "reviewers:strategy", kernel.load().revision, "strategy", {
+                    "mission_ref": mission_ref,
+                    "material_inventory_ref": materials_ref,
+                    "content_identity_mode": "material-backed",
+                    "decision_stage": "立项", "core_tension": "系统割裂",
+                }
+            )
+            claim_ref = content.register_content_stage(
+                "reviewers:claim", kernel.load().revision, "claim-map", {
+                    "strategy_ref": strategy_ref,
+                    "claims": [{"claim_id": "c1", "status": "supported", "evidence_refs": [materials_ref]}],
+                }
+            )
+            argument_ref = content.register_content_stage(
+                "reviewers:argument", kernel.load().revision, "argument-map", {
+                    "strategy_ref": strategy_ref, "claim_evidence_map_ref": claim_ref,
+                    "chapters": [{"chapter_id": "c1", "task": "建立共识"}],
+                }
+            )
+            draft_ref = content.register_content_stage(
+                "reviewers:draft-set", kernel.load().revision, "slide-draft-set",
+                complete_slide_draft_payload(
+                    argument_map_ref=argument_ref, material_ref=materials_ref
+                ),
+            )
             actions = {
                 "review-content-presales": "presales-content-reviewer",
                 "review-content-decision-maker": "audience-decision-reviewer",
@@ -970,8 +1131,14 @@ class V16ProjectServiceTests(unittest.TestCase):
                 "review-content-editorial": "reading-experience-reviewer",
             }
 
-            revision = 7
+            revision = kernel.load().revision
             for action, role_id in actions.items():
+                target_refs = [
+                    framework_ref, framework_confirmation_ref,
+                    authorization_ref, draft_ref,
+                ]
+                if action == "review-content-evidence":
+                    target_refs.append(materials_ref)
                 result = dispatch_v16(
                     {
                         "operation": "request-agent-action",
@@ -979,7 +1146,7 @@ class V16ProjectServiceTests(unittest.TestCase):
                         "expected_revision": revision,
                         "command_id": f"task:{action}",
                         "action_type": action,
-                        "target_refs": [target_ref],
+                        "target_refs": target_refs,
                         "instructions": "独立审查当前内容，不读取其他审查结论。",
                     }
                 )["result"]

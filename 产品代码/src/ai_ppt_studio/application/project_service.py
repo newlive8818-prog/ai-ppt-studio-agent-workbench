@@ -16,6 +16,7 @@ from typing import Any
 
 from ai_ppt_studio.config import RuntimeConfig
 from ai_ppt_studio.errors import (
+    ArtifactReferenceError,
     ContractValidationError,
     ProjectNotFoundError,
 )
@@ -23,6 +24,15 @@ from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.state import KernelState
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 from ai_ppt_studio.paths import PathPolicy
+from ai_ppt_studio.application.content_action_policy import (
+    BATCH_APPLY_ACTIONS,
+    BATCH_PLAN_ACTIONS,
+    CONTENT_ACTIONS,
+    FRAMEWORK_ACTIONS,
+    FULL_DECK_CONTENT_ACTIONS,
+    CONTENT_ACTION_CONTRACTS,
+    validate_content_action_targets,
+)
 
 
 SAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
@@ -55,30 +65,6 @@ ACTION_ROLES = {
     "evaluate-experience": "experience-evaluator",
     "coordinate-delivery": "delivery-coordinator",
 }
-
-FRAMEWORK_ACTIONS = frozenset({"build-content-framework"})
-
-FULL_DECK_CONTENT_ACTIONS = frozenset(
-    {
-        "build-presales-strategy",
-        "build-claim-evidence-map",
-        "build-deck-argument-map",
-        "build-slide-draft-set",
-        "repair-content",
-        "review-content-presales",
-        "review-content-decision-maker",
-        "review-content-evidence",
-        "review-content-narrative",
-        "review-content-editorial",
-        "aggregate-content-reviews",
-        "expand-full-content-blueprint",
-    }
-)
-
-BATCH_PLAN_ACTIONS = frozenset({"propose-content-batch-revision-plan"})
-BATCH_APPLY_ACTIONS = frozenset({"apply-content-batch-revision"})
-CONTENT_ACTIONS = FULL_DECK_CONTENT_ACTIONS | BATCH_PLAN_ACTIONS | BATCH_APPLY_ACTIONS
-
 
 def _normalize_project_id(value: str) -> str:
     identity = unicodedata.normalize("NFC", value.strip())
@@ -339,13 +325,20 @@ class ProjectCommandService:
             )
         if not target_refs:
             raise ContractValidationError("Agent task requires target_refs")
+        content_contract = CONTENT_ACTION_CONTRACTS.get(action)
+        if content_contract is not None and role_id != content_contract.role_id:
+            raise ContractValidationError(
+                "Content action role registry conflicts with the action policy"
+            )
         if action in FRAMEWORK_ACTIONS:
             from ai_ppt_studio.application.mission_readiness import (
                 MissionReadinessPolicy,
             )
 
             MissionReadinessPolicy(self.kernel).require_ready()
-            self._validate_framework_targets(target_refs)
+            validate_content_action_targets(
+                action, target_refs, self.kernel.load().artifact_heads
+            )
         elif action in CONTENT_ACTIONS:
             from ai_ppt_studio.application.mission_readiness import (
                 MissionReadinessPolicy,
@@ -356,14 +349,9 @@ class ProjectCommandService:
 
             MissionReadinessPolicy(self.kernel).require_ready()
             require_full_deck_expansion_authorization(self.kernel)
-            if action in BATCH_PLAN_ACTIONS | BATCH_APPLY_ACTIONS:
-                from ai_ppt_studio.errors import ContentWorkflowError
-
-                raise ContentWorkflowError(
-                    "CONTENT_REVIEW_CONFLICT",
-                    "Batch content actions are registered but unavailable until their governed contracts exist",
-                    {"action_type": action, "revision": self.kernel.load().revision},
-                )
+            validate_content_action_targets(
+                action, target_refs, self.kernel.load().artifact_heads
+            )
         for value in target_refs:
             self.kernel.artifacts.resolve(ArtifactReference.parse(value))
         from ai_ppt_studio.context_compiler import ContextCompiler
@@ -405,28 +393,6 @@ class ProjectCommandService:
         )
         return state.artifact_heads["agent/task/active"], task, state
 
-    def _validate_framework_targets(self, target_refs: list[str]) -> None:
-        from ai_ppt_studio.errors import ContentWorkflowError
-
-        state = self.kernel.load()
-        allowed = {
-            state.artifact_heads[slot]
-            for slot in (
-                "mission/draft",
-                "mission/confirmation",
-                "materials",
-                "content/framework-draft",
-            )
-            if state.artifact_heads.get(slot)
-        }
-        invalid = [value for value in target_refs if value not in allowed]
-        if invalid:
-            raise ContentWorkflowError(
-                "CONTENT_REVIEW_CONFLICT",
-                "Framework tasks may target only current Mission, material, or framework identities",
-                {"invalid_target_refs": invalid, "revision": state.revision},
-            )
-
     def require_active_agent_task(self, task_id: str) -> dict[str, Any]:
         """Resolve one exact active task before accepting its result."""
 
@@ -446,6 +412,88 @@ class ProjectCommandService:
                 "Artifact result task_id must match the active Agent task"
             )
         return dict(task)
+
+    def preflight_content_agent_result(
+        self,
+        *,
+        task_id: str,
+        expected_action: str,
+        expected_revision: int,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Validate task, context, targets, and lineage before result writes."""
+
+        from ai_ppt_studio.application.content_service import (
+            require_full_deck_expansion_authorization,
+        )
+        from ai_ppt_studio.errors import ContentWorkflowError
+
+        state = self.kernel.load()
+        task = self.require_active_agent_task(task_id)
+        try:
+            if state.revision != expected_revision:
+                raise ValueError("result revision is stale")
+            if task.get("status") != "queued":
+                raise ValueError("Agent task is not active")
+            if task.get("action_type") != expected_action:
+                raise ValueError("Agent task action does not match result")
+            input_revision = task.get("input_revision")
+            if isinstance(input_revision, bool) or not isinstance(input_revision, int):
+                raise ValueError("Agent task input revision is invalid")
+            context_ref = str(task.get("context_pack_ref") or "")
+            context_reference = ArtifactReference.parse(context_ref)
+            if context_reference.kind != "context-pack":
+                raise ValueError("Agent ContextPack kind is invalid")
+            exact_context_ref = state.artifact_heads.get(
+                f"agent/context/{task_id}", ""
+            )
+            if exact_context_ref != context_ref:
+                raise ValueError("Agent ContextPack is not the exact task context")
+            context = dict(
+                self.kernel.artifacts.resolve(context_reference)["payload"]
+            )
+            if (
+                context.get("project_id") != state.project_id
+                or context.get("project_revision") != input_revision
+                or context.get("layers", {}).get("task_contract", {}).get(
+                    "task_type"
+                )
+                != expected_action
+                or context.get("layers", {}).get("task_contract", {}).get(
+                    "target_refs"
+                )
+                != task.get("target_refs")
+                or context.get("artifact_version_refs") != task.get("target_refs")
+            ):
+                raise ValueError("Agent ContextPack task contract is invalid")
+            lineage = require_full_deck_expansion_authorization(self.kernel)
+            workflow = context.get("layers", {}).get("content_workflow")
+            if not isinstance(workflow, dict) or any(
+                workflow.get(field) != value
+                for field, value in lineage.items()
+            ):
+                raise ValueError("Agent ContextPack framework lineage is stale")
+            validate_content_action_targets(
+                expected_action,
+                list(task.get("target_refs") or []),
+                state.artifact_heads,
+            )
+        except (
+            ArtifactReferenceError,
+            KeyError,
+            TypeError,
+            ValueError,
+            ContentWorkflowError,
+        ):
+            raise ContentWorkflowError(
+                "CONTENT_REVIEW_CONFLICT",
+                "Agent result provenance is stale or inconsistent",
+                {
+                    "task_id": task_id,
+                    "expected_action": expected_action,
+                    "revision": state.revision,
+                },
+            ) from None
+        return task, context
 
     def complete_agent_task(
         self,

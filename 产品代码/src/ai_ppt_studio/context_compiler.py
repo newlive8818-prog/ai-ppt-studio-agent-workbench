@@ -11,11 +11,14 @@ from ai_ppt_studio.kernel.transactions import ProjectKernel
 from ai_ppt_studio.role_registry import RoleRegistry
 from ai_ppt_studio.scenario_packs import ScenarioPackRegistry
 from ai_ppt_studio.application.mission_readiness import MissionReadinessPolicy
-from ai_ppt_studio.application.project_service import (
+from ai_ppt_studio.application.content_action_policy import (
     BATCH_APPLY_ACTIONS,
     BATCH_PLAN_ACTIONS,
+    CONTENT_ACTIONS,
     FRAMEWORK_ACTIONS,
     FULL_DECK_CONTENT_ACTIONS,
+    content_action_contract,
+    validate_content_action_targets,
 )
 
 
@@ -51,6 +54,15 @@ class ContextCompiler:
                 "Context Pack project_revision must equal the current revision"
             )
         role = RoleRegistry.default().get(role_id)
+        action_contract = content_action_contract(task_type)
+        if action_contract is not None:
+            if role_id != action_contract.role_id:
+                raise WorkbenchValidationError(
+                    "Context Pack role does not match content action policy"
+                )
+            validate_content_action_targets(
+                task_type, target_refs, state.artifact_heads
+            )
         if task_type in FRAMEWORK_ACTIONS:
             MissionReadinessPolicy(self.kernel).require_ready()
         elif task_type in (
@@ -138,9 +150,9 @@ class ContextCompiler:
                 "batch_revision_plan_ref": "",
                 "batch_plan_confirmation_ref": "",
             }
-        allowed_content_heads = (
-            {"content/framework-draft"}
-            if task_type in FRAMEWORK_ACTIONS
+        active_head_slots = (
+            set(action_contract.active_head_slots)
+            if action_contract is not None
             else None
         )
         return {
@@ -193,22 +205,21 @@ class ContextCompiler:
                     "active_head_refs": {
                         key: value
                         for key, value in state.artifact_heads.items()
-                        if key
-                        in {
-                            "mission/draft",
-                            "mission/confirmation",
-                            "materials",
-                            "human/decision/latest",
-                        }
-                        or (
-                            key.startswith("content/")
-                            and (
-                                allowed_content_heads is None
-                                or key in allowed_content_heads
+                        if (
+                            key in active_head_slots
+                            if active_head_slots is not None
+                            else (
+                                key in {
+                                    "mission/draft",
+                                    "mission/confirmation",
+                                    "materials",
+                                    "human/decision/latest",
+                                }
+                                or key.startswith("content/")
+                                or key.startswith("visual/")
+                                or key.startswith("delivery/")
                             )
                         )
-                        or key.startswith("visual/")
-                        or key.startswith("delivery/")
                     },
                 },
                 "project_facts": {

@@ -306,7 +306,30 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
             raise ContractValidationError("payload must be an object")
         kind = str(request.get("kind") or "")
         task_id = str(request.get("task_id") or "").strip()
-        if task_id:
+        content_action_by_artifact = {
+            "presales-content-strategy": "build-presales-strategy",
+            "claim-evidence-map": "build-claim-evidence-map",
+            "deck-argument-map": "build-deck-argument-map",
+            "slide-draft-set": "build-slide-draft-set",
+            "content-review-record": {
+                "presales-reviewer": "review-content-presales",
+                "decision-maker-reviewer": "review-content-decision-maker",
+                "evidence-reviewer": "review-content-evidence",
+                "narrative-reviewer": "review-content-narrative",
+                "editorial-reviewer": "review-content-editorial",
+            }.get(str(payload.get("reviewer_role") or ""), ""),
+        }
+        artifact_type = str(payload.get("artifact_type") or "")
+        expected_content_action = str(
+            content_action_by_artifact.get(artifact_type) or ""
+        )
+        if task_id and expected_content_action:
+            project_commands.preflight_content_agent_result(
+                task_id=task_id,
+                expected_action=expected_content_action,
+                expected_revision=int(request["expected_revision"]),
+            )
+        elif task_id:
             project_commands.require_active_agent_task(task_id)
         command_id = _command_id(operation, request)
         if kind == "mission":

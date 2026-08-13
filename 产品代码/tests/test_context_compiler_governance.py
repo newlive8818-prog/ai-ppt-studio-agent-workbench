@@ -20,6 +20,7 @@ from ai_ppt_studio.errors import WorkbenchValidationError  # noqa: E402
 from tests.test_v16_content_acceptance import (  # noqa: E402
     TEST_SECRET,
     authorize_current_framework,
+    build_authorized_draft,
 )
 from ai_ppt_studio.application.scoped_confirmation import (  # noqa: E402
     HOST_CONFIRMATION_SECRET_ENV,
@@ -36,6 +37,51 @@ def make_project(base: Path, name: str = "测试项目"):
 
 
 class ContextCompilerGovernanceTests(unittest.TestCase):
+    def test_formal_strategy_context_uses_only_policy_active_heads(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
+        ):
+            content = ContentService.initialize(Path(temp), project_id="policy-context")
+            _revision, _draft, lineage = build_authorized_draft(content)
+            state = content.kernel.load()
+            content.kernel.commit(
+                command_id="seed-unrelated-policy-heads",
+                expected_revision=state.revision,
+                event_type="test.seed-unrelated-policy-heads",
+                artifact_updates={
+                    "visual/contract": ("visual-contract", {"secret": "visual"}),
+                    "delivery/build": ("delivery-build", {"secret": "delivery"}),
+                    "content/review/presales-reviewer": (
+                        "content-review-record", {"secret": "review"}
+                    ),
+                },
+            )
+            state = content.kernel.load()
+            exact = [
+                state.artifact_heads["mission/draft"],
+                state.artifact_heads["mission/confirmation"],
+                state.artifact_heads["materials"],
+                *lineage,
+            ]
+
+            pack = ContextCompiler(content.kernel).compile_role_task(
+                role_id="presales-content-strategist",
+                task_type="build-presales-strategy",
+                project_revision=state.revision,
+                target_refs=exact,
+                instructions="形成策略",
+            )
+
+            active = pack["layers"]["current_state"]["active_head_refs"]
+            self.assertEqual(set(active), {
+                "mission/draft", "mission/confirmation", "materials",
+                "content/framework-draft", "content/framework-confirmation",
+                "content/full-deck-expansion-authorization",
+            })
+            self.assertFalse(any(slot.startswith("visual/") for slot in active))
+            self.assertFalse(any(slot.startswith("delivery/") for slot in active))
+            self.assertFalse(any(slot.startswith("content/review/") for slot in active))
+
     def test_content_workflow_layer_is_total_without_fabricated_refs(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = make_project(Path(temp))
@@ -87,7 +133,11 @@ class ContextCompilerGovernanceTests(unittest.TestCase):
                 role_id="presales-content-strategist",
                 task_type="build-content-framework",
                 project_revision=project.load().revision,
-                target_refs=[], instructions="只讨论框架",
+                target_refs=[
+                    project.load().artifact_heads["mission/draft"],
+                    project.load().artifact_heads["mission/confirmation"],
+                ],
+                instructions="只讨论框架",
             )
             active = pack["layers"]["current_state"]["active_head_refs"]
             self.assertFalse(any(slot.startswith("content/") for slot in active))
@@ -136,7 +186,12 @@ class ContextCompilerGovernanceTests(unittest.TestCase):
                 role_id="presales-content-strategist",
                 task_type="build-content-framework",
                 project_revision=project.load().revision,
-                target_refs=[], instructions="仅修订框架",
+                target_refs=[
+                    project.load().artifact_heads["mission/draft"],
+                    project.load().artifact_heads["mission/confirmation"],
+                    framework_ref,
+                ],
+                instructions="仅修订框架",
             )
             workflow = pack["layers"]["content_workflow"]
             self.assertEqual(workflow["framework_ref"], framework_ref)
