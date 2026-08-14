@@ -46,6 +46,7 @@ class ContentActionContract:
     required_slots: tuple[str, ...]
     optional_slots: tuple[str, ...] = ()
     active_head_slots: tuple[str, ...] = ()
+    workflow_slots: tuple[str, ...] = LINEAGE_SLOTS
     unavailable: bool = False
 
     def exact_target_slots(self, heads: Mapping[str, str]) -> tuple[str, ...]:
@@ -62,6 +63,13 @@ class ContentActionContract:
         )
 
 
+@dataclass(frozen=True)
+class ContentResultContract:
+    request_kind: str
+    artifact_type: str
+    stage: str = ""
+    reviewer_role: str = ""
+
 def _contract(
     action: str,
     role_id: str,
@@ -69,6 +77,7 @@ def _contract(
     *,
     optional: tuple[str, ...] = (),
     active: tuple[str, ...] | None = None,
+    workflow: tuple[str, ...] = LINEAGE_SLOTS,
     unavailable: bool = False,
 ) -> ContentActionContract:
     target_slots = (*required, *optional)
@@ -78,6 +87,7 @@ def _contract(
         required_slots=required,
         optional_slots=optional,
         active_head_slots=active if active is not None else target_slots,
+        workflow_slots=workflow,
         unavailable=unavailable,
     )
 
@@ -88,6 +98,7 @@ CONTENT_ACTION_CONTRACTS = {
         "presales-content-strategist",
         MISSION_SLOTS,
         optional=("materials", "content/framework-draft"),
+        workflow=("content/framework-draft",),
     ),
     "expand-full-content-blueprint": _contract(
         "expand-full-content-blueprint",
@@ -161,15 +172,58 @@ CONTENT_ACTION_CONTRACTS = {
         "propose-content-batch-revision-plan",
         "deck-coherence-editor",
         (),
+        workflow=("content/review-batch",),
         unavailable=True,
     ),
     "apply-content-batch-revision": _contract(
         "apply-content-batch-revision",
         "content-repair-specialist",
         (),
+        workflow=(
+            "content/batch-revision-plan",
+            "content/batch-plan-confirmation",
+        ),
         unavailable=True,
     ),
 }
+
+CONTENT_RESULT_CONTRACTS = {
+    "build-presales-strategy": ContentResultContract(
+        "content-blueprint", "presales-content-strategy", stage="strategy"
+    ),
+    "build-claim-evidence-map": ContentResultContract(
+        "content-blueprint", "claim-evidence-map", stage="claim-map"
+    ),
+    "build-deck-argument-map": ContentResultContract(
+        "content-blueprint", "deck-argument-map", stage="argument-map"
+    ),
+    "build-slide-draft-set": ContentResultContract(
+        "content-blueprint", "slide-draft-set", stage="slide-draft-set"
+    ),
+    "review-content-presales": ContentResultContract(
+        "content-blueprint", "content-review-record",
+        reviewer_role="presales-reviewer",
+    ),
+    "review-content-decision-maker": ContentResultContract(
+        "content-blueprint", "content-review-record",
+        reviewer_role="decision-maker-reviewer",
+    ),
+    "review-content-evidence": ContentResultContract(
+        "content-blueprint", "content-review-record",
+        reviewer_role="evidence-reviewer",
+    ),
+    "review-content-narrative": ContentResultContract(
+        "content-blueprint", "content-review-record",
+        reviewer_role="narrative-reviewer",
+    ),
+    "review-content-editorial": ContentResultContract(
+        "content-blueprint", "content-review-record",
+        reviewer_role="editorial-reviewer",
+    ),
+}
+FORMAL_AGENT_CONTENT_ARTIFACT_TYPES = frozenset(
+    contract.artifact_type for contract in CONTENT_RESULT_CONTRACTS.values()
+)
 
 FRAMEWORK_ACTIONS = frozenset({"build-content-framework"})
 BATCH_PLAN_ACTIONS = frozenset({"propose-content-batch-revision-plan"})

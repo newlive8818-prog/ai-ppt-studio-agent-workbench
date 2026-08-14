@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from ai_ppt_studio.application.content_service import ContentService
+from ai_ppt_studio.application.content_action_policy import (
+    CONTENT_RESULT_CONTRACTS,
+    FORMAL_AGENT_CONTENT_ARTIFACT_TYPES,
+)
 from ai_ppt_studio.application.delivery_service import DeliveryService
 from ai_ppt_studio.application.experience_service import ExperienceService
 from ai_ppt_studio.application.review_service import ReviewService
@@ -306,33 +310,46 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
             raise ContractValidationError("payload must be an object")
         kind = str(request.get("kind") or "")
         task_id = str(request.get("task_id") or "").strip()
-        content_action_by_artifact = {
-            "presales-content-strategy": "build-presales-strategy",
-            "claim-evidence-map": "build-claim-evidence-map",
-            "deck-argument-map": "build-deck-argument-map",
-            "slide-draft-set": "build-slide-draft-set",
-            "content-review-record": {
-                "presales-reviewer": "review-content-presales",
-                "decision-maker-reviewer": "review-content-decision-maker",
-                "evidence-reviewer": "review-content-evidence",
-                "narrative-reviewer": "review-content-narrative",
-                "editorial-reviewer": "review-content-editorial",
-            }.get(str(payload.get("reviewer_role") or ""), ""),
-        }
         artifact_type = str(payload.get("artifact_type") or "")
-        expected_content_action = str(
-            content_action_by_artifact.get(artifact_type) or ""
-        )
-        if task_id and expected_content_action:
-            project_commands.preflight_content_agent_result(
+        content_task = None
+        if task_id:
+            content_task, _context = project_commands.preflight_content_agent_result(
                 task_id=task_id,
-                expected_action=expected_content_action,
+                request_kind=kind,
+                payload=payload,
                 expected_revision=int(request["expected_revision"]),
             )
-        elif task_id:
-            project_commands.require_active_agent_task(task_id)
+        elif artifact_type in FORMAL_AGENT_CONTENT_ARTIFACT_TYPES:
+            from ai_ppt_studio.errors import ContentWorkflowError
+
+            raise ContentWorkflowError(
+                "CONTENT_REVIEW_CONFLICT",
+                "Formal Agent content results require an active task identity",
+                {"artifact_type": artifact_type},
+            )
         command_id = _command_id(operation, request)
-        if kind == "mission":
+        if content_task is not None:
+            action = str(content_task["action_type"])
+            result_contract = CONTENT_RESULT_CONTRACTS[action]
+            if result_contract.stage:
+                slot, artifact_kind, normalized = (
+                    content.prepare_content_stage_update(
+                        result_contract.stage, payload
+                    )
+                )
+            else:
+                slot, artifact_kind, normalized = content.prepare_review_update(
+                    payload
+                )
+            artifact_ref, state = project_commands.commit_content_agent_result(
+                command_id=command_id,
+                expected_revision=int(request["expected_revision"]),
+                task_id=task_id,
+                artifact_slot=slot,
+                artifact_kind=artifact_kind,
+                artifact_payload=normalized,
+            )
+        elif kind == "mission":
             artifact_ref = content.save_mission_draft(
                 command_id,
                 int(request["expected_revision"]),
@@ -357,14 +374,8 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
                 kind=kind,
                 payload=payload,
             )
-        state = kernel.load()
-        if task_id:
-            state = project_commands.complete_agent_task(
-                f"{command_id}:complete-agent-task:{task_id}",
-                state.revision,
-                task_id=task_id,
-                result_ref=artifact_ref,
-            )
+        if content_task is None:
+            state = kernel.load()
         return {
             "ok": True,
             "operation": operation,

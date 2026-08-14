@@ -401,11 +401,21 @@ class ProjectKernel:
             consumed[key] = value
         artifact_bindings.update(ledger_bindings)
         if heads.get("content/framework-draft") and not has_framework_epoch:
-            self._infer_legacy_framework_reset_revision(
+            _epoch, historical_consumed, historical_bindings = (
+                self._infer_legacy_framework_history(
                 state,
                 heads,
                 artifact_bindings=artifact_bindings,
+                )
             )
+            if (
+                ledger_consumed != historical_consumed
+                or ledger_bindings != historical_bindings
+            ):
+                raise ConfirmationTransactionError(
+                    "CONFIRMATION_HISTORY_CORRUPT",
+                    "Legacy ledger does not exactly match validated history",
+                )
         return consumed, artifact_bindings
 
     def _framework_reset_revision(
@@ -477,11 +487,21 @@ class ProjectKernel:
             ) from error
         if "framework_reset_revision" in payload:
             return False
-        self._infer_legacy_framework_reset_revision(
+        _epoch, historical_consumed, historical_bindings = (
+            self._infer_legacy_framework_history(
             state,
             heads,
             artifact_bindings=payload.get("artifact_bindings", {}),
+            )
         )
+        if (
+            payload.get("consumed") != historical_consumed
+            or payload.get("artifact_bindings", {}) != historical_bindings
+        ):
+            raise ConfirmationTransactionError(
+                "CONFIRMATION_HISTORY_CORRUPT",
+                "Legacy ledger does not exactly match validated history",
+            )
         return True
 
     def _infer_legacy_framework_reset_revision(

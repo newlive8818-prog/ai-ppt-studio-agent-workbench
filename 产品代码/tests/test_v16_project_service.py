@@ -858,7 +858,7 @@ class V16ProjectServiceTests(unittest.TestCase):
             active_task = kernel.artifacts.resolve(
                 ArtifactReference.parse(active_task_ref)
             )["payload"]
-            self.assertEqual(committed["snapshot"]["revision"], 10)
+            self.assertEqual(committed["snapshot"]["revision"], 9)
             self.assertEqual(active_task["task_id"], task_id)
             self.assertEqual(active_task["status"], "completed")
             self.assertEqual(active_task["progress"], {
@@ -934,6 +934,84 @@ class V16ProjectServiceTests(unittest.TestCase):
             self.assertEqual(tuple(kernel.events_root.iterdir()), events)
             self.assertEqual(tuple(kernel.artifacts.objects_root.rglob("*")), objects)
 
+    def test_content_task_result_type_and_task_id_are_mandatory_zero_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config, _profile = runtime_config(Path(temp))
+            kernel = ProjectService(config).create_project("result contract")
+            content = ContentService(kernel)
+            mission_ref = content.save_mission_draft("rc-mission", 1, {
+                "topic": "经营一体化", "primary_audience": "决策者",
+                "desired_judgment_or_action": "批准一期",
+            })
+            mission_confirmation_ref = content.confirm_mission(
+                "rc-confirm", 2, mission_draft_ref=mission_ref,
+                material_mode="no-materials-confirmed", material_inventory_ref="",
+                user_action_ref="test-user-action://result-contract", user_message_ref="",
+            )
+            framework_ref, confirmation_ref, authorization_ref = (
+                _save_confirm_authorize(kernel, mission_confirmation_ref)
+            )
+            requested = dispatch_v16({
+                "operation": "request-agent-action",
+                "project_root": str(kernel.project_root),
+                "expected_revision": kernel.load().revision,
+                "command_id": "result-contract-task",
+                "action_type": "build-presales-strategy",
+                "target_refs": [
+                    mission_ref, mission_confirmation_ref, framework_ref,
+                    confirmation_ref, authorization_ref,
+                ],
+                "instructions": "形成策略",
+            })["result"]
+            task_id = requested["task"]["task_id"]
+            payload = {
+                "artifact_type": "presales-content-strategy",
+                "mission_ref": mission_ref,
+                "content_identity_mode": "proposal-only",
+                "identity_labels": [
+                    "diagnostic-hypothesis", "solution-recommendation",
+                    "joint-validation-required",
+                ],
+                "empty_material_identity": content.kernel.load().artifact_heads.get(
+                    "mission/confirmation", ""
+                ),
+                "decision_stage": "方案建议",
+                "core_tension": "诊断假设：系统割裂，待联合验证",
+            }
+            attempts = (
+                {
+                    "command_id": "strategy-task-to-mission",
+                    "kind": "mission",
+                    "task_id": task_id,
+                    "payload": {
+                        "topic": "越权", "primary_audience": "越权",
+                        "desired_judgment_or_action": "越权",
+                    },
+                },
+                {
+                    "command_id": "formal-content-without-task",
+                    "kind": "content-blueprint",
+                    "payload": payload,
+                },
+            )
+            for attempt in attempts:
+                before = kernel.load()
+                events = tuple(kernel.events_root.iterdir())
+                objects = tuple(kernel.artifacts.objects_root.rglob("*"))
+                with self.subTest(command_id=attempt["command_id"]), self.assertRaises(
+                    ContentWorkflowError
+                ) as caught:
+                    dispatch_v16({
+                        "operation": "commit-artifact",
+                        "project_root": str(kernel.project_root),
+                        "expected_revision": before.revision,
+                        **attempt,
+                    })
+                self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+                self.assertEqual(kernel.load(), before)
+                self.assertEqual(tuple(kernel.events_root.iterdir()), events)
+                self.assertEqual(tuple(kernel.artifacts.objects_root.rglob("*")), objects)
+
     def test_public_artifact_route_reaches_every_content_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
@@ -981,29 +1059,19 @@ class V16ProjectServiceTests(unittest.TestCase):
             ]
             _save_confirm_authorize(kernel, mission_confirmation_ref)
 
-            strategy_ref = dispatch_v16(
-                {
-                    "operation": "commit-artifact",
-                    "project_root": project_root,
-                    "expected_revision": 7,
-                    "kind": "content-blueprint",
-                    "payload": {
+            content = ContentService(kernel)
+            strategy_ref = content.register_content_stage(
+                "direct-route-strategy", 7, "strategy", {
                         "artifact_type": "presales-content-strategy",
                         "mission_ref": mission_ref,
                         "material_inventory_ref": material_ref,
                         "content_identity_mode": "material-backed",
                         "decision_stage": "立项",
                         "core_tension": "系统割裂",
-                    },
-                }
-            )["result"]["artifact_ref"]
-            claim_ref = dispatch_v16(
-                {
-                    "operation": "commit-artifact",
-                    "project_root": project_root,
-                    "expected_revision": 8,
-                    "kind": "content-blueprint",
-                    "payload": {
+                    }
+            )
+            claim_ref = content.register_content_stage(
+                "direct-route-claim", 8, "claim-map", {
                         "artifact_type": "claim-evidence-map",
                         "strategy_ref": strategy_ref,
                         "claims": [
@@ -1013,41 +1081,28 @@ class V16ProjectServiceTests(unittest.TestCase):
                                 "evidence_refs": [material_ref],
                             }
                         ],
-                    },
-                }
-            )["result"]["artifact_ref"]
-            argument_ref = dispatch_v16(
-                {
-                    "operation": "commit-artifact",
-                    "project_root": project_root,
-                    "expected_revision": 9,
-                    "kind": "content-blueprint",
-                    "payload": {
+                    }
+            )
+            argument_ref = content.register_content_stage(
+                "direct-route-argument", 9, "argument-map", {
                         "artifact_type": "deck-argument-map",
                         "strategy_ref": strategy_ref,
                         "claim_evidence_map_ref": claim_ref,
                         "chapters": [
                             {"chapter_id": "ch1", "task": "建立问题共识"}
                         ],
-                    },
-                }
-            )["result"]["artifact_ref"]
-            draft_ref = dispatch_v16(
-                {
-                    "operation": "commit-artifact",
-                    "project_root": project_root,
-                    "expected_revision": 10,
-                    "kind": "content-blueprint",
-                    "payload": {
+                    }
+            )
+            draft_ref = content.register_content_stage(
+                "direct-route-draft", 10, "slide-draft-set", {
                         "artifact_type": "slide-draft-set",
                         **complete_slide_draft_payload(
                             argument_map_ref=argument_ref,
                             material_ref=material_ref,
                             slide_id_prefix="s",
                         ),
-                    },
-                }
-            )["result"]["artifact_ref"]
+                    }
+            )
 
             self.assertTrue(strategy_ref.startswith("artifact://presales-content-strategy/"))
             self.assertTrue(claim_ref.startswith("artifact://claim-evidence-map/"))

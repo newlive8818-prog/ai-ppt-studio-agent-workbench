@@ -141,14 +141,24 @@ class ContextCompiler:
                 "content/batch-plan-confirmation", ""
             ),
         }
-        if task_type in FRAMEWORK_ACTIONS:
+        if action_contract is not None:
+            workflow_keys_by_slot = {
+                "content/framework-draft": "framework_ref",
+                "content/framework-confirmation": "framework_confirmation_ref",
+                "content/full-deck-expansion-authorization": (
+                    "full_deck_expansion_authorization_ref"
+                ),
+                "content/review-batch": "review_batch_ref",
+                "content/batch-revision-plan": "batch_revision_plan_ref",
+                "content/batch-plan-confirmation": "batch_plan_confirmation_ref",
+            }
+            visible_workflow_keys = {
+                workflow_keys_by_slot[slot]
+                for slot in action_contract.workflow_slots
+            }
             content_workflow = {
-                **content_workflow,
-                "framework_confirmation_ref": "",
-                "full_deck_expansion_authorization_ref": "",
-                "review_batch_ref": "",
-                "batch_revision_plan_ref": "",
-                "batch_plan_confirmation_ref": "",
+                key: value if key in visible_workflow_keys else ""
+                for key, value in content_workflow.items()
             }
         active_head_slots = (
             set(action_contract.active_head_slots)

@@ -367,6 +367,46 @@ class FrameworkDiscussionTests(unittest.TestCase):
         )["payload"]
         self.assertEqual(ledger["framework_reset_revision"], 3)
 
+    def test_legacy_ledger_missing_consumed_identity_rejects_zero_write(self) -> None:
+        framework_ref, _state = self._save()
+        self._confirm(framework_ref)
+        self._authorize(framework_ref)
+        self._rewrite_as_legacy_epoch_state(keep_legacy_ledger=True)
+        state = self.kernel.load()
+        ledger_ref = state.artifact_heads[CONFIRMATION_LEDGER_SLOT]
+        payload = dict(self.kernel.artifacts.resolve(
+            ArtifactReference.parse(ledger_ref)
+        )["payload"])
+        removed_identity = next(iter(payload["consumed"]))
+        del payload["consumed"][removed_identity]
+        incomplete_ref = str(
+            self.kernel.artifacts.put(CONFIRMATION_LEDGER_KIND, payload)
+        )
+        rewritten = replace(
+            state,
+            artifact_heads={
+                **state.artifact_heads,
+                CONFIRMATION_LEDGER_SLOT: incomplete_ref,
+            },
+        )
+        latest = self.kernel.events_root / f"r{state.revision:08d}.json"
+        event = json.loads(latest.read_text(encoding="utf-8"))
+        event["artifact_heads"] = dict(rewritten.artifact_heads)
+        atomic_write_json(latest, event)
+        atomic_write_json(self.kernel.state_path, rewritten.as_dict())
+        before = self._filesystem_snapshot()
+
+        with self.assertRaises(ConfirmationTransactionError) as raised:
+            self.kernel.commit(
+                command_id="reject-incomplete-legacy-consumed",
+                expected_revision=state.revision,
+                event_type="test.must-not-migrate",
+                artifact_updates={"test/no-write": ("marker", {"x": 1})},
+            )
+
+        self.assertEqual(raised.exception.code, "CONFIRMATION_HISTORY_CORRUPT")
+        self.assertEqual(self._filesystem_snapshot(), before)
+
     def test_legacy_epoch_inference_rejects_ambiguous_history_zero_write(self) -> None:
         self._save()
         self._rewrite_as_legacy_epoch_state(keep_legacy_ledger=False)

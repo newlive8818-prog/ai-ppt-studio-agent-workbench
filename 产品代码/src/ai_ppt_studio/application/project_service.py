@@ -31,6 +31,7 @@ from ai_ppt_studio.application.content_action_policy import (
     FRAMEWORK_ACTIONS,
     FULL_DECK_CONTENT_ACTIONS,
     CONTENT_ACTION_CONTRACTS,
+    CONTENT_RESULT_CONTRACTS,
     validate_content_action_targets,
 )
 
@@ -417,7 +418,8 @@ class ProjectCommandService:
         self,
         *,
         task_id: str,
-        expected_action: str,
+        request_kind: str,
+        payload: dict[str, Any],
         expected_revision: int,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Validate task, context, targets, and lineage before result writes."""
@@ -429,13 +431,25 @@ class ProjectCommandService:
 
         state = self.kernel.load()
         task = self.require_active_agent_task(task_id)
+        expected_action = str(task.get("action_type") or "")
         try:
             if state.revision != expected_revision:
                 raise ValueError("result revision is stale")
             if task.get("status") != "queued":
                 raise ValueError("Agent task is not active")
-            if task.get("action_type") != expected_action:
-                raise ValueError("Agent task action does not match result")
+            result_contract = CONTENT_RESULT_CONTRACTS.get(expected_action)
+            if result_contract is None:
+                raise ValueError("Agent task does not allow a formal content result")
+            if (
+                request_kind != result_contract.request_kind
+                or payload.get("artifact_type") != result_contract.artifact_type
+                or (
+                    result_contract.reviewer_role
+                    and payload.get("reviewer_role")
+                    != result_contract.reviewer_role
+                )
+            ):
+                raise ValueError("Agent result does not match its task contract")
             input_revision = task.get("input_revision")
             if isinstance(input_revision, bool) or not isinstance(input_revision, int):
                 raise ValueError("Agent task input revision is invalid")
@@ -526,6 +540,46 @@ class ProjectCommandService:
                 f"agent/task/{task_id}": ("agent-task", completed),
             },
         )
+
+    def commit_content_agent_result(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        task_id: str,
+        artifact_slot: str,
+        artifact_kind: str,
+        artifact_payload: dict[str, Any],
+    ) -> tuple[str, KernelState]:
+        """Publish a validated content result and complete its task atomically."""
+
+        task = self.require_active_agent_task(task_id)
+        result_ref = str(
+            self.kernel.artifacts.reference_for(
+                artifact_kind, artifact_payload
+            )
+        )
+        result_refs = list(task.get("result_refs") or [])
+        if result_ref not in result_refs:
+            result_refs.append(result_ref)
+        completed = {
+            **task,
+            "status": "completed",
+            "progress": {"stage": "completed", "done": 1, "total": 1},
+            "result_refs": result_refs,
+            "error": None,
+        }
+        state = self.kernel.commit(
+            command_id=command_id,
+            expected_revision=expected_revision,
+            event_type="agent.content-result-committed",
+            artifact_updates={
+                artifact_slot: (artifact_kind, artifact_payload),
+                "agent/task/active": ("agent-task", completed),
+                f"agent/task/{task_id}": ("agent-task", completed),
+            },
+        )
+        return state.artifact_heads[artifact_slot], state
 
     def submit_human_decision(
         self,

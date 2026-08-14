@@ -81,6 +81,10 @@ class ContextCompilerGovernanceTests(unittest.TestCase):
             self.assertFalse(any(slot.startswith("visual/") for slot in active))
             self.assertFalse(any(slot.startswith("delivery/") for slot in active))
             self.assertFalse(any(slot.startswith("content/review/") for slot in active))
+            workflow = pack["layers"]["content_workflow"]
+            self.assertEqual(workflow["review_batch_ref"], "")
+            self.assertEqual(workflow["batch_revision_plan_ref"], "")
+            self.assertEqual(workflow["batch_plan_confirmation_ref"], "")
 
     def test_content_workflow_layer_is_total_without_fabricated_refs(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

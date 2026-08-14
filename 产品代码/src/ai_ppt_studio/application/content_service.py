@@ -318,6 +318,22 @@ class ContentService:
         stage: str,
         payload: dict[str, Any],
     ) -> str:
+        slot, kind, normalized = self.prepare_content_stage_update(
+            stage, payload
+        )
+        state = self.kernel.commit(
+            command_id=command_id,
+            expected_revision=expected_revision,
+            event_type=f"content.{stage}.registered",
+            artifact_updates={slot: (kind, normalized)},
+        )
+        return state.artifact_heads[slot]
+
+    def prepare_content_stage_update(
+        self, stage: str, payload: dict[str, Any]
+    ) -> tuple[str, str, dict[str, Any]]:
+        """Validate one stage completely without exposing a new head."""
+
         readiness = MissionReadinessPolicy(self.kernel).require_ready()
         lineage = require_full_deck_expansion_authorization(self.kernel)
         self._reject_supplied_stale_workflow_lineage(payload, lineage)
@@ -327,13 +343,7 @@ class ContentService:
         normalized = validate_content_stage(stage, governed_payload)
         self._validate_lineage(stage, normalized, readiness)
         slot, kind = CONTENT_STAGES[stage]
-        state = self.kernel.commit(
-            command_id=command_id,
-            expected_revision=expected_revision,
-            event_type=f"content.{stage}.registered",
-            artifact_updates={slot: (kind, normalized)},
-        )
-        return state.artifact_heads[slot]
+        return slot, kind, normalized
 
     def register_review(
         self,
@@ -341,6 +351,20 @@ class ContentService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
+        slot, kind, normalized = self.prepare_review_update(payload)
+        state = self.kernel.commit(
+            command_id=command_id,
+            expected_revision=expected_revision,
+            event_type="content.review.registered",
+            artifact_updates={slot: (kind, normalized)},
+        )
+        return state.artifact_heads[slot]
+
+    def prepare_review_update(
+        self, payload: dict[str, Any]
+    ) -> tuple[str, str, dict[str, Any]]:
+        """Validate one independent review completely without writing it."""
+
         MissionReadinessPolicy(self.kernel).require_ready()
         lineage = require_full_deck_expansion_authorization(self.kernel)
         self._reject_supplied_stale_workflow_lineage(payload, lineage)
@@ -363,13 +387,7 @@ class ContentService:
                 self.kernel.artifacts.resolve(ArtifactReference.parse(value))
         role = normalized["reviewer_role"]
         slot = f"content/review/{role}"
-        state = self.kernel.commit(
-            command_id=command_id,
-            expected_revision=expected_revision,
-            event_type="content.review.registered",
-            artifact_updates={slot: ("content-review-record", normalized)},
-        )
-        return state.artifact_heads[slot]
+        return slot, "content-review-record", normalized
 
     def accept_content(
         self, command_id: str, expected_revision: int
