@@ -24,6 +24,7 @@ from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.state import KernelState
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 from ai_ppt_studio.paths import PathPolicy
+from ai_ppt_studio.kernel.artifacts import canonical_json
 from ai_ppt_studio.application.content_action_policy import (
     BATCH_APPLY_ACTIONS,
     BATCH_PLAN_ACTIONS,
@@ -31,6 +32,7 @@ from ai_ppt_studio.application.content_action_policy import (
     FRAMEWORK_ACTIONS,
     FULL_DECK_CONTENT_ACTIONS,
     CONTENT_ACTION_CONTRACTS,
+    CONTENT_ACTION_ROLES,
     CONTENT_RESULT_CONTRACTS,
     validate_content_action_targets,
 )
@@ -39,21 +41,7 @@ from ai_ppt_studio.application.content_action_policy import (
 SAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 ACTION_ROLES = {
-    "build-content-framework": "presales-content-strategist",
-    "build-presales-strategy": "presales-content-strategist",
-    "build-claim-evidence-map": "claim-evidence-analyst",
-    "build-deck-argument-map": "deck-narrative-architect",
-    "build-slide-draft-set": "slide-copywriter",
-    "repair-content": "content-repair-specialist",
-    "review-content-presales": "presales-content-reviewer",
-    "review-content-decision-maker": "audience-decision-reviewer",
-    "review-content-evidence": "content-fact-checker",
-    "review-content-narrative": "argument-logic-reviewer",
-    "review-content-editorial": "reading-experience-reviewer",
-    "aggregate-content-reviews": "deck-coherence-editor",
-    "expand-full-content-blueprint": "deck-narrative-architect",
-    "propose-content-batch-revision-plan": "deck-coherence-editor",
-    "apply-content-batch-revision": "content-repair-specialist",
+    **CONTENT_ACTION_ROLES,
     "design-deck-system": "deck-designer",
     "design-slide-visuals": "slide-visual-designer",
     "build-native-first": "native-first-engineer",
@@ -509,6 +497,78 @@ class ProjectCommandService:
             ) from None
         return task, context
 
+    def replay_content_agent_result(
+        self,
+        *,
+        command_id: str,
+        task_id: str,
+        request_kind: str,
+        payload: dict[str, Any],
+        expected_revision: int,
+    ) -> tuple[str, KernelState] | None:
+        """Return an exact completed result replay or reject command collision."""
+
+        from ai_ppt_studio.application.content_action_policy import (
+            CONTENT_RESULT_CONTRACTS,
+        )
+        from ai_ppt_studio.errors import ContentWorkflowError
+
+        state = self.kernel.load()
+        revision = state.processed_commands.get(command_id)
+        if revision is None:
+            return None
+        task_ref = state.artifact_heads.get(f"agent/task/{task_id}", "")
+        try:
+            task_reference = ArtifactReference.parse(task_ref)
+            task = self.kernel.artifacts.resolve(task_reference)["payload"]
+            action = str(task.get("action_type") or "")
+            contract = CONTENT_RESULT_CONTRACTS[action]
+            completion = task.get("completion_result")
+            request_fingerprint = hashlib.sha256(
+                canonical_json({
+                    "request_kind": request_kind,
+                    "payload": payload,
+                    "expected_revision": expected_revision,
+                })
+            ).hexdigest()
+            if (
+                task_reference.kind != "agent-task"
+                or task.get("status") != "completed"
+                or task.get("completion_command_id") != command_id
+                or request_kind != contract.request_kind
+                or payload.get("artifact_type") != contract.artifact_type
+                or not isinstance(completion, dict)
+                or completion.get("action_type") != action
+                or completion.get("artifact_slot") != contract.artifact_slot
+                or completion.get("artifact_kind") != contract.artifact_kind
+                or completion.get("request_fingerprint")
+                != request_fingerprint
+                or (
+                    contract.reviewer_role
+                    and payload.get("reviewer_role") != contract.reviewer_role
+                )
+            ):
+                raise ValueError("Processed command does not match completed task")
+            result_ref = str(completion.get("result_ref") or "")
+            result_reference = ArtifactReference.parse(result_ref)
+            self.kernel.artifacts.resolve(result_reference)
+            if (
+                result_reference.kind != contract.artifact_kind
+            ):
+                raise ValueError("Processed command result payload differs")
+            return result_ref, state
+        except (
+            ArtifactReferenceError,
+            KeyError,
+            TypeError,
+            ValueError,
+        ):
+            raise ContentWorkflowError(
+                "CONTENT_REVIEW_CONFLICT",
+                "Processed content result command has different semantics",
+                {"command_id": command_id, "task_id": task_id, "revision": revision},
+            ) from None
+
     def complete_agent_task(
         self,
         command_id: str,
@@ -547,22 +607,62 @@ class ProjectCommandService:
         command_id: str,
         expected_revision: int,
         task_id: str,
-        artifact_slot: str,
-        artifact_kind: str,
-        artifact_payload: dict[str, Any],
+        request_kind: str,
+        raw_request_payload: dict[str, Any],
     ) -> tuple[str, KernelState]:
         """Publish a validated content result and complete its task atomically."""
 
+        from ai_ppt_studio.application.content_action_policy import (
+            CONTENT_RESULT_CONTRACTS,
+        )
         from ai_ppt_studio.errors import ContentWorkflowError
 
         before = self.kernel.load()
-        if command_id in before.processed_commands:
+        task, _context = self.preflight_content_agent_result(
+            task_id=task_id,
+            request_kind=request_kind,
+            payload=raw_request_payload,
+            expected_revision=expected_revision,
+        )
+        action = str(task.get("action_type") or "")
+        contract = CONTENT_RESULT_CONTRACTS.get(action)
+        if (
+            contract is None
+            or request_kind != contract.request_kind
+            or raw_request_payload.get("artifact_type") != contract.artifact_type
+            or (
+                contract.reviewer_role
+                and raw_request_payload.get("reviewer_role") != contract.reviewer_role
+            )
+        ):
             raise ContentWorkflowError(
                 "CONTENT_REVIEW_CONFLICT",
-                "Content result command identity was already processed",
-                {"command_id": command_id},
+                "Prepared content result does not match the active task contract",
+                {"task_id": task_id, "action_type": action},
             )
-        task = self.require_active_agent_task(task_id)
+        from ai_ppt_studio.application.content_service import ContentService
+
+        content = ContentService(self.kernel)
+        if contract.stage:
+            artifact_slot, artifact_kind, normalized = (
+                content._prepare_content_stage_update(
+                    contract.stage, raw_request_payload
+                )
+            )
+        else:
+            artifact_slot, artifact_kind, normalized = (
+                content._prepare_review_update(raw_request_payload)
+            )
+        if (
+            artifact_slot != contract.artifact_slot
+            or artifact_kind != contract.artifact_kind
+        ):
+            raise ContentWorkflowError(
+                "CONTENT_REVIEW_CONFLICT",
+                "Prepared content result violates the active task contract",
+                {"task_id": task_id, "action_type": action},
+            )
+        artifact_payload = normalized
         result_ref = str(
             self.kernel.artifacts.reference_for(
                 artifact_kind, artifact_payload
@@ -577,6 +677,20 @@ class ProjectCommandService:
             "progress": {"stage": "completed", "done": 1, "total": 1},
             "result_refs": result_refs,
             "error": None,
+            "completion_command_id": command_id,
+            "completion_result": {
+                "action_type": action,
+                "artifact_slot": artifact_slot,
+                "artifact_kind": artifact_kind,
+                "result_ref": result_ref,
+                "request_fingerprint": hashlib.sha256(
+                    canonical_json({
+                        "request_kind": request_kind,
+                        "payload": raw_request_payload,
+                        "expected_revision": expected_revision,
+                    })
+                ).hexdigest(),
+            },
         }
         state = self.kernel.commit(
             command_id=command_id,

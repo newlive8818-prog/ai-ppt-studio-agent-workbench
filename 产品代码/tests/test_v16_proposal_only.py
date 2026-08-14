@@ -16,7 +16,10 @@ from ai_ppt_studio.application.scoped_confirmation import (
 )
 from ai_ppt_studio.errors import ProposalOnlyIdentityViolationError
 from ai_ppt_studio.kernel.references import ArtifactReference
-from tests.v16_content_fixtures import complete_proposal_only_draft_payload
+from tests.v16_content_fixtures import (
+    complete_proposal_only_draft_payload,
+    publish_content_stage,
+)
 from tests.test_v16_content_acceptance import (
     TEST_SECRET,
     authorize_current_framework,
@@ -59,9 +62,9 @@ class ProposalOnlyContentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             service = ContentService.initialize(Path(temp), project_id="p1")
             revision, draft_ref, confirmation_ref = confirmed_no_materials(service)
-            strategy_ref = service.register_content_stage(
+            strategy_ref = publish_content_stage(
+                service,
                 "strategy",
-                revision,
                 "strategy",
                 {
                     "mission_ref": draft_ref,
@@ -71,9 +74,9 @@ class ProposalOnlyContentTests(unittest.TestCase):
                     "core_tension": "诊断假设：经营流程可能存在跨系统断点",
                 },
             )
-            claim_ref = service.register_content_stage(
+            claim_ref = publish_content_stage(
+                service,
                 "claim-map",
-                revision + 1,
                 "claim-map",
                 {
                     "strategy_ref": strategy_ref,
@@ -97,9 +100,9 @@ class ProposalOnlyContentTests(unittest.TestCase):
                     ],
                 },
             )
-            argument_ref = service.register_content_stage(
+            argument_ref = publish_content_stage(
+                service,
                 "argument-map",
-                revision + 2,
                 "argument-map",
                 {
                     "strategy_ref": strategy_ref,
@@ -114,9 +117,9 @@ class ProposalOnlyContentTests(unittest.TestCase):
                     ],
                 },
             )
-            slide_ref = service.register_content_stage(
+            slide_ref = publish_content_stage(
+                service,
                 "slide-draft-set",
-                revision + 3,
                 "slide-draft-set",
                 complete_proposal_only_draft_payload(
                     argument_map_ref=argument_ref
@@ -146,9 +149,9 @@ class ProposalOnlyContentTests(unittest.TestCase):
                     service
                 )
                 with self.assertRaises(ProposalOnlyIdentityViolationError):
-                    service.register_content_stage(
+                    publish_content_stage(
+                        service,
                         f"invalid-{index}",
-                        revision,
                         "strategy",
                         {
                             "mission_ref": draft_ref,
@@ -163,9 +166,9 @@ class ProposalOnlyContentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             service = ContentService.initialize(Path(temp), project_id="p1")
             revision, draft_ref, _confirmation_ref = confirmed_no_materials(service)
-            strategy_ref = service.register_content_stage(
+            strategy_ref = publish_content_stage(
+                service,
                 "strategy",
-                revision,
                 "strategy",
                 {
                     "mission_ref": draft_ref,
@@ -176,9 +179,9 @@ class ProposalOnlyContentTests(unittest.TestCase):
                 },
             )
             with self.assertRaises(ProposalOnlyIdentityViolationError):
-                service.register_content_stage(
+                publish_content_stage(
+                    service,
                     "invalid-claim",
-                    revision + 1,
                     "claim-map",
                     {
                         "strategy_ref": strategy_ref,

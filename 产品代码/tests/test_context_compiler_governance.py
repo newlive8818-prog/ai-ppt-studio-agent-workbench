@@ -60,8 +60,8 @@ class ContextCompilerGovernanceTests(unittest.TestCase):
             exact = [
                 state.artifact_heads["mission/draft"],
                 state.artifact_heads["mission/confirmation"],
-                state.artifact_heads["materials"],
                 *lineage,
+                state.artifact_heads["materials"],
             ]
 
             pack = ContextCompiler(content.kernel).compile_role_task(

@@ -30,7 +30,11 @@ from ai_ppt_studio.application.scoped_confirmation import (
 from ai_ppt_studio.errors import ContentWorkflowError, ProjectNotFoundError
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.workbench_bridge import dispatch
-from tests.v16_content_fixtures import complete_slide_draft_payload
+from tests.v16_content_fixtures import (
+    complete_slide_draft_payload,
+    publish_content_review,
+    publish_content_stage,
+)
 
 
 TEST_SECRET = "test-only-full-deck-authorization-secret-32-bytes"
@@ -821,9 +825,9 @@ class V16ProjectServiceTests(unittest.TestCase):
                     "expected_revision": 7,
                     "action_type": "build-presales-strategy",
                     "target_refs": [
-                        mission_ref, mission_confirmation_ref, material_ref,
-                        framework_ref, framework_confirmation_ref,
-                        authorization_ref,
+                        mission_ref, mission_confirmation_ref, framework_ref,
+                        framework_confirmation_ref, authorization_ref,
+                        material_ref,
                     ],
                     "instructions": "只依据用户材料形成策略。",
                 }
@@ -838,6 +842,7 @@ class V16ProjectServiceTests(unittest.TestCase):
                 {
                     "operation": "commit-artifact",
                     "project_root": project_root,
+                    "command_id": "content-result-exact-replay",
                     "expected_revision": 8,
                     "kind": "content-blueprint",
                     "task_id": task_id,
@@ -869,6 +874,95 @@ class V16ProjectServiceTests(unittest.TestCase):
             self.assertEqual(
                 active_task["result_refs"], [committed["artifact_ref"]]
             )
+            events = tuple(kernel.events_root.iterdir())
+            retried = dispatch_v16(
+                {
+                    "operation": "commit-artifact",
+                    "project_root": project_root,
+                    "command_id": "content-result-exact-replay",
+                    "expected_revision": 8,
+                    "kind": "content-blueprint",
+                    "task_id": task_id,
+                    "payload": {
+                        "artifact_type": "presales-content-strategy",
+                        "mission_ref": mission_ref,
+                        "material_inventory_ref": material_ref,
+                        "content_identity_mode": "material-backed",
+                        "decision_stage": "方案建议",
+                        "core_tension": "待联合验证",
+                    },
+                }
+            )["result"]
+            self.assertEqual(retried["artifact_ref"], committed["artifact_ref"])
+            self.assertEqual(retried["snapshot"], committed["snapshot"])
+            self.assertEqual(tuple(kernel.events_root.iterdir()), events)
+
+            semantic_collisions = (
+                {
+                    "expected_revision": 8,
+                    "kind": "content-blueprint",
+                    "payload": {
+                        "artifact_type": "presales-content-strategy",
+                        "mission_ref": mission_ref,
+                        "material_inventory_ref": material_ref,
+                        "content_identity_mode": "material-backed",
+                        "decision_stage": "方案建议",
+                        "core_tension": "已被篡改",
+                    },
+                },
+                {
+                    "expected_revision": 8,
+                    "kind": "content-acceptance",
+                    "payload": {
+                        "artifact_type": "presales-content-strategy",
+                        "mission_ref": mission_ref,
+                        "material_inventory_ref": material_ref,
+                        "content_identity_mode": "material-backed",
+                        "decision_stage": "方案建议",
+                        "core_tension": "待联合验证",
+                    },
+                },
+                {
+                    "expected_revision": 9,
+                    "kind": "content-blueprint",
+                    "payload": {
+                        "artifact_type": "presales-content-strategy",
+                        "mission_ref": mission_ref,
+                        "material_inventory_ref": material_ref,
+                        "content_identity_mode": "material-backed",
+                        "decision_stage": "方案建议",
+                        "core_tension": "待联合验证",
+                    },
+                },
+                {
+                    "expected_revision": 8,
+                    "kind": "content-blueprint",
+                    "payload": {"artifact_type": "presales-content-strategy"},
+                },
+                {
+                    "expected_revision": 8,
+                    "kind": "content-blueprint",
+                    "payload": {
+                        "artifact_type": "claim-evidence-map",
+                        "strategy_ref": committed["artifact_ref"],
+                        "claims": [],
+                    },
+                },
+            )
+            for collision in semantic_collisions:
+                with self.subTest(collision=collision), self.assertRaises(
+                    ContentWorkflowError
+                ) as caught:
+                    dispatch_v16({
+                        "operation": "commit-artifact",
+                        "project_root": project_root,
+                        "command_id": "content-result-exact-replay",
+                        "task_id": task_id,
+                        **collision,
+                    })
+                self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+                self.assertEqual(kernel.load().revision, 9)
+                self.assertEqual(tuple(kernel.events_root.iterdir()), events)
 
     def test_stale_agent_result_after_framework_reset_is_rejected_zero_write(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -899,8 +993,8 @@ class V16ProjectServiceTests(unittest.TestCase):
                 "command_id": "stale-v1-task",
                 "action_type": "build-presales-strategy",
                 "target_refs": [
-                    mission_ref, mission_confirmation_ref, materials_ref,
-                    framework_ref, confirmation_ref, authorization_ref,
+                    mission_ref, mission_confirmation_ref, framework_ref,
+                    confirmation_ref, authorization_ref, materials_ref,
                 ],
                 "instructions": "生成 v1 策略",
             })["result"]
@@ -933,6 +1027,41 @@ class V16ProjectServiceTests(unittest.TestCase):
             self.assertEqual(kernel.load(), before)
             self.assertEqual(tuple(kernel.events_root.iterdir()), events)
             self.assertEqual(tuple(kernel.artifacts.objects_root.rglob("*")), objects)
+
+    def test_content_action_requires_canonical_target_order_zero_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config, _profile = runtime_config(Path(temp))
+            kernel = ProjectService(config).create_project("canonical targets")
+            content = ContentService(kernel)
+            mission_ref = content.save_mission_draft("canonical-mission", 1, {
+                "topic": "经营一体化", "primary_audience": "决策者",
+                "desired_judgment_or_action": "批准一期",
+            })
+            confirmation_ref = content.confirm_mission(
+                "canonical-confirm", 2, mission_draft_ref=mission_ref,
+                material_mode="no-materials-confirmed", material_inventory_ref="",
+                user_action_ref="test-user-action://canonical-targets",
+                user_message_ref="",
+            )
+            framework_ref, framework_confirmation_ref, authorization_ref = (
+                _save_confirm_authorize(kernel, confirmation_ref)
+            )
+            expected = [
+                mission_ref, confirmation_ref, framework_ref,
+                framework_confirmation_ref, authorization_ref,
+            ]
+            before = kernel.load()
+            events = tuple(kernel.events_root.iterdir())
+            with self.assertRaises(ContentWorkflowError) as caught:
+                ProjectCommandService(kernel).request_agent_action(
+                    "canonical-targets-reordered", before.revision,
+                    action_type="build-presales-strategy",
+                    target_refs=list(reversed(expected)),
+                    instructions="不应接受重排后的引用。",
+                )
+            self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+            self.assertEqual(kernel.load(), before)
+            self.assertEqual(tuple(kernel.events_root.iterdir()), events)
 
     def test_content_task_result_type_and_task_id_are_mandatory_zero_write(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1115,8 +1244,8 @@ class V16ProjectServiceTests(unittest.TestCase):
             _save_confirm_authorize(kernel, mission_confirmation_ref)
 
             content = ContentService(kernel)
-            strategy_ref = content.register_content_stage(
-                "direct-route-strategy", 7, "strategy", {
+            strategy_ref = publish_content_stage(
+                content, "direct-route-strategy", "strategy", {
                         "artifact_type": "presales-content-strategy",
                         "mission_ref": mission_ref,
                         "material_inventory_ref": material_ref,
@@ -1125,8 +1254,8 @@ class V16ProjectServiceTests(unittest.TestCase):
                         "core_tension": "系统割裂",
                     }
             )
-            claim_ref = content.register_content_stage(
-                "direct-route-claim", 8, "claim-map", {
+            claim_ref = publish_content_stage(
+                content, "direct-route-claim", "claim-map", {
                         "artifact_type": "claim-evidence-map",
                         "strategy_ref": strategy_ref,
                         "claims": [
@@ -1138,8 +1267,8 @@ class V16ProjectServiceTests(unittest.TestCase):
                         ],
                     }
             )
-            argument_ref = content.register_content_stage(
-                "direct-route-argument", 9, "argument-map", {
+            argument_ref = publish_content_stage(
+                content, "direct-route-argument", "argument-map", {
                         "artifact_type": "deck-argument-map",
                         "strategy_ref": strategy_ref,
                         "claim_evidence_map_ref": claim_ref,
@@ -1148,8 +1277,8 @@ class V16ProjectServiceTests(unittest.TestCase):
                         ],
                     }
             )
-            draft_ref = content.register_content_stage(
-                "direct-route-draft", 10, "slide-draft-set", {
+            draft_ref = publish_content_stage(
+                content, "direct-route-draft", "slide-draft-set", {
                         "artifact_type": "slide-draft-set",
                         **complete_slide_draft_payload(
                             argument_map_ref=argument_ref,
@@ -1207,28 +1336,28 @@ class V16ProjectServiceTests(unittest.TestCase):
             framework_ref, framework_confirmation_ref, authorization_ref = (
                 _save_confirm_authorize(kernel, mission_confirmation_ref)
             )
-            strategy_ref = content.register_content_stage(
-                "reviewers:strategy", kernel.load().revision, "strategy", {
+            strategy_ref = publish_content_stage(
+                content, "reviewers:strategy", "strategy", {
                     "mission_ref": mission_ref,
                     "material_inventory_ref": materials_ref,
                     "content_identity_mode": "material-backed",
                     "decision_stage": "立项", "core_tension": "系统割裂",
                 }
             )
-            claim_ref = content.register_content_stage(
-                "reviewers:claim", kernel.load().revision, "claim-map", {
+            claim_ref = publish_content_stage(
+                content, "reviewers:claim", "claim-map", {
                     "strategy_ref": strategy_ref,
                     "claims": [{"claim_id": "c1", "status": "supported", "evidence_refs": [materials_ref]}],
                 }
             )
-            argument_ref = content.register_content_stage(
-                "reviewers:argument", kernel.load().revision, "argument-map", {
+            argument_ref = publish_content_stage(
+                content, "reviewers:argument", "argument-map", {
                     "strategy_ref": strategy_ref, "claim_evidence_map_ref": claim_ref,
                     "chapters": [{"chapter_id": "c1", "task": "建立共识"}],
                 }
             )
-            draft_ref = content.register_content_stage(
-                "reviewers:draft-set", kernel.load().revision, "slide-draft-set",
+            draft_ref = publish_content_stage(
+                content, "reviewers:draft-set", "slide-draft-set",
                 complete_slide_draft_payload(
                     argument_map_ref=argument_ref, material_ref=materials_ref
                 ),
@@ -1261,8 +1390,35 @@ class V16ProjectServiceTests(unittest.TestCase):
                     }
                 )["result"]
                 self.assertEqual(result["task"]["role_id"], role_id)
-                revision += 1
-                self.assertEqual(result["snapshot"]["revision"], revision)
+                self.assertEqual(result["snapshot"]["revision"], revision + 1)
+                review_role = {
+                    "review-content-presales": "presales-reviewer",
+                    "review-content-decision-maker": "decision-maker-reviewer",
+                    "review-content-evidence": "evidence-reviewer",
+                    "review-content-narrative": "narrative-reviewer",
+                    "review-content-editorial": "editorial-reviewer",
+                }[action]
+                publish_content_review(
+                    content,
+                    f"result:{action}",
+                    {
+                        "target_ref": draft_ref,
+                        "reviewer_role": review_role,
+                        "input_version": draft_ref,
+                        "checks": [{
+                            "criterion_id": f"{review_role}-hard",
+                            "level": "must-follow",
+                            "applicability": "applicable",
+                            "result": "passed",
+                            "evidence_refs": [draft_ref],
+                            "failure_reason": "",
+                            "repair_instruction": "",
+                        }],
+                        "overall_result": "passed",
+                    },
+                    task_id=result["task"]["task_id"],
+                )
+                revision = kernel.load().revision
 
 
 if __name__ == "__main__":

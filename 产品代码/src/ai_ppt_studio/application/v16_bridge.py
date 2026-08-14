@@ -312,17 +312,29 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
         task_id = str(request.get("task_id") or "").strip()
         artifact_type = str(payload.get("artifact_type") or "")
         content_task = None
+        command_id = _command_id(operation, request)
         if task_id:
+            replay = project_commands.replay_content_agent_result(
+                command_id=command_id,
+                task_id=task_id,
+                request_kind=kind,
+                payload=payload,
+                expected_revision=int(request["expected_revision"]),
+            )
+            if replay is not None:
+                artifact_ref, state = replay
+                return {
+                    "ok": True,
+                    "operation": operation,
+                    "selected_project_root": str(project_root),
+                    "result": {
+                        "artifact_ref": artifact_ref,
+                        "snapshot": _snapshot(state, project_root),
+                    },
+                }
             active_task = project_commands.require_active_agent_task(task_id)
             if str(active_task.get("action_type") or "") in CONTENT_RESULT_CONTRACTS:
-                content_task, _context = (
-                    project_commands.preflight_content_agent_result(
-                        task_id=task_id,
-                        request_kind=kind,
-                        payload=payload,
-                        expected_revision=int(request["expected_revision"]),
-                    )
-                )
+                content_task = active_task
         elif artifact_type in FORMAL_AGENT_CONTENT_ARTIFACT_TYPES:
             from ai_ppt_studio.errors import ContentWorkflowError
 
@@ -331,27 +343,13 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
                 "Formal Agent content results require an active task identity",
                 {"artifact_type": artifact_type},
             )
-        command_id = _command_id(operation, request)
         if content_task is not None:
-            action = str(content_task["action_type"])
-            result_contract = CONTENT_RESULT_CONTRACTS[action]
-            if result_contract.stage:
-                slot, artifact_kind, normalized = (
-                    content.prepare_content_stage_update(
-                        result_contract.stage, payload
-                    )
-                )
-            else:
-                slot, artifact_kind, normalized = content.prepare_review_update(
-                    payload
-                )
             artifact_ref, state = project_commands.commit_content_agent_result(
                 command_id=command_id,
                 expected_revision=int(request["expected_revision"]),
                 task_id=task_id,
-                artifact_slot=slot,
-                artifact_kind=artifact_kind,
-                artifact_payload=normalized,
+                request_kind=kind,
+                raw_request_payload=payload,
             )
         elif kind == "mission":
             artifact_ref = content.save_mission_draft(
@@ -380,6 +378,13 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
             )
         if content_task is None:
             state = kernel.load()
+            if task_id:
+                state = project_commands.complete_agent_task(
+                    f"{command_id}:complete-agent-task:{task_id}",
+                    state.revision,
+                    task_id=task_id,
+                    result_ref=artifact_ref,
+                )
         return {
             "ok": True,
             "operation": operation,

@@ -318,18 +318,13 @@ class ContentService:
         stage: str,
         payload: dict[str, Any],
     ) -> str:
-        slot, kind, normalized = self.prepare_content_stage_update(
-            stage, payload
+        raise ContentWorkflowError(
+            "CONTENT_REVIEW_CONFLICT",
+            "Formal content stages require an exact governed Agent task",
+            {"stage": stage},
         )
-        state = self.kernel.commit(
-            command_id=command_id,
-            expected_revision=expected_revision,
-            event_type=f"content.{stage}.registered",
-            artifact_updates={slot: (kind, normalized)},
-        )
-        return state.artifact_heads[slot]
 
-    def prepare_content_stage_update(
+    def _prepare_content_stage_update(
         self, stage: str, payload: dict[str, Any]
     ) -> tuple[str, str, dict[str, Any]]:
         """Validate one stage completely without exposing a new head."""
@@ -351,16 +346,13 @@ class ContentService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
-        slot, kind, normalized = self.prepare_review_update(payload)
-        state = self.kernel.commit(
-            command_id=command_id,
-            expected_revision=expected_revision,
-            event_type="content.review.registered",
-            artifact_updates={slot: (kind, normalized)},
+        raise ContentWorkflowError(
+            "CONTENT_REVIEW_CONFLICT",
+            "Formal content reviews require an exact governed Agent task",
+            {},
         )
-        return state.artifact_heads[slot]
 
-    def prepare_review_update(
+    def _prepare_review_update(
         self, payload: dict[str, Any]
     ) -> tuple[str, str, dict[str, Any]]:
         """Validate one independent review completely without writing it."""

@@ -14,12 +14,15 @@ from ai_ppt_studio.application.content_service import ContentService
 from ai_ppt_studio.application.scoped_confirmation import (
     HOST_CONFIRMATION_SECRET_ENV,
 )
-from ai_ppt_studio.errors import ArtifactReferenceError
+from ai_ppt_studio.errors import ContentWorkflowError
 from tests.test_v16_content_acceptance import (
     TEST_SECRET,
     authorize_current_framework,
 )
-from tests.v16_content_fixtures import complete_slide_draft_payload
+from tests.v16_content_fixtures import (
+    complete_slide_draft_payload,
+    publish_content_stage,
+)
 
 
 def valid_mission() -> dict[str, str]:
@@ -64,9 +67,9 @@ def build_ready_draft(
     ):
         authorize_current_framework(service, mission_confirmation)
     revision = service.kernel.load().revision
-    strategy = service.register_content_stage(
+    strategy = publish_content_stage(
+        service,
         "c4",
-        revision,
         "strategy",
         {
             "mission_ref": mission,
@@ -76,9 +79,9 @@ def build_ready_draft(
             "core_tension": "系统割裂",
         },
     )
-    claim_map = service.register_content_stage(
+    claim_map = publish_content_stage(
+        service,
         "c5",
-        revision + 1,
         "claim-map",
         {
             "strategy_ref": strategy,
@@ -91,9 +94,9 @@ def build_ready_draft(
             ],
         },
     )
-    argument = service.register_content_stage(
+    argument = publish_content_stage(
+        service,
         "c6",
-        revision + 2,
         "argument-map",
         {
             "strategy_ref": strategy,
@@ -103,9 +106,9 @@ def build_ready_draft(
             ],
         },
     )
-    draft = service.register_content_stage(
+    draft = publish_content_stage(
+        service,
         "c7",
-        revision + 3,
         "slide-draft-set",
         complete_slide_draft_payload(
             argument_map_ref=argument,
@@ -114,7 +117,7 @@ def build_ready_draft(
             slide_id_prefix="s",
         ),
     )
-    return revision + 4, draft, {
+    return service.kernel.load().revision, draft, {
         "mission": mission,
         "materials": materials,
         "strategy": strategy,
@@ -130,7 +133,7 @@ class V16ContentChainTests(unittest.TestCase):
             revision, draft, refs = build_ready_draft(service)
             self.assertTrue(draft.startswith("artifact://slide-draft-set/"))
             self.assertEqual(service.kernel.load().revision, revision)
-            with self.assertRaises(ArtifactReferenceError):
+            with self.assertRaises(ContentWorkflowError) as caught:
                 service.register_content_stage(
                     "bad",
                     revision,
@@ -143,6 +146,7 @@ class V16ContentChainTests(unittest.TestCase):
                         "chapters": [{"chapter_id": "x", "task": "x"}],
                     },
                 )
+            self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
             self.assertEqual(service.kernel.load().revision, revision)
 
 

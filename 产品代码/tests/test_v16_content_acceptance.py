@@ -26,7 +26,11 @@ from ai_ppt_studio.errors import (
     GateBlockedError,
 )
 from ai_ppt_studio.kernel.references import ArtifactReference
-from tests.v16_content_fixtures import complete_slide_draft_payload
+from tests.v16_content_fixtures import (
+    complete_slide_draft_payload,
+    publish_content_review,
+    publish_content_stage,
+)
 
 
 TEST_SECRET = "test-only-content-acceptance-secret-32-bytes-long"
@@ -104,24 +108,24 @@ def build_authorized_draft(service: ContentService):
     )
     lineage = authorize_current_framework(service, mission_confirmation)
     revision = service.kernel.load().revision
-    strategy = service.register_content_stage("c4", revision, "strategy", {
+    strategy = publish_content_stage(service, "c4", "strategy", {
         "mission_ref": mission, "material_inventory_ref": materials,
         "content_identity_mode": "material-backed", "decision_stage": "立项",
         "core_tension": "系统割裂",
     })
-    claim_map = service.register_content_stage("c5", revision + 1, "claim-map", {
+    claim_map = publish_content_stage(service, "c5", "claim-map", {
         "strategy_ref": strategy,
         "claims": [{"claim_id": "c1", "status": "supported", "evidence_refs": [materials]}],
     })
-    argument = service.register_content_stage("c6", revision + 2, "argument-map", {
+    argument = publish_content_stage(service, "c6", "argument-map", {
         "strategy_ref": strategy, "claim_evidence_map_ref": claim_map,
         "chapters": [{"chapter_id": "ch1", "task": "建立问题共识"}],
     })
-    draft = service.register_content_stage(
-        "c7", revision + 3, "slide-draft-set",
+    draft = publish_content_stage(
+        service, "c7", "slide-draft-set",
         complete_slide_draft_payload(argument_map_ref=argument, material_ref=materials),
     )
-    return revision + 4, draft, lineage
+    return service.kernel.load().revision, draft, lineage
 
 
 def review_payload(draft_ref: str, role: str, *, passed: bool = True) -> dict:
@@ -155,16 +159,48 @@ def register_reviews(
 ) -> int:
     revision = start_revision
     for index, role in enumerate(roles):
-        service.register_review(
+        publish_content_review(
+            service,
             f"review-{index}",
-            revision,
             review_payload(draft_ref, role, passed=role != failed_role),
         )
-        revision += 1
+        revision = service.kernel.load().revision
     return revision
 
 
 class V16ContentAcceptanceTests(unittest.TestCase):
+    def test_direct_formal_stage_and_review_publication_fail_closed_zero_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            service = ContentService.initialize(Path(temp), project_id="direct-blocked")
+            for operation in (
+                lambda: service.register_content_stage(
+                    "direct-stage", service.kernel.load().revision, "strategy", {}
+                ),
+                lambda: service.register_review(
+                    "direct-review", service.kernel.load().revision, {}
+                ),
+            ):
+                before = service.kernel.load()
+                events = (
+                    tuple(service.kernel.events_root.iterdir())
+                    if service.kernel.events_root.exists()
+                    else ()
+                )
+                objects = tuple(service.kernel.artifacts.objects_root.rglob("*"))
+                with self.assertRaises(ContentWorkflowError) as caught:
+                    operation()
+                self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+                self.assertEqual(service.kernel.load(), before)
+                events_after = (
+                    tuple(service.kernel.events_root.iterdir())
+                    if service.kernel.events_root.exists()
+                    else ()
+                )
+                self.assertEqual(events_after, events)
+                self.assertEqual(
+                    tuple(service.kernel.artifacts.objects_root.rglob("*")), objects
+                )
+
     def test_stage_and_review_reject_supplied_stale_framework_lineage_zero_write(self) -> None:
         with tempfile.TemporaryDirectory() as temp, patch.dict(
             os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
@@ -184,16 +220,16 @@ class V16ContentAcceptanceTests(unittest.TestCase):
             ]
             authorize_current_framework(service, mission_confirmation, version=2)
             current = service.kernel.load()
-            strategy_ref = service.register_content_stage(
-                "v2-strategy", current.revision, "strategy", {
+            strategy_ref = publish_content_stage(
+                service, "v2-strategy", "strategy", {
                     "mission_ref": current.artifact_heads["mission/draft"],
                     "material_inventory_ref": current.artifact_heads["materials"],
                     "content_identity_mode": "material-backed",
                     "decision_stage": "立项", "core_tension": "系统割裂",
                 }
             )
-            claim_ref = service.register_content_stage(
-                "v2-claim", service.kernel.load().revision, "claim-map", {
+            claim_ref = publish_content_stage(
+                service, "v2-claim", "claim-map", {
                     "strategy_ref": strategy_ref,
                     "claims": [{
                         "claim_id": "v2-c1", "status": "supported",
@@ -201,15 +237,15 @@ class V16ContentAcceptanceTests(unittest.TestCase):
                     }],
                 }
             )
-            argument_ref = service.register_content_stage(
-                "v2-argument", service.kernel.load().revision, "argument-map", {
+            argument_ref = publish_content_stage(
+                service, "v2-argument", "argument-map", {
                     "strategy_ref": strategy_ref,
                     "claim_evidence_map_ref": claim_ref,
                     "chapters": [{"chapter_id": "ch1", "task": "建立问题共识"}],
                 }
             )
-            current_draft_ref = service.register_content_stage(
-                "v2-draft", service.kernel.load().revision, "slide-draft-set",
+            current_draft_ref = publish_content_stage(
+                service, "v2-draft", "slide-draft-set",
                 complete_slide_draft_payload(
                     argument_map_ref=argument_ref,
                     material_ref=current.artifact_heads["materials"],
@@ -364,7 +400,7 @@ class V16ContentAcceptanceTests(unittest.TestCase):
                     "decision_stage": "立项", "core_tension": "诊断假设",
                     "identity_labels": ["diagnostic-hypothesis", "solution-recommendation", "joint-validation-required"],
                 })
-            self.assertEqual(caught.exception.code, "FULL_DECK_EXPANSION_NOT_AUTHORIZED")
+            self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
             self.assertEqual(service.kernel.load(), before)
             self.assertNotIn("content/blueprint", before.artifact_heads)
 

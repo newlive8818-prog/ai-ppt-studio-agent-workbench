@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.application.v16_bridge import dispatch_v16
+from ai_ppt_studio.kernel.references import ArtifactReference
 from tests.v16_visual_fixtures import (
     confirmed_g0,
     passing_visual_review,
@@ -19,6 +20,42 @@ from tests.v16_visual_fixtures import (
 
 
 class V16VisualBridgeTests(unittest.TestCase):
+    def test_task_bound_visual_result_completes_and_binds_the_agent_task(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp)
+            content, revision, blueprint_ref = confirmed_g0(project)
+            requested = dispatch_v16(
+                {
+                    "operation": "request-agent-action",
+                    "project_root": str(project),
+                    "expected_revision": revision,
+                    "command_id": "visual-task",
+                    "action_type": "design-deck-system",
+                    "target_refs": [blueprint_ref],
+                    "instructions": "形成视觉方向。",
+                }
+            )["result"]
+            task_id = requested["task"]["task_id"]
+            committed = dispatch_v16(
+                {
+                    "operation": "commit-artifact",
+                    "project_root": str(project),
+                    "expected_revision": revision + 1,
+                    "command_id": "visual-task-result",
+                    "kind": "visual-brief",
+                    "task_id": task_id,
+                    "payload": valid_visual_brief(blueprint_ref),
+                }
+            )["result"]
+
+            self.assertEqual(committed["snapshot"]["revision"], revision + 3)
+            task_ref = committed["snapshot"]["artifacts"][f"agent/task/{task_id}"]
+            task = content.kernel.artifacts.resolve(
+                ArtifactReference.parse(task_ref)
+            )["payload"]
+            self.assertEqual(task["status"], "completed")
+            self.assertEqual(task["result_refs"], [committed["artifact_ref"]])
+
     def test_existing_commit_and_internal_gate_operations_route_to_visual_service(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)

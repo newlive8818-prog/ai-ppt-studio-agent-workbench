@@ -16,6 +16,7 @@ from ai_ppt_studio.application.scoped_confirmation import (
     HOST_CONFIRMATION_SECRET_ENV,
 )
 from ai_ppt_studio.errors import (
+    ContentWorkflowError,
     MaterialModeUnconfirmedError,
     MissionNotConfirmedError,
 )
@@ -24,6 +25,7 @@ from tests.test_v16_content_acceptance import (
     TEST_SECRET,
     authorize_current_framework,
 )
+from tests.v16_content_fixtures import publish_content_stage
 
 
 MISSION = {
@@ -52,7 +54,7 @@ class MissionReadinessTests(unittest.TestCase):
             draft_ref = service.save_mission_draft("draft", 0, MISSION)
             materials_ref = service.register_materials("materials", 1, MATERIALS)
 
-            with self.assertRaises(MissionNotConfirmedError):
+            with self.assertRaises(ContentWorkflowError) as caught:
                 service.register_content_stage(
                     "blocked-strategy",
                     2,
@@ -65,6 +67,7 @@ class MissionReadinessTests(unittest.TestCase):
                         "core_tension": "系统割裂",
                     },
                 )
+            self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
 
             confirmation_ref = service.confirm_mission(
                 "confirm",
@@ -91,9 +94,9 @@ class MissionReadinessTests(unittest.TestCase):
             ):
                 authorize_current_framework(service, confirmation_ref)
 
-            strategy_ref = service.register_content_stage(
+            strategy_ref = publish_content_stage(
+                service,
                 "strategy",
-                service.kernel.load().revision,
                 "strategy",
                 {
                     "mission_ref": draft_ref,
@@ -159,7 +162,7 @@ class MissionReadinessTests(unittest.TestCase):
                 {**MISSION, "primary_audience": "客户经营与数字化决策团队"},
             )
 
-            with self.assertRaises(MissionNotConfirmedError):
+            with self.assertRaises(ContentWorkflowError) as caught:
                 service.register_content_stage(
                     "stale-confirmation",
                     4,
@@ -172,6 +175,7 @@ class MissionReadinessTests(unittest.TestCase):
                         "core_tension": "系统割裂",
                     },
                 )
+            self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
 
     def test_explicit_no_materials_confirmation_enters_proposal_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -197,9 +201,9 @@ class MissionReadinessTests(unittest.TestCase):
             ):
                 authorize_current_framework(service, confirmation_ref)
 
-            strategy_ref = service.register_content_stage(
+            strategy_ref = publish_content_stage(
+                service,
                 "proposal-strategy",
-                service.kernel.load().revision,
                 "strategy",
                 {
                     "mission_ref": draft_ref,

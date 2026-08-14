@@ -2,8 +2,117 @@ from __future__ import annotations
 
 from typing import Any
 
+from ai_ppt_studio.application.content_action_policy import (
+    CONTENT_RESULT_CONTRACTS,
+    content_action_contract,
+)
+from ai_ppt_studio.application.content_service import ContentService
+from ai_ppt_studio.application.project_service import ProjectCommandService
+from ai_ppt_studio.kernel.references import ArtifactReference
+
 
 DEFAULT_MATERIAL_REF = "artifact://material-inventory/" + "a" * 64
+
+
+STAGE_ACTIONS = {
+    "strategy": "build-presales-strategy",
+    "claim-map": "build-claim-evidence-map",
+    "argument-map": "build-deck-argument-map",
+    "slide-draft-set": "build-slide-draft-set",
+}
+
+REVIEW_ACTIONS = {
+    "presales-reviewer": "review-content-presales",
+    "decision-maker-reviewer": "review-content-decision-maker",
+    "evidence-reviewer": "review-content-evidence",
+    "narrative-reviewer": "review-content-narrative",
+    "editorial-reviewer": "review-content-editorial",
+}
+
+
+def publish_content_result(
+    service: ContentService,
+    *,
+    action: str,
+    command_id: str,
+    payload: dict[str, Any],
+    task_id: str = "",
+) -> str:
+    """Publish a formal content result through its exact governed Agent task."""
+
+    command = ProjectCommandService(service.kernel)
+    state = service.kernel.load()
+    action_contract = content_action_contract(action)
+    result_contract = CONTENT_RESULT_CONTRACTS[action]
+    if action_contract is None:
+        raise AssertionError(f"Missing content action contract: {action}")
+    if task_id:
+        task = command.require_active_agent_task(task_id)
+        if task.get("action_type") != action:
+            raise AssertionError("Active fixture task has the wrong action")
+    else:
+        target_refs = [
+            state.artifact_heads[slot]
+            for slot in action_contract.exact_target_slots(state.artifact_heads)
+        ]
+        _task_ref, task, _requested = command.request_agent_action(
+            f"{command_id}:task",
+            state.revision,
+            action_type=action,
+            target_refs=target_refs,
+            instructions="Test fixture: publish one governed formal content result.",
+        )
+    request_payload = {
+        "artifact_type": result_contract.artifact_type,
+        **payload,
+    }
+    result_ref, completed = command.commit_content_agent_result(
+        command_id=f"{command_id}:result",
+        expected_revision=service.kernel.load().revision,
+        task_id=str(task["task_id"]),
+        request_kind=result_contract.request_kind,
+        raw_request_payload=request_payload,
+    )
+    completed_task_ref = completed.artifact_heads[f"agent/task/{task['task_id']}"]
+    completed_task = service.kernel.artifacts.resolve(
+        ArtifactReference.parse(completed_task_ref)
+    )["payload"]
+    if (
+        completed_task.get("status") != "completed"
+        or completed_task.get("result_refs") != [result_ref]
+    ):
+        raise AssertionError("Governed content fixture did not complete its Agent task")
+    return result_ref
+
+
+def publish_content_stage(
+    service: ContentService,
+    command_id: str,
+    stage: str,
+    payload: dict[str, Any],
+) -> str:
+    return publish_content_result(
+        service,
+        action=STAGE_ACTIONS[stage],
+        command_id=command_id,
+        payload=payload,
+    )
+
+
+def publish_content_review(
+    service: ContentService,
+    command_id: str,
+    payload: dict[str, Any],
+    *,
+    task_id: str = "",
+) -> str:
+    return publish_content_result(
+        service,
+        action=REVIEW_ACTIONS[str(payload.get("reviewer_role") or "")],
+        command_id=command_id,
+        payload=payload,
+        task_id=task_id,
+    )
 
 
 def complete_material_evidence(

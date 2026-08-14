@@ -69,6 +69,8 @@ class ContentResultContract:
     artifact_type: str
     stage: str = ""
     reviewer_role: str = ""
+    artifact_slot: str = ""
+    artifact_kind: str = ""
 
 def _contract(
     action: str,
@@ -189,36 +191,50 @@ CONTENT_ACTION_CONTRACTS = {
 
 CONTENT_RESULT_CONTRACTS = {
     "build-presales-strategy": ContentResultContract(
-        "content-blueprint", "presales-content-strategy", stage="strategy"
+        "content-blueprint", "presales-content-strategy", stage="strategy",
+        artifact_slot="content/strategy", artifact_kind="presales-content-strategy",
     ),
     "build-claim-evidence-map": ContentResultContract(
-        "content-blueprint", "claim-evidence-map", stage="claim-map"
+        "content-blueprint", "claim-evidence-map", stage="claim-map",
+        artifact_slot="content/claim-map", artifact_kind="claim-evidence-map",
     ),
     "build-deck-argument-map": ContentResultContract(
-        "content-blueprint", "deck-argument-map", stage="argument-map"
+        "content-blueprint", "deck-argument-map", stage="argument-map",
+        artifact_slot="content/argument-map", artifact_kind="deck-argument-map",
     ),
     "build-slide-draft-set": ContentResultContract(
-        "content-blueprint", "slide-draft-set", stage="slide-draft-set"
+        "content-blueprint", "slide-draft-set", stage="slide-draft-set",
+        artifact_slot="content/draft", artifact_kind="slide-draft-set",
     ),
     "review-content-presales": ContentResultContract(
         "content-blueprint", "content-review-record",
         reviewer_role="presales-reviewer",
+        artifact_slot="content/review/presales-reviewer",
+        artifact_kind="content-review-record",
     ),
     "review-content-decision-maker": ContentResultContract(
         "content-blueprint", "content-review-record",
         reviewer_role="decision-maker-reviewer",
+        artifact_slot="content/review/decision-maker-reviewer",
+        artifact_kind="content-review-record",
     ),
     "review-content-evidence": ContentResultContract(
         "content-blueprint", "content-review-record",
         reviewer_role="evidence-reviewer",
+        artifact_slot="content/review/evidence-reviewer",
+        artifact_kind="content-review-record",
     ),
     "review-content-narrative": ContentResultContract(
         "content-blueprint", "content-review-record",
         reviewer_role="narrative-reviewer",
+        artifact_slot="content/review/narrative-reviewer",
+        artifact_kind="content-review-record",
     ),
     "review-content-editorial": ContentResultContract(
         "content-blueprint", "content-review-record",
         reviewer_role="editorial-reviewer",
+        artifact_slot="content/review/editorial-reviewer",
+        artifact_kind="content-review-record",
     ),
 }
 FORMAL_AGENT_CONTENT_ARTIFACT_TYPES = frozenset(
@@ -232,6 +248,10 @@ FULL_DECK_CONTENT_ACTIONS = frozenset(CONTENT_ACTION_CONTRACTS) - (
     FRAMEWORK_ACTIONS | BATCH_PLAN_ACTIONS | BATCH_APPLY_ACTIONS
 )
 CONTENT_ACTIONS = frozenset(CONTENT_ACTION_CONTRACTS) - FRAMEWORK_ACTIONS
+CONTENT_ACTION_ROLES = {
+    action: contract.role_id
+    for action, contract in CONTENT_ACTION_CONTRACTS.items()
+}
 
 
 def content_action_contract(action: str) -> ContentActionContract | None:
@@ -252,7 +272,7 @@ def validate_content_action_targets(
         )
     slots = contract.exact_target_slots(heads)
     expected = [heads[slot] for slot in slots]
-    if len(target_refs) != len(set(target_refs)) or set(target_refs) != set(expected):
+    if target_refs != expected:
         raise ContentWorkflowError(
             "CONTENT_REVIEW_CONFLICT",
             "Content action targets must equal the exact current policy set",
@@ -284,6 +304,7 @@ __all__ = [
     "BATCH_PLAN_ACTIONS",
     "CONTENT_ACTIONS",
     "CONTENT_ACTION_CONTRACTS",
+    "CONTENT_ACTION_ROLES",
     "ContentActionContract",
     "FRAMEWORK_ACTIONS",
     "FULL_DECK_CONTENT_ACTIONS",
