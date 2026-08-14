@@ -687,8 +687,17 @@ class ProjectCommandService:
                     "expected_revision": expected_revision,
                 })
             ).hexdigest()
+            event = json.loads(
+                (
+                    self.kernel.events_root / f"r{revision:08d}.json"
+                ).read_text(encoding="utf-8")
+            )
+            context_ref = str(task.get("context_pack_ref") or "")
+            context_reference = ArtifactReference.parse(context_ref)
+            context = self.kernel.artifacts.resolve(context_reference)["payload"]
             if (
                 task_reference.kind != "agent-task"
+                or task.get("task_id") != task_id
                 or task.get("status") != "completed"
                 or task.get("completion_command_id") != command_id
                 or request_kind != contract.request_kind
@@ -699,6 +708,29 @@ class ProjectCommandService:
                 or completion.get("artifact_kind") != contract.artifact_kind
                 or completion.get("request_fingerprint")
                 != request_fingerprint
+                or event.get("command_id") != command_id
+                or event.get("command_fingerprint") != request_fingerprint
+                or event.get("revision") != revision
+                or event.get("artifact_heads", {}).get(contract.artifact_slot)
+                != completion.get("result_ref")
+                or event.get("artifact_heads", {}).get(
+                    f"agent/task/{task_id}"
+                ) != task_ref
+                or context_reference.kind != "context-pack"
+                or state.artifact_heads.get(f"agent/context/{task_id}")
+                != context_ref
+                or context.get("project_id") != state.project_id
+                or context.get("project_revision") != task.get("input_revision")
+                or context.get("artifact_version_refs") != task.get("target_refs")
+                or context.get("layers", {}).get("role_contract", {}).get(
+                    "role_id"
+                ) != task.get("role_id")
+                or context.get("layers", {}).get("task_contract", {}).get(
+                    "task_type"
+                ) != action
+                or context.get("layers", {}).get("task_contract", {}).get(
+                    "target_refs"
+                ) != task.get("target_refs")
                 or (
                     contract.reviewer_role
                     and payload.get("reviewer_role") != contract.reviewer_role
@@ -716,6 +748,8 @@ class ProjectCommandService:
         except (
             ArtifactReferenceError,
             KeyError,
+            OSError,
+            json.JSONDecodeError,
             TypeError,
             ValueError,
         ):
@@ -759,27 +793,67 @@ class ProjectCommandService:
             request_kind, payload, expected_revision
         )
         try:
-            result_ref = str(completion.get("result_ref") or "") if isinstance(
-                completion, dict
-            ) else ""
+            completion_dict = completion if isinstance(completion, dict) else {}
+            result_ref = str(completion_dict.get("result_ref") or "")
             result_reference = ArtifactReference.parse(result_ref)
+            artifact_slot = str(completion_dict.get("artifact_slot") or "")
+            processed_revision = state.processed_commands[command_id]
+            event = json.loads(
+                (
+                    self.kernel.events_root
+                    / f"r{processed_revision:08d}.json"
+                ).read_text(encoding="utf-8")
+            )
+            exact_task_ref = state.artifact_heads.get(
+                f"agent/task/{task_id}", ""
+            )
+            context_ref = str(task.get("context_pack_ref") or "")
+            context_reference = ArtifactReference.parse(context_ref)
+            context = self.kernel.artifacts.resolve(context_reference)["payload"]
             if (
                 task.get("status") != "completed"
                 or task.get("completion_command_id") != command_id
                 or not isinstance(completion, dict)
                 or completion.get("action_type") != task.get("action_type")
                 or completion.get("artifact_kind") != result_reference.kind
-                or state.artifact_heads.get(
-                    str(completion.get("artifact_slot") or "")
-                ) != result_ref
                 or completion.get("request_fingerprint") != fingerprint
+                or event.get("command_id") != command_id
+                or event.get("command_fingerprint") != fingerprint
+                or event.get("revision") != processed_revision
+                or event.get("artifact_heads", {}).get(artifact_slot)
+                != result_ref
+                or event.get("artifact_heads", {}).get(
+                    f"agent/task/{task_id}"
+                ) != exact_task_ref
+                or context_reference.kind != "context-pack"
+                or state.artifact_heads.get(f"agent/context/{task_id}")
+                != context_ref
+                or context.get("project_id") != state.project_id
+                or context.get("project_revision") != task.get("input_revision")
+                or context.get("artifact_version_refs") != task.get("target_refs")
+                or context.get("layers", {}).get("role_contract", {}).get(
+                    "role_id"
+                ) != task.get("role_id")
+                or context.get("layers", {}).get("task_contract", {}).get(
+                    "task_type"
+                ) != task.get("action_type")
+                or context.get("layers", {}).get("task_contract", {}).get(
+                    "target_refs"
+                ) != task.get("target_refs")
             ):
                 raise ValueError("Processed command has different semantics")
             self.kernel.artifacts.resolve(result_reference)
             if task.get("result_refs") != [result_ref]:
                 raise ValueError("Completed task result binding differs")
             return result_ref, state
-        except (ArtifactReferenceError, TypeError, ValueError):
+        except (
+            ArtifactReferenceError,
+            KeyError,
+            OSError,
+            json.JSONDecodeError,
+            TypeError,
+            ValueError,
+        ):
             raise ContractValidationError(
                 "Processed Agent result command has different semantics"
             ) from None

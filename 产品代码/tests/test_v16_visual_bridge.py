@@ -250,6 +250,75 @@ class V16VisualBridgeTests(unittest.TestCase):
             self.assertEqual(content.kernel.load(), before_replay)
             self.assertEqual(tuple(content.kernel.events_root.iterdir()), replay_events)
 
+            newer_payload = valid_visual_brief(blueprint_ref)
+            newer_payload["design_proposition"] = "任务 B 已覆盖当前视觉简报 head"
+            newer_result = dispatch_v16({
+                "operation": "commit-artifact",
+                "project_root": str(project),
+                "expected_revision": before_replay.revision,
+                "command_id": "newer-visual-result",
+                "kind": "visual-brief",
+                "task_id": newer_task_id,
+                "payload": newer_payload,
+            })["result"]
+            after_newer_result = content.kernel.load()
+            self.assertEqual(
+                after_newer_result.artifact_heads["visual/brief"],
+                newer_result["artifact_ref"],
+            )
+            completed_replay_events = tuple(content.kernel.events_root.iterdir())
+            completed_replay_objects = tuple(
+                content.kernel.artifacts.objects_root.rglob("*")
+            )
+            historical_after_supersession = dispatch_v16({
+                "operation": "commit-artifact",
+                "project_root": str(project),
+                "expected_revision": revision + 1,
+                "command_id": "visual-task-result",
+                "kind": "visual-brief",
+                "task_id": task_id,
+                "payload": valid_visual_brief(blueprint_ref),
+            })["result"]
+            self.assertEqual(
+                historical_after_supersession["artifact_ref"],
+                committed["artifact_ref"],
+            )
+            self.assertEqual(content.kernel.load(), after_newer_result)
+            self.assertEqual(
+                content.kernel.load().artifact_heads["visual/brief"],
+                newer_result["artifact_ref"],
+            )
+            self.assertEqual(
+                tuple(content.kernel.events_root.iterdir()),
+                completed_replay_events,
+            )
+            self.assertEqual(
+                tuple(content.kernel.artifacts.objects_root.rglob("*")),
+                completed_replay_objects,
+            )
+            active_completed = content.kernel.artifacts.resolve(
+                ArtifactReference.parse(
+                    after_newer_result.artifact_heads["agent/task/active"]
+                )
+            )["payload"]
+            self.assertEqual(active_completed["task_id"], newer_task_id)
+            self.assertEqual(active_completed["status"], "completed")
+            with self.assertRaises(ContractValidationError):
+                dispatch_v16({
+                    "operation": "commit-artifact",
+                    "project_root": str(project),
+                    "expected_revision": revision + 1,
+                    "command_id": "visual-task-result",
+                    "kind": "visual-brief",
+                    "task_id": task_id,
+                    "payload": changed_historical,
+                })
+            self.assertEqual(content.kernel.load(), after_newer_result)
+            self.assertEqual(
+                tuple(content.kernel.events_root.iterdir()),
+                completed_replay_events,
+            )
+
     def test_task_bound_visual_result_failure_is_zero_write_and_task_stays_queued(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)

@@ -973,8 +973,12 @@ class V16ProjectServiceTests(unittest.TestCase):
                 "project_root": project_root,
                 "expected_revision": 9,
                 "command_id": "newer-task-after-content-result",
-                "action_type": "design-deck-system",
-                "target_refs": [committed["artifact_ref"]],
+                "action_type": "build-presales-strategy",
+                "target_refs": [
+                    mission_ref, mission_confirmation_ref, framework_ref,
+                    framework_confirmation_ref, authorization_ref,
+                    material_ref,
+                ],
                 "instructions": "新任务保持排队，不得影响历史重放。",
             })["result"]
             before_replay = kernel.load()
@@ -1029,6 +1033,61 @@ class V16ProjectServiceTests(unittest.TestCase):
                 })
             self.assertEqual(kernel.load(), before_replay)
             self.assertEqual(tuple(kernel.events_root.iterdir()), replay_events)
+
+            newer_payload = {
+                "artifact_type": "presales-content-strategy",
+                "mission_ref": mission_ref,
+                "material_inventory_ref": material_ref,
+                "content_identity_mode": "material-backed",
+                "decision_stage": "方案建议",
+                "core_tension": "任务 B 已覆盖当前内容策略 head",
+            }
+            newer_result = dispatch_v16({
+                "operation": "commit-artifact",
+                "project_root": project_root,
+                "command_id": "newer-content-result",
+                "expected_revision": before_replay.revision,
+                "kind": "content-blueprint",
+                "task_id": newer["task"]["task_id"],
+                "payload": newer_payload,
+            })["result"]
+            after_newer_result = kernel.load()
+            self.assertEqual(
+                after_newer_result.artifact_heads["content/strategy"],
+                newer_result["artifact_ref"],
+            )
+            completed_replay_events = tuple(kernel.events_root.iterdir())
+            completed_replay_objects = tuple(kernel.artifacts.objects_root.rglob("*"))
+            historical_after_supersession = dispatch_v16({
+                "operation": "commit-artifact",
+                "project_root": project_root,
+                "command_id": "content-result-exact-replay",
+                "expected_revision": 8,
+                "kind": "content-blueprint",
+                "task_id": task_id,
+                "payload": {
+                    "artifact_type": "presales-content-strategy",
+                    "mission_ref": mission_ref,
+                    "material_inventory_ref": material_ref,
+                    "content_identity_mode": "material-backed",
+                    "decision_stage": "方案建议",
+                    "core_tension": "待联合验证",
+                },
+            })["result"]
+            self.assertEqual(
+                historical_after_supersession["artifact_ref"],
+                committed["artifact_ref"],
+            )
+            self.assertEqual(kernel.load(), after_newer_result)
+            self.assertEqual(
+                kernel.load().artifact_heads["content/strategy"],
+                newer_result["artifact_ref"],
+            )
+            self.assertEqual(tuple(kernel.events_root.iterdir()), completed_replay_events)
+            self.assertEqual(
+                tuple(kernel.artifacts.objects_root.rglob("*")),
+                completed_replay_objects,
+            )
 
     def test_stale_agent_result_after_framework_reset_is_rejected_zero_write(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
