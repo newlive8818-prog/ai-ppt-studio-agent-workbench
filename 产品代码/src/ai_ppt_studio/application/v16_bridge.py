@@ -313,12 +313,16 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
         artifact_type = str(payload.get("artifact_type") or "")
         content_task = None
         if task_id:
-            content_task, _context = project_commands.preflight_content_agent_result(
-                task_id=task_id,
-                request_kind=kind,
-                payload=payload,
-                expected_revision=int(request["expected_revision"]),
-            )
+            active_task = project_commands.require_active_agent_task(task_id)
+            if str(active_task.get("action_type") or "") in CONTENT_RESULT_CONTRACTS:
+                content_task, _context = (
+                    project_commands.preflight_content_agent_result(
+                        task_id=task_id,
+                        request_kind=kind,
+                        payload=payload,
+                        expected_revision=int(request["expected_revision"]),
+                    )
+                )
         elif artifact_type in FORMAL_AGENT_CONTENT_ARTIFACT_TYPES:
             from ai_ppt_studio.errors import ContentWorkflowError
 

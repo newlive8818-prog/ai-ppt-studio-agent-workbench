@@ -1012,6 +1012,61 @@ class V16ProjectServiceTests(unittest.TestCase):
                 self.assertEqual(tuple(kernel.events_root.iterdir()), events)
                 self.assertEqual(tuple(kernel.artifacts.objects_root.rglob("*")), objects)
 
+    def test_atomic_content_result_rejects_reused_command_identity_zero_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config, _profile = runtime_config(Path(temp))
+            kernel = ProjectService(config).create_project("result command identity")
+            content = ContentService(kernel)
+            mission_ref = content.save_mission_draft("reuse-mission", 1, {
+                "topic": "经营一体化", "primary_audience": "决策者",
+                "desired_judgment_or_action": "批准一期",
+            })
+            mission_confirmation_ref = content.confirm_mission(
+                "reuse-confirm", 2, mission_draft_ref=mission_ref,
+                material_mode="no-materials-confirmed", material_inventory_ref="",
+                user_action_ref="test-user-action://reuse-command", user_message_ref="",
+            )
+            framework_ref, confirmation_ref, authorization_ref = (
+                _save_confirm_authorize(kernel, mission_confirmation_ref)
+            )
+            requested = dispatch_v16({
+                "operation": "request-agent-action",
+                "project_root": str(kernel.project_root),
+                "expected_revision": kernel.load().revision,
+                "command_id": "active-result-task",
+                "action_type": "build-presales-strategy",
+                "target_refs": [mission_ref, mission_confirmation_ref, framework_ref, confirmation_ref, authorization_ref],
+                "instructions": "形成策略",
+            })["result"]
+            task_id = requested["task"]["task_id"]
+            before = kernel.load()
+            events = tuple(kernel.events_root.iterdir())
+
+            with self.assertRaises(ContentWorkflowError):
+                dispatch_v16({
+                    "operation": "commit-artifact",
+                    "project_root": str(kernel.project_root),
+                    "expected_revision": before.revision,
+                    "command_id": "reuse-mission",
+                    "kind": "content-blueprint",
+                    "task_id": task_id,
+                    "payload": {
+                        "artifact_type": "presales-content-strategy",
+                        "mission_ref": mission_ref,
+                        "content_identity_mode": "proposal-only",
+                        "identity_labels": ["diagnostic-hypothesis", "solution-recommendation", "joint-validation-required"],
+                        "empty_material_identity": "placeholder",
+                        "decision_stage": "方案建议",
+                        "core_tension": "诊断假设：系统割裂，待联合验证",
+                    },
+                })
+            self.assertEqual(kernel.load(), before)
+            self.assertEqual(tuple(kernel.events_root.iterdir()), events)
+            active = kernel.artifacts.resolve(ArtifactReference.parse(
+                before.artifact_heads["agent/task/active"]
+            ))["payload"]
+            self.assertEqual(active["status"], "queued")
+
     def test_public_artifact_route_reaches_every_content_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)

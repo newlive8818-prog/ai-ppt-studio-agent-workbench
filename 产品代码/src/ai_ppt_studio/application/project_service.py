@@ -553,6 +553,15 @@ class ProjectCommandService:
     ) -> tuple[str, KernelState]:
         """Publish a validated content result and complete its task atomically."""
 
+        from ai_ppt_studio.errors import ContentWorkflowError
+
+        before = self.kernel.load()
+        if command_id in before.processed_commands:
+            raise ContentWorkflowError(
+                "CONTENT_REVIEW_CONFLICT",
+                "Content result command identity was already processed",
+                {"command_id": command_id},
+            )
         task = self.require_active_agent_task(task_id)
         result_ref = str(
             self.kernel.artifacts.reference_for(
