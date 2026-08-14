@@ -671,6 +671,22 @@ class ProjectCommandService:
             raise ContractValidationError(
                 "Agent result kind or artifact_type does not match its task action"
             )
+        reviewer_contracts = {
+            "review-visual-aesthetic": (
+                "aesthetic", "visual-aesthetic-reviewer"
+            ),
+            "review-visual-engineering": (
+                "engineering", "visual-engineering-reviewer"
+            ),
+        }
+        reviewer_contract = reviewer_contracts.get(action)
+        if reviewer_contract is not None and (
+            str(payload.get("reviewer_kind") or "") != reviewer_contract[0]
+            or str(payload.get("reviewer_role") or "") != reviewer_contract[1]
+        ):
+            raise ContractValidationError(
+                "Visual review result does not match its reviewer task identity"
+            )
 
     def complete_agent_task(
         self,

@@ -197,6 +197,41 @@ class V16VisualBridgeTests(unittest.TestCase):
                 )
             self.assertEqual(tuple(content.kernel.events_root.iterdir()), events)
 
+    def test_visual_reviewer_task_cannot_write_the_other_reviewer_slot(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp)
+            visual, revision, refs = prepared_g2(project, slide_count=2)
+            requested = dispatch_v16({
+                "operation": "request-agent-action",
+                "project_root": str(project),
+                "expected_revision": revision,
+                "command_id": "engineering-review-task",
+                "action_type": "review-visual-engineering",
+                "target_refs": [str(refs["anchors"])],
+                "instructions": "独立检查工程可编辑性。",
+            })["result"]
+            before = visual.kernel.load()
+            events = tuple(visual.kernel.events_root.iterdir())
+            payload = passing_visual_review(
+                str(refs["anchors"]),
+                stage="G2",
+                reviewer_kind="aesthetic",
+                reviewer_role="visual-aesthetic-reviewer",
+            )
+            payload["artifact_type"] = "visual-review-record"
+            with self.assertRaises(ContractValidationError):
+                dispatch_v16({
+                    "operation": "commit-artifact",
+                    "project_root": str(project),
+                    "expected_revision": revision + 1,
+                    "command_id": "engineering-review-result",
+                    "kind": "visual-contract",
+                    "task_id": requested["task"]["task_id"],
+                    "payload": payload,
+                })
+            self.assertEqual(visual.kernel.load(), before)
+            self.assertEqual(tuple(visual.kernel.events_root.iterdir()), events)
+
     def test_existing_commit_and_internal_gate_operations_route_to_visual_service(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
