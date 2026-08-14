@@ -386,6 +386,19 @@ class ContentReviewBatchServiceTests(unittest.TestCase):
             "current-withdrawal-receipt": withdrawal_ref,
         }
 
+    def remove_current_review_batch_head(self) -> None:
+        state_payload = json.loads(
+            self.content.kernel.state_path.read_text(encoding="utf-8")
+        )
+        removed = state_payload["artifact_heads"].pop(
+            "content/review-batch"
+        )
+        self.assertTrue(removed)
+        self.content.kernel.state_path.write_text(
+            json.dumps(state_payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
     def test_submission_context_reports_exact_incomplete_progress(self) -> None:
         self.save("s1", "approved")
         self.save("s2", "modify", comment="完整修改意见")
@@ -499,6 +512,38 @@ class ContentReviewBatchServiceTests(unittest.TestCase):
         self.assertEqual(caught.exception.details["status"], "submitted")
         self.assertEqual(self.content.kernel.load(), state_before_rejected_save)
         self.assertEqual(object_files(self.content), objects_before_rejected_save)
+
+    def test_first_batch_without_withdrawal_allows_same_batch_decision_history(self) -> None:
+        self.save_all()
+        self.save(
+            "s1",
+            "modify",
+            comment="首次审核内再次调整第一页判断",
+            command_id="replace-s1-within-first-batch",
+        )
+        before = self.content.kernel.load()
+        self.assertNotIn("content/review-batch", before.artifact_heads)
+        self.assertNotIn(
+            "content/review-batch-withdrawal", before.artifact_heads
+        )
+        context = self.review.submission_context(
+            source_version=self.source_version,
+            review_batch_id=self.batch_id,
+        )
+        batch_ref, follow_up, after = self.submit(
+            command_id="submit-first-batch-with-decision-history",
+            context=context,
+            assertion=signed_assertion(
+                context,
+                identity_ref="host-action://first-batch-decision-history",
+            ),
+        )
+        self.assertEqual(follow_up, CONTENT_REVIEW_BATCH_FOLLOW_UP)
+        self.assertEqual(after.revision, before.revision + 1)
+        self.assertEqual(after.artifact_heads["content/review-batch"], batch_ref)
+        self.assertEqual(
+            resolve_payload(self.content, batch_ref)["status"], "submitted"
+        )
 
     def test_stale_source_wrong_batch_revision_and_duplicates_are_zero_write(self) -> None:
         self.save_all()
@@ -914,6 +959,65 @@ class ContentReviewBatchServiceTests(unittest.TestCase):
                     self.assertEqual(event_files(self.content), before_events)
             finally:
                 path.write_bytes(original)
+
+    def test_replacement_context_rejects_a_missing_current_draft_batch_head(self) -> None:
+        replacement_batch_id, _targets = self.withdraw_to_replacement()
+        self.remove_current_review_batch_head()
+        before = self.content.kernel.load()
+        before_state_bytes = self.content.kernel.state_path.read_bytes()
+        before_objects = object_files(self.content)
+        before_events = event_files(self.content)
+        before_heads = dict(before.artifact_heads)
+
+        with self.assertRaises(ContentWorkflowError) as caught:
+            self.review.submission_context(
+                source_version=self.source_version,
+                review_batch_id=replacement_batch_id,
+            )
+        self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+        self.assertEqual(self.content.kernel.load(), before)
+        self.assertEqual(
+            self.content.kernel.state_path.read_bytes(), before_state_bytes
+        )
+        self.assertEqual(self.content.kernel.load().artifact_heads, before_heads)
+        self.assertEqual(object_files(self.content), before_objects)
+        self.assertEqual(event_files(self.content), before_events)
+
+    def test_replacement_submission_rejects_a_missing_current_draft_batch_head(self) -> None:
+        replacement_batch_id, _targets = self.withdraw_to_replacement()
+        context = self.review.submission_context(
+            source_version=self.source_version,
+            review_batch_id=replacement_batch_id,
+        )
+        assertion = signed_assertion(
+            context,
+            identity_ref="host-action://missing-replacement-batch-head",
+        )
+        self.remove_current_review_batch_head()
+        before = self.content.kernel.load()
+        before_state_bytes = self.content.kernel.state_path.read_bytes()
+        before_objects = object_files(self.content)
+        before_events = event_files(self.content)
+        before_heads = dict(before.artifact_heads)
+
+        with self.assertRaises(ContentWorkflowError) as caught:
+            self.review.submit_review_batch(
+                command_id="submit-with-missing-replacement-batch-head",
+                expected_revision=int(context["challenge_revision"]),
+                source_version=self.source_version,
+                review_batch_id=replacement_batch_id,
+                challenge_id=str(context["challenge_id"]),
+                challenge_revision=int(context["challenge_revision"]),
+                host_confirmation_assertion=assertion,
+            )
+        self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+        self.assertEqual(self.content.kernel.load(), before)
+        self.assertEqual(
+            self.content.kernel.state_path.read_bytes(), before_state_bytes
+        )
+        self.assertEqual(self.content.kernel.load().artifact_heads, before_heads)
+        self.assertEqual(object_files(self.content), before_objects)
+        self.assertEqual(event_files(self.content), before_events)
 
     def test_withdrawal_exact_replay_is_idempotent_but_changed_assertion_conflicts(self) -> None:
         self.save_all()

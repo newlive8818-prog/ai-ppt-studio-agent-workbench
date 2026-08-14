@@ -886,6 +886,20 @@ class ContentReviewService:
         )
         if decision_set is None:
             self._incomplete(slides, {})
+        replacement_signal = bool(
+            state.artifact_heads.get(REVIEW_BATCH_WITHDRAWAL_HEAD, "")
+        ) or self._decision_set_has_cross_batch_lineage(decision_set)
+        if batch is None and replacement_signal:
+            self._conflict(
+                "A replacement decision set requires its exact current draft batch",
+                {
+                    "decision_set_ref": decision_set_ref,
+                    "review_batch_id": review_batch_id,
+                    "withdrawal_ref": state.artifact_heads.get(
+                        REVIEW_BATCH_WITHDRAWAL_HEAD, ""
+                    ),
+                },
+            )
         if batch is not None:
             self._validate_replacement_draft_lineage(
                 state=state,
@@ -1924,6 +1938,34 @@ class ContentReviewService:
                     "reason": str(error),
                 },
             )
+
+    def _decision_set_has_cross_batch_lineage(
+        self,
+        decision_set: dict[str, Any],
+    ) -> bool:
+        expected_batch_id = decision_set["review_batch_id"]
+        for row in decision_set["decision_refs"]:
+            reference = row["decision_ref"]
+            seen: set[str] = set()
+            for _depth in range(MAX_DECISION_LINEAGE_DEPTH):
+                if not reference or reference in seen:
+                    break
+                seen.add(reference)
+                decision = self._resolve_decision(reference)
+                if decision["review_batch_id"] != expected_batch_id:
+                    return True
+                reference = decision["supersedes_decision_ref"]
+            if reference in seen:
+                self._conflict(
+                    "Page-decision lineage is cyclic",
+                    {"decision_ref": row["decision_ref"]},
+                )
+            if reference:
+                self._conflict(
+                    "Page-decision lineage exceeds the maximum depth",
+                    {"decision_ref": row["decision_ref"]},
+                )
+        return False
 
     def _validate_decision_lineage(
         self,
