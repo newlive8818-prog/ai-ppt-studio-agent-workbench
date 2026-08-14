@@ -23,6 +23,36 @@ CONTENT_PAGE_DECISIONS = (
 COMMENT_REQUIRED_DECISIONS = frozenset(CONTENT_PAGE_DECISIONS[1:])
 MAX_PAGE_DECISION_COMMENT_CODE_POINTS = 1200
 
+_CONTENT_BLUEPRINT_FIELDS = frozenset(
+    {
+        "strategy_ref",
+        "claim_evidence_map_ref",
+        "argument_map_ref",
+        "draft_ref",
+        "framework_ref",
+        "framework_confirmation_ref",
+        "full_deck_expansion_authorization_ref",
+        "acceptance_ref",
+        "strategy",
+        "claim_evidence_map",
+        "argument_map",
+        "slides",
+        "status",
+    }
+)
+_CONTENT_BLUEPRINT_REFERENCE_KINDS = {
+    "strategy_ref": "presales-content-strategy",
+    "claim_evidence_map_ref": "claim-evidence-map",
+    "argument_map_ref": "deck-argument-map",
+    "draft_ref": "slide-draft-set",
+    "framework_ref": "content-framework-draft",
+    "framework_confirmation_ref": "content-framework-confirmation",
+    "full_deck_expansion_authorization_ref": (
+        "full-deck-expansion-authorization"
+    ),
+    "acceptance_ref": "content-acceptance",
+}
+
 _PAGE_DECISION_FIELDS = frozenset(
     {
         "page_decision_id",
@@ -147,6 +177,45 @@ def normalize_page_decision_choice(
     return decision, normalized_comment
 
 
+def validate_content_blueprint(payload: dict[str, Any]) -> dict[str, Any]:
+    """Validate the one closed envelope accepted for formal review."""
+
+    if not isinstance(payload, dict):
+        raise ContractValidationError("ContentBlueprint must be an object")
+    if set(payload) != _CONTENT_BLUEPRINT_FIELDS:
+        raise ContractValidationError(
+            "ContentBlueprint must contain exactly the formal content-chain "
+            "references, embedded content, slides, and status"
+        )
+    normalized = {
+        field: _artifact_ref(
+            _nonempty_text(payload, field),
+            field=field,
+            kind=kind,
+        )
+        for field, kind in _CONTENT_BLUEPRINT_REFERENCE_KINDS.items()
+    }
+    for field in ("strategy", "claim_evidence_map", "argument_map"):
+        value = payload.get(field)
+        if not isinstance(value, dict) or not value:
+            raise ContractValidationError(f"{field} must be a non-empty object")
+        normalized[field] = copy.deepcopy(value)
+    slides = payload.get("slides")
+    if (
+        not isinstance(slides, list)
+        or not slides
+        or any(not isinstance(slide, dict) for slide in slides)
+    ):
+        raise ContractValidationError("slides must be a non-empty object array")
+    normalized["slides"] = copy.deepcopy(slides)
+    if payload.get("status") != "user-reviewable":
+        raise ContractValidationError(
+            "ContentBlueprint status must be user-reviewable"
+        )
+    normalized["status"] = "user-reviewable"
+    return normalized
+
+
 def validate_visible_copy_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
     """Validate the exact immutable copy snapshot captured from one slide."""
 
@@ -159,8 +228,8 @@ def validate_visible_copy_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
             "and visible_copy"
         )
     visible_copy = payload.get("visible_copy")
-    if not isinstance(visible_copy, list):
-        raise ContractValidationError("visible_copy must be a list")
+    if not isinstance(visible_copy, list) or not visible_copy:
+        raise ContractValidationError("visible_copy must be a non-empty list")
     normalized_visible_copy: list[dict[str, str]] = []
     for index, item in enumerate(visible_copy):
         if not isinstance(item, dict):

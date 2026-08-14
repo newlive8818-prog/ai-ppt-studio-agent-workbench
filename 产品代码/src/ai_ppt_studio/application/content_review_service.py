@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -12,14 +13,28 @@ from typing import Any
 from ai_ppt_studio.domains.content.review_contracts import (
     CONTENT_PAGE_DECISIONS,
     normalize_page_decision_choice,
+    validate_content_blueprint,
     validate_page_decision,
     validate_page_decision_set,
     validate_visible_copy_snapshot,
+)
+from ai_ppt_studio.domains.content.contracts import (
+    REQUIRED_CONTENT_REVIEW_ROLES,
+    aggregate_content_reviews,
+    validate_content_review,
+    validate_content_stage,
+)
+from ai_ppt_studio.domains.content.framework import (
+    validate_framework_confirmation,
+    validate_framework_draft,
+    validate_full_deck_expansion_authorization,
 )
 from ai_ppt_studio.errors import (
     ArtifactReferenceError,
     ContractValidationError,
     ContentWorkflowError,
+    GateBlockedError,
+    ProposalOnlyIdentityViolationError,
     RevisionConflictError,
 )
 from ai_ppt_studio.kernel.references import ArtifactReference
@@ -38,6 +53,58 @@ PROTECTED_HEADS = (
     "content/acceptance",
     "feedback/governance",
     "content/change-set",
+)
+CONTENT_WORKFLOW_LINEAGE_FIELDS = (
+    "framework_ref",
+    "framework_confirmation_ref",
+    "full_deck_expansion_authorization_ref",
+)
+CONTENT_ACCEPTANCE_FIELDS = frozenset(
+    {
+        "target_ref",
+        "review_record_refs",
+        "required_roles",
+        "all_applicable_checks",
+        "overall_result",
+        "passed_at",
+        *CONTENT_WORKFLOW_LINEAGE_FIELDS,
+    }
+)
+CONFIRMATION_FIELDS = frozenset(
+    {
+        "project_id",
+        "scope_kind",
+        "scope_id",
+        "source_version",
+        "evidence_refs",
+        "challenge_id",
+        "challenge_revision",
+        "user_action_ref",
+        "user_message_ref",
+        "confirmation_identity_type",
+        "host_assertion_sha256",
+        "confirmed_at",
+        "framework_ref",
+        "framework_revision",
+        "challenge_identity",
+    }
+)
+AUTHORIZATION_FIELDS = frozenset(
+    {*CONFIRMATION_FIELDS, "framework_confirmation_ref"}
+)
+PUBLICATION_EVENT_REQUIRED_FIELDS = frozenset(
+    {
+        "transaction_id",
+        "command_id",
+        "event_type",
+        "revision",
+        "artifact_heads",
+        "artifact_head_removals",
+        "confirmation_consumptions",
+        "confirmation_artifact_bindings",
+        "gate_updates",
+        "gate_evidence_refs",
+    }
 )
 
 
@@ -267,11 +334,18 @@ class ContentReviewService:
                     "actual_source_version": source_version,
                 },
             )
-        return self._resolve_blueprint(source_version)
+        return self._resolve_blueprint(
+            source_version,
+            state=state,
+            require_current=True,
+        )
 
     def _resolve_blueprint(
         self,
         source_version: str,
+        *,
+        state: KernelState,
+        require_current: bool,
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         try:
             reference = ArtifactReference.parse(source_version)
@@ -280,27 +354,497 @@ class ContentReviewService:
                     "The current content blueprint head has the wrong kind"
                 )
             envelope = self.kernel.artifacts.resolve(reference)
-            blueprint = envelope["payload"]
-        except (ArtifactReferenceError, KeyError, TypeError) as error:
+            raw_blueprint = envelope["payload"]
+            blueprint = validate_content_blueprint(raw_blueprint)
+            if blueprint != raw_blueprint:
+                raise ContractValidationError(
+                    "ContentBlueprint payload is not canonical"
+                )
+            self._validate_blueprint_chain(
+                blueprint=blueprint,
+                state=state,
+            )
+            self._validate_blueprint_publication(
+                source_version=source_version,
+                blueprint=blueprint,
+                state=state,
+                require_current=require_current,
+            )
+        except (
+            ArtifactReferenceError,
+            ContractValidationError,
+            ContentWorkflowError,
+            GateBlockedError,
+            ProposalOnlyIdentityViolationError,
+            json.JSONDecodeError,
+            KeyError,
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
             self._conflict(
                 "The current content blueprint cannot be resolved safely",
                 {"source_version": source_version, "reason": str(error)},
             )
-        if not isinstance(blueprint, dict):
-            self._conflict(
-                "The current content blueprint payload is invalid",
-                {"source_version": source_version},
-            )
-        if blueprint.get("status") != "user-reviewable":
-            self._conflict(
-                "The current content blueprint is not user-reviewable",
-                {
-                    "source_version": source_version,
-                    "status": blueprint.get("status", ""),
-                },
-            )
         slides = self._authoritative_slides(blueprint)
         return blueprint, slides
+
+    def _validate_blueprint_chain(
+        self,
+        *,
+        blueprint: dict[str, Any],
+        state: KernelState,
+    ) -> None:
+        lineage = {
+            field: blueprint[field]
+            for field in CONTENT_WORKFLOW_LINEAGE_FIELDS
+        }
+        stage_definitions = (
+            (
+                "strategy",
+                "strategy_ref",
+                "presales-content-strategy",
+                "presales-content-strategy",
+            ),
+            (
+                "claim-map",
+                "claim_evidence_map_ref",
+                "claim-evidence-map",
+                "claim-evidence-map",
+            ),
+            (
+                "argument-map",
+                "argument_map_ref",
+                "deck-argument-map",
+                "deck-argument-map",
+            ),
+            (
+                "slide-draft-set",
+                "draft_ref",
+                "slide-draft-set",
+                "slide-draft-set",
+            ),
+        )
+        stage_payloads: dict[str, dict[str, Any]] = {}
+        for stage, ref_field, kind, artifact_type in stage_definitions:
+            raw = self._resolve_payload(blueprint[ref_field], kind)
+            normalized = validate_content_stage(stage, copy.deepcopy(raw))
+            if normalized != raw or raw.get("artifact_type") != artifact_type:
+                raise ContractValidationError(
+                    f"{ref_field} does not contain a canonical {stage} payload"
+                )
+            self._require_lineage(raw, lineage, ref_field)
+            stage_payloads[stage] = raw
+
+        strategy = stage_payloads["strategy"]
+        claim_map = stage_payloads["claim-map"]
+        argument_map = stage_payloads["argument-map"]
+        draft = stage_payloads["slide-draft-set"]
+        if (
+            claim_map.get("strategy_ref") != blueprint["strategy_ref"]
+            or argument_map.get("strategy_ref") != blueprint["strategy_ref"]
+            or argument_map.get("claim_evidence_map_ref")
+            != blueprint["claim_evidence_map_ref"]
+            or draft.get("argument_map_ref") != blueprint["argument_map_ref"]
+        ):
+            raise ContractValidationError(
+                "ContentBlueprint upstream stage references are inconsistent"
+            )
+        identity_mode = strategy.get("content_identity_mode")
+        if identity_mode not in {"material-backed", "proposal-only"} or any(
+            payload.get("content_identity_mode") != identity_mode
+            for payload in (claim_map, argument_map, draft)
+        ):
+            raise ContractValidationError(
+                "ContentBlueprint content identity mode is inconsistent"
+            )
+        mission_confirmation_ref = self._exact_reference(
+            strategy.get("mission_confirmation_ref"),
+            "mission-confirmation",
+        )
+        self._resolve_payload(mission_confirmation_ref, "mission-confirmation")
+        if any(
+            payload.get("mission_confirmation_ref")
+            != mission_confirmation_ref
+            for payload in (claim_map, argument_map, draft)
+        ):
+            raise ContractValidationError(
+                "ContentBlueprint mission confirmation lineage is inconsistent"
+            )
+        self._resolve_payload(strategy.get("mission_ref"), "mission-draft")
+        if identity_mode == "material-backed":
+            material_ref = self._exact_reference(
+                strategy.get("material_inventory_ref"),
+                "material-inventory",
+            )
+            self._resolve_payload(material_ref, "material-inventory")
+            for claim in claim_map["claims"]:
+                for reference in claim["evidence_refs"]:
+                    if reference != material_ref:
+                        raise ContractValidationError(
+                            "Claim evidence does not bind the strategy material"
+                        )
+            for slide in draft["slides"]:
+                for reference in slide["source_refs"]:
+                    if reference != material_ref:
+                        raise ContractValidationError(
+                            "Slide source does not bind the strategy material"
+                        )
+
+        if (
+            blueprint["strategy"] != strategy
+            or blueprint["claim_evidence_map"] != claim_map
+            or blueprint["argument_map"] != argument_map
+            or blueprint["slides"] != draft["slides"]
+        ):
+            raise ContractValidationError(
+                "ContentBlueprint embedded content differs from its references"
+            )
+
+        framework = self._resolve_payload(
+            lineage["framework_ref"], "content-framework-draft"
+        )
+        if validate_framework_draft(copy.deepcopy(framework)) != framework:
+            raise ContractValidationError(
+                "Content framework payload is not canonical"
+            )
+        if framework.get("mission_confirmation_ref") != mission_confirmation_ref:
+            raise ContractValidationError(
+                "Content framework binds a different mission confirmation"
+            )
+        confirmation = self._resolve_payload(
+            lineage["framework_confirmation_ref"],
+            "content-framework-confirmation",
+        )
+        authorization = self._resolve_payload(
+            lineage["full_deck_expansion_authorization_ref"],
+            "full-deck-expansion-authorization",
+        )
+        self._validate_framework_confirmation_payload(
+            confirmation,
+            framework_ref=lineage["framework_ref"],
+            mission_confirmation_ref=mission_confirmation_ref,
+            project_id=state.project_id,
+        )
+        self._validate_expansion_authorization_payload(
+            authorization,
+            framework_ref=lineage["framework_ref"],
+            confirmation_ref=lineage["framework_confirmation_ref"],
+            mission_confirmation_ref=mission_confirmation_ref,
+            project_id=state.project_id,
+        )
+        acceptance = self._resolve_payload(
+            blueprint["acceptance_ref"], "content-acceptance"
+        )
+        self._validate_acceptance(
+            acceptance,
+            draft_ref=blueprint["draft_ref"],
+            lineage=lineage,
+        )
+
+    def _validate_framework_confirmation_payload(
+        self,
+        payload: dict[str, Any],
+        *,
+        framework_ref: str,
+        mission_confirmation_ref: str,
+        project_id: str,
+    ) -> None:
+        if set(payload) != CONFIRMATION_FIELDS:
+            raise ContractValidationError(
+                "FrameworkConfirmation has an invalid formal schema"
+            )
+        normalized = validate_framework_confirmation(copy.deepcopy(payload))
+        expected = {
+            "project_id": project_id,
+            "framework_ref": framework_ref,
+        }
+        if (
+            any(normalized.get(key) != value for key, value in expected.items())
+            or any(payload.get(key) != value for key, value in normalized.items())
+        ):
+            raise ContractValidationError(
+                "FrameworkConfirmation binding is inconsistent"
+            )
+        self._validate_confirmation_common(payload)
+        if (
+            payload["scope_kind"] != "content-framework-confirmation"
+            or payload["scope_id"] != framework_ref
+            or payload["source_version"] != framework_ref
+            or payload["evidence_refs"]
+            != [framework_ref, mission_confirmation_ref]
+        ):
+            raise ContractValidationError(
+                "FrameworkConfirmation scope is inconsistent"
+            )
+
+    def _validate_expansion_authorization_payload(
+        self,
+        payload: dict[str, Any],
+        *,
+        framework_ref: str,
+        confirmation_ref: str,
+        mission_confirmation_ref: str,
+        project_id: str,
+    ) -> None:
+        if set(payload) != AUTHORIZATION_FIELDS:
+            raise ContractValidationError(
+                "FullDeckExpansionAuthorization has an invalid formal schema"
+            )
+        normalized = validate_full_deck_expansion_authorization(
+            copy.deepcopy(payload)
+        )
+        expected = {
+            "project_id": project_id,
+            "framework_ref": framework_ref,
+            "framework_confirmation_ref": confirmation_ref,
+        }
+        if (
+            any(normalized.get(key) != value for key, value in expected.items())
+            or any(payload.get(key) != value for key, value in normalized.items())
+        ):
+            raise ContractValidationError(
+                "FullDeckExpansionAuthorization binding is inconsistent"
+            )
+        self._validate_confirmation_common(payload)
+        if (
+            payload["scope_kind"]
+            != "content-full-deck-expansion-authorization"
+            or payload["scope_id"] != confirmation_ref
+            or payload["source_version"] != framework_ref
+            or payload["evidence_refs"]
+            != [framework_ref, confirmation_ref, mission_confirmation_ref]
+        ):
+            raise ContractValidationError(
+                "FullDeckExpansionAuthorization scope is inconsistent"
+            )
+
+    def _validate_confirmation_common(self, payload: dict[str, Any]) -> None:
+        challenge_revision = payload.get("challenge_revision")
+        if (
+            isinstance(challenge_revision, bool)
+            or not isinstance(challenge_revision, int)
+            or challenge_revision < 1
+            or payload.get("framework_revision") != challenge_revision
+            or payload.get("challenge_identity") != payload.get("challenge_id")
+            or not re.fullmatch(
+                r"[0-9a-f]{64}", str(payload.get("challenge_id") or "")
+            )
+            or not re.fullmatch(
+                r"[0-9a-f]{64}",
+                str(payload.get("host_assertion_sha256") or ""),
+            )
+        ):
+            raise ContractValidationError(
+                "Confirmation challenge binding is invalid"
+            )
+        identity_type = payload.get("confirmation_identity_type")
+        action_ref = payload.get("user_action_ref")
+        message_ref = payload.get("user_message_ref")
+        if (
+            identity_type not in {"host-action", "verified-message"}
+            or not isinstance(action_ref, str)
+            or not isinstance(message_ref, str)
+            or (identity_type == "host-action" and (not action_ref or message_ref))
+            or (
+                identity_type == "verified-message"
+                and (not message_ref or action_ref)
+            )
+        ):
+            raise ContractValidationError(
+                "Confirmation identity binding is invalid"
+            )
+        self._iso_timestamp(payload.get("confirmed_at"), "confirmed_at")
+
+    def _validate_acceptance(
+        self,
+        payload: dict[str, Any],
+        *,
+        draft_ref: str,
+        lineage: dict[str, str],
+    ) -> None:
+        if set(payload) != CONTENT_ACCEPTANCE_FIELDS:
+            raise ContractValidationError(
+                "ContentAcceptance has an invalid formal schema"
+            )
+        self._require_lineage(payload, lineage, "acceptance_ref")
+        if payload.get("target_ref") != draft_ref:
+            raise ContractValidationError(
+                "ContentAcceptance targets a different draft"
+            )
+        refs = payload.get("review_record_refs")
+        if (
+            not isinstance(refs, list)
+            or len(refs) != len(REQUIRED_CONTENT_REVIEW_ROLES)
+        ):
+            raise ContractValidationError(
+                "ContentAcceptance review references are incomplete"
+            )
+        records: list[tuple[str, dict[str, Any]]] = []
+        for expected_role, reference in zip(REQUIRED_CONTENT_REVIEW_ROLES, refs):
+            review = self._resolve_payload(reference, "content-review-record")
+            normalized = validate_content_review(copy.deepcopy(review))
+            if normalized != review:
+                raise ContractValidationError(
+                    "Content review record is not canonical"
+                )
+            self._require_lineage(review, lineage, "review_record_ref")
+            if (
+                review.get("reviewer_role") != expected_role
+                or review.get("target_ref") != draft_ref
+                or review.get("input_version") != draft_ref
+            ):
+                raise ContractValidationError(
+                    "Content review record lineage is inconsistent"
+                )
+            records.append((reference, review))
+        aggregated = aggregate_content_reviews(draft_ref, records)
+        if any(payload.get(key) != value for key, value in aggregated.items()):
+            raise ContractValidationError(
+                "ContentAcceptance differs from its review aggregation"
+            )
+        if self._iso_timestamp(payload.get("passed_at"), "passed_at") != payload.get(
+            "passed_at"
+        ):
+            raise ContractValidationError(
+                "ContentAcceptance passed_at is not canonical"
+            )
+
+    def _validate_blueprint_publication(
+        self,
+        *,
+        source_version: str,
+        blueprint: dict[str, Any],
+        state: KernelState,
+        require_current: bool,
+    ) -> None:
+        if require_current and (
+            state.artifact_heads.get(BLUEPRINT_HEAD) != source_version
+        ):
+            raise ContractValidationError(
+                "ContentBlueprint is not the current published head"
+            )
+        expected_heads = {
+            "content/blueprint": source_version,
+            "content/acceptance": blueprint["acceptance_ref"],
+            "content/strategy": blueprint["strategy_ref"],
+            "content/claim-map": blueprint["claim_evidence_map_ref"],
+            "content/argument-map": blueprint["argument_map_ref"],
+            "content/draft": blueprint["draft_ref"],
+            "content/framework-draft": blueprint["framework_ref"],
+            "content/framework-confirmation": blueprint[
+                "framework_confirmation_ref"
+            ],
+            "content/full-deck-expansion-authorization": blueprint[
+                "full_deck_expansion_authorization_ref"
+            ],
+        }
+        matches: list[dict[str, Any]] = []
+        for revision in range(1, state.revision + 1):
+            path = self.kernel.events_root / f"r{revision:08d}.json"
+            event = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(event, dict) or event.get("revision") != revision:
+                raise ContractValidationError(
+                    "Project event chronology is incomplete or corrupt"
+                )
+            command_id = event.get("command_id")
+            if (
+                not isinstance(command_id, str)
+                or not command_id
+                or state.processed_commands.get(command_id) != revision
+                or not isinstance(event.get("transaction_id"), str)
+                or not event.get("transaction_id")
+                or not isinstance(event.get("artifact_heads"), dict)
+            ):
+                raise ContractValidationError(
+                    "Project event receipt is incomplete or corrupt"
+                )
+            if (
+                event.get("event_type") == "content.accepted-internally"
+                and event["artifact_heads"].get(BLUEPRINT_HEAD)
+                == source_version
+            ):
+                matches.append(event)
+        if len(matches) != 1:
+            raise ContractValidationError(
+                "ContentBlueprint lacks one unambiguous publication receipt"
+            )
+        publication = matches[0]
+        if (
+            not PUBLICATION_EVENT_REQUIRED_FIELDS.issubset(publication)
+            or not isinstance(publication["artifact_head_removals"], dict)
+            or not isinstance(publication["confirmation_consumptions"], dict)
+            or not isinstance(
+                publication["confirmation_artifact_bindings"], dict
+            )
+            or not isinstance(publication["gate_updates"], dict)
+            or not isinstance(publication["gate_evidence_refs"], list)
+        ):
+            raise ContractValidationError(
+                "ContentBlueprint publication receipt is incomplete"
+            )
+        if any(
+            publication["artifact_heads"].get(slot) != reference
+            for slot, reference in expected_heads.items()
+        ) or publication.get("gate_updates", {}).get("G0") != "user-reviewable":
+            raise ContractValidationError(
+                "ContentBlueprint publication receipt has inconsistent heads"
+            )
+        if publication.get("gate_evidence_refs") != [
+            blueprint["acceptance_ref"],
+            source_version,
+        ]:
+            raise ContractValidationError(
+                "ContentBlueprint publication evidence is inconsistent"
+            )
+
+    def _resolve_payload(self, reference_value: object, kind: str) -> dict[str, Any]:
+        reference_text = self._exact_reference(reference_value, kind)
+        payload = self.kernel.artifacts.resolve(
+            ArtifactReference.parse(reference_text)
+        )["payload"]
+        if not isinstance(payload, dict):
+            raise ContractValidationError(
+                f"{kind} artifact payload must be an object"
+            )
+        return copy.deepcopy(payload)
+
+    @staticmethod
+    def _exact_reference(reference_value: object, kind: str) -> str:
+        if not isinstance(reference_value, str) or not reference_value:
+            raise ContractValidationError(f"{kind} reference is required")
+        reference = ArtifactReference.parse(reference_value)
+        if reference.kind != kind:
+            raise ContractValidationError(
+                f"Artifact reference must have kind {kind}"
+            )
+        return str(reference)
+
+    @staticmethod
+    def _require_lineage(
+        payload: dict[str, Any],
+        lineage: dict[str, str],
+        label: str,
+    ) -> None:
+        if any(payload.get(field) != value for field, value in lineage.items()):
+            raise ContractValidationError(
+                f"{label} has inconsistent framework lineage"
+            )
+
+    @staticmethod
+    def _iso_timestamp(value: object, field: str) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ContractValidationError(f"{field} must be an ISO timestamp")
+        text = value.strip()
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ContractValidationError(
+                f"{field} must be an ISO timestamp"
+            ) from error
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ContractValidationError(f"{field} must include a timezone")
+        return text
 
     def _authoritative_slides(
         self, blueprint: dict[str, Any]
@@ -379,7 +923,11 @@ class ContentReviewService:
             )
         if payload["source_version"] != source_version:
             _historical_blueprint, historical_slides = (
-                self._resolve_blueprint(payload["source_version"])
+                self._resolve_blueprint(
+                    payload["source_version"],
+                    state=state,
+                    require_current=False,
+                )
             )
             self._validate_decision_set_lineage(
                 decision_set_ref=decision_set_ref,
@@ -597,13 +1145,11 @@ class ContentReviewService:
             decision_set = validate_page_decision_set(
                 self.kernel.artifacts.resolve(reference)["payload"]
             )
-            source_reference = ArtifactReference.parse(
-                decision_set["source_version"]
+            _blueprint, slides = self._resolve_blueprint(
+                decision_set["source_version"],
+                state=state,
+                require_current=False,
             )
-            if source_reference.kind != BLUEPRINT_KIND:
-                raise ValueError("Processed source kind is invalid")
-            blueprint = self.kernel.artifacts.resolve(source_reference)["payload"]
-            slides = self._authoritative_slides(blueprint)
             fingerprint_payload = event.get("command_fingerprint")
             if not isinstance(fingerprint_payload, str) or not fingerprint_payload:
                 raise ValueError("Processed command fingerprint is missing")

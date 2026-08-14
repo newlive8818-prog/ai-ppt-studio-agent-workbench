@@ -16,6 +16,7 @@ from ai_ppt_studio.application.content_review_service import ContentReviewServic
 from ai_ppt_studio.application.content_service import ContentService
 from ai_ppt_studio.domains.content.contracts import REQUIRED_CONTENT_REVIEW_ROLES
 from ai_ppt_studio.domains.content.review_contracts import (
+    validate_content_blueprint,
     validate_page_decision,
     validate_page_decision_set,
     validate_visible_copy_snapshot,
@@ -151,6 +152,39 @@ def publish_revised_blueprint(
 
 
 class PageDecisionContractTests(unittest.TestCase):
+    def test_content_blueprint_has_one_closed_formal_envelope(self) -> None:
+        blueprint = {
+            "strategy_ref": artifact_ref("presales-content-strategy"),
+            "claim_evidence_map_ref": artifact_ref("claim-evidence-map"),
+            "argument_map_ref": artifact_ref("deck-argument-map"),
+            "draft_ref": artifact_ref("slide-draft-set"),
+            "framework_ref": artifact_ref("content-framework-draft"),
+            "framework_confirmation_ref": artifact_ref(
+                "content-framework-confirmation"
+            ),
+            "full_deck_expansion_authorization_ref": artifact_ref(
+                "full-deck-expansion-authorization"
+            ),
+            "acceptance_ref": artifact_ref("content-acceptance"),
+            "strategy": {"artifact_type": "presales-content-strategy"},
+            "claim_evidence_map": {"artifact_type": "claim-evidence-map"},
+            "argument_map": {"artifact_type": "deck-argument-map"},
+            "slides": [{"slide_id": "s1"}],
+            "status": "user-reviewable",
+        }
+        self.assertEqual(validate_content_blueprint(blueprint), blueprint)
+        for malformed in (
+            {key: value for key, value in blueprint.items() if key != "draft_ref"},
+            {**blueprint, "unknown": "not-closed"},
+            {**blueprint, "acceptance_ref": artifact_ref("content-blueprint")},
+            {**blueprint, "strategy": []},
+            {**blueprint, "slides": []},
+            {**blueprint, "status": "draft"},
+        ):
+            with self.subTest(malformed=malformed):
+                with self.assertRaises(ContractValidationError):
+                    validate_content_blueprint(malformed)
+
     def test_visible_copy_snapshot_has_a_closed_exact_schema(self) -> None:
         snapshot = {
             "project_id": "project-1",
@@ -174,6 +208,7 @@ class PageDecisionContractTests(unittest.TestCase):
             {**snapshot, "source_version": artifact_ref("content-acceptance")},
             {**snapshot, "slide_order": True},
             {**snapshot, "visible_copy": "not-a-list"},
+            {**snapshot, "visible_copy": []},
             {**snapshot, "visible_copy": ["not-an-object"]},
             {
                 **snapshot,
@@ -689,6 +724,305 @@ class ContentReviewServiceTests(unittest.TestCase):
         self.assertEqual(self.content.kernel.load(), before)
         self.assertEqual(object_files(self.content), objects)
         self.assertEqual(event_files(self.content), events)
+
+    def test_minimal_malformed_historical_blueprint_cannot_be_discarded(self) -> None:
+        malformed = {
+            "status": "user-reviewable",
+            "slides": [
+                {
+                    "slide_id": "forged-s1",
+                    "order": 1,
+                    "title": "伪造历史蓝图",
+                    "visible_copy": [],
+                }
+            ],
+        }
+        malformed_ref = str(
+            self.content.kernel.artifacts.put("content-blueprint", malformed)
+        )
+        malformed_set = validate_page_decision_set(
+            {
+                "decision_set_id": "malformed-historical-set",
+                "review_batch_id": "malformed-historical-batch",
+                "project_id": self.content.kernel.project_id,
+                "review_type": "content",
+                "source_version": malformed_ref,
+                "expected_slide_count": 1,
+                "status": "draft",
+                "decision_refs": [],
+                "updated_at": "2026-08-14T09:30:00+00:00",
+            }
+        )
+        self.content.kernel.commit(
+            command_id="install-malformed-historical-set",
+            expected_revision=self.content.kernel.load().revision,
+            event_type="test.install-malformed-historical-set",
+            artifact_updates={
+                "content/page-decisions": (
+                    "content-page-decision-set",
+                    malformed_set,
+                )
+            },
+        )
+        before = self.content.kernel.load()
+        objects = object_files(self.content)
+        events = event_files(self.content)
+        with self.assertRaises(ContentWorkflowError) as caught:
+            self.save(
+                command_id="reject-malformed-historical-blueprint",
+                slide_id="s1",
+                decision="approved",
+            )
+        self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+        self.assertEqual(self.content.kernel.load(), before)
+        self.assertEqual(object_files(self.content), objects)
+        self.assertEqual(event_files(self.content), events)
+
+    def test_minimal_malformed_current_blueprint_is_not_reviewable(self) -> None:
+        malformed = {
+            "status": "user-reviewable",
+            "slides": [
+                {
+                    "slide_id": "forged-s1",
+                    "order": 1,
+                    "title": "伪造当前蓝图",
+                    "visible_copy": [
+                        {
+                            "copy_id": "FORGED-1",
+                            "role": "headline",
+                            "text": "仅有表面字段的伪造内容",
+                        }
+                    ],
+                }
+            ],
+        }
+        malformed_ref = str(
+            self.content.kernel.artifacts.reference_for(
+                "content-blueprint", malformed
+            )
+        )
+        installed = self.content.kernel.commit(
+            command_id="install-malformed-current-blueprint",
+            expected_revision=self.content.kernel.load().revision,
+            event_type="test.install-malformed-current-blueprint",
+            artifact_updates={
+                "content/blueprint": ("content-blueprint", malformed)
+            },
+        )
+        self.assertEqual(
+            installed.artifact_heads["content/blueprint"], malformed_ref
+        )
+        before = self.content.kernel.load()
+        objects = object_files(self.content)
+        events = event_files(self.content)
+        with self.assertRaises(ContentWorkflowError) as caught:
+            self.review.save_page_decision(
+                command_id="reject-malformed-current-blueprint",
+                expected_revision=before.revision,
+                source_version=malformed_ref,
+                review_batch_id="malformed-current-batch",
+                slide_id="forged-s1",
+                decision="approved",
+                comment="",
+            )
+        self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+        self.assertEqual(self.content.kernel.load(), before)
+        self.assertEqual(object_files(self.content), objects)
+        self.assertEqual(event_files(self.content), events)
+
+    def test_structurally_complete_unpublished_blueprint_is_not_history(self) -> None:
+        acceptance = resolve_payload(
+            self.content, self.blueprint["acceptance_ref"]
+        )
+        unpublished_acceptance = {
+            **acceptance,
+            "passed_at": "2026-08-14T10:30:00+00:00",
+        }
+        unpublished_acceptance_ref = str(
+            self.content.kernel.artifacts.put(
+                "content-acceptance", unpublished_acceptance
+            )
+        )
+        unpublished_blueprint = {
+            **self.blueprint,
+            "acceptance_ref": unpublished_acceptance_ref,
+        }
+        unpublished_ref = str(
+            self.content.kernel.artifacts.put(
+                "content-blueprint", unpublished_blueprint
+            )
+        )
+        unpublished_set = validate_page_decision_set(
+            {
+                "decision_set_id": "unpublished-historical-set",
+                "review_batch_id": "unpublished-historical-batch",
+                "project_id": self.content.kernel.project_id,
+                "review_type": "content",
+                "source_version": unpublished_ref,
+                "expected_slide_count": len(unpublished_blueprint["slides"]),
+                "status": "draft",
+                "decision_refs": [],
+                "updated_at": "2026-08-14T10:30:00+00:00",
+            }
+        )
+        self.content.kernel.commit(
+            command_id="install-unpublished-historical-set",
+            expected_revision=self.content.kernel.load().revision,
+            event_type="test.install-unpublished-historical-set",
+            artifact_updates={
+                "content/page-decisions": (
+                    "content-page-decision-set",
+                    unpublished_set,
+                )
+            },
+        )
+        before = self.content.kernel.load()
+        objects = object_files(self.content)
+        events = event_files(self.content)
+        with self.assertRaises(ContentWorkflowError) as caught:
+            self.save(
+                command_id="reject-unpublished-historical-blueprint",
+                slide_id="s1",
+                decision="approved",
+            )
+        self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+        self.assertEqual(self.content.kernel.load(), before)
+        self.assertEqual(object_files(self.content), objects)
+        self.assertEqual(event_files(self.content), events)
+
+    def test_ambiguous_or_corrupt_blueprint_publication_receipt_fails_closed(self) -> None:
+        for failure_mode in ("ambiguous", "corrupt"):
+            with self.subTest(failure_mode=failure_mode), tempfile.TemporaryDirectory() as temp:
+                content = ContentService.initialize(
+                    Path(temp), project_id=f"publication-{failure_mode}"
+                )
+                source, _blueprint = accept_blueprint(content, slide_count=1)
+                if failure_mode == "ambiguous":
+                    content.kernel.commit(
+                        command_id="duplicate-publication-receipt",
+                        expected_revision=content.kernel.load().revision,
+                        event_type="content.accepted-internally",
+                        artifact_updates={},
+                    )
+                else:
+                    publication_path = next(
+                        path
+                        for path in content.kernel.events_root.glob("r*.json")
+                        if json.loads(path.read_text(encoding="utf-8"))[
+                            "event_type"
+                        ]
+                        == "content.accepted-internally"
+                    )
+                    event = json.loads(
+                        publication_path.read_text(encoding="utf-8")
+                    )
+                    event.pop("artifact_head_removals")
+                    publication_path.write_text(
+                        json.dumps(event, ensure_ascii=False, sort_keys=True),
+                        encoding="utf-8",
+                    )
+                before = content.kernel.load()
+                before_state = content.kernel.state_path.read_bytes()
+                before_objects = object_files(content)
+                before_events = {
+                    path.name: path.read_bytes()
+                    for path in content.kernel.events_root.glob("r*.json")
+                }
+                with self.assertRaises(ContentWorkflowError) as caught:
+                    ContentReviewService(content.kernel).save_page_decision(
+                        command_id=f"reject-publication-{failure_mode}",
+                        expected_revision=before.revision,
+                        source_version=source,
+                        review_batch_id=f"publication-batch-{failure_mode}",
+                        slide_id="s1",
+                        decision="approved",
+                        comment="",
+                    )
+                self.assertEqual(
+                    caught.exception.code, "CONTENT_REVIEW_CONFLICT"
+                )
+                self.assertEqual(content.kernel.load(), before)
+                self.assertEqual(
+                    content.kernel.state_path.read_bytes(), before_state
+                )
+                self.assertEqual(object_files(content), before_objects)
+                self.assertEqual(
+                    {
+                        path.name: path.read_bytes()
+                        for path in content.kernel.events_root.glob("r*.json")
+                    },
+                    before_events,
+                )
+
+    def test_current_blueprint_chain_mismatches_are_zero_write(self) -> None:
+        def bad_acceptance(blueprint: dict) -> dict:
+            return {
+                **blueprint,
+                "acceptance_ref": artifact_ref("content-acceptance", "f"),
+            }
+
+        def bad_upstream(blueprint: dict) -> dict:
+            return {
+                **blueprint,
+                "argument_map_ref": blueprint["strategy_ref"],
+            }
+
+        def bad_lineage(blueprint: dict) -> dict:
+            return {
+                **blueprint,
+                "framework_ref": blueprint["framework_confirmation_ref"],
+            }
+
+        def bad_embedded(blueprint: dict) -> dict:
+            forged = copy.deepcopy(blueprint)
+            forged["strategy"]["core_tension"] = "不属于引用产物的内容"
+            return forged
+
+        cases = {
+            "acceptance": bad_acceptance,
+            "upstream": bad_upstream,
+            "lineage": bad_lineage,
+            "embedded": bad_embedded,
+        }
+        for label, mutate in cases.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp:
+                content = ContentService.initialize(
+                    Path(temp), project_id=f"forged-chain-{label}"
+                )
+                _source, blueprint = accept_blueprint(content, slide_count=1)
+                forged = mutate(blueprint)
+                forged_ref = str(
+                    content.kernel.artifacts.reference_for(
+                        "content-blueprint", forged
+                    )
+                )
+                installed = content.kernel.commit(
+                    command_id=f"install-forged-chain-{label}",
+                    expected_revision=content.kernel.load().revision,
+                    event_type="test.install-forged-current-blueprint",
+                    artifact_updates={
+                        "content/blueprint": ("content-blueprint", forged)
+                    },
+                )
+                before = content.kernel.load()
+                objects = object_files(content)
+                events = event_files(content)
+                with self.assertRaises(ContentWorkflowError) as caught:
+                    ContentReviewService(content.kernel).save_page_decision(
+                        command_id=f"reject-forged-chain-{label}",
+                        expected_revision=installed.revision,
+                        source_version=forged_ref,
+                        review_batch_id=f"forged-chain-batch-{label}",
+                        slide_id="s1",
+                        decision="approved",
+                        comment="",
+                    )
+                self.assertEqual(
+                    caught.exception.code, "CONTENT_REVIEW_CONFLICT"
+                )
+                self.assertEqual(content.kernel.load(), before)
+                self.assertEqual(object_files(content), objects)
+                self.assertEqual(event_files(content), events)
 
     def test_frozen_decision_set_rejects_changes_without_writes(self) -> None:
         self.save(
