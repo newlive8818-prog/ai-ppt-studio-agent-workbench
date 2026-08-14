@@ -42,6 +42,7 @@ class ProjectKernel:
         self.state_path = self.project_root / "kernel" / "state.json"
         self.events_root = self.project_root / "kernel" / "events"
         self.lock_path = self.project_root / "kernel" / "write.lock"
+        self.result_lock_path = self.project_root / "kernel" / "result.lock"
         self.artifacts = ArtifactRepository(
             self.project_root, project_id=project_id
         )
@@ -79,11 +80,18 @@ class ProjectKernel:
     def semantic_command(self, fingerprint: str) -> Iterator[None]:
         """Bind trusted request semantics to all commits in this call context."""
 
-        token = _COMMAND_FINGERPRINT.set(fingerprint)
-        try:
+        if not fingerprint:
             yield
-        finally:
-            _COMMAND_FINGERPRINT.reset(token)
+            return
+        token = _COMMAND_FINGERPRINT.set(fingerprint)
+        self.result_lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.result_lock_path.open("a+", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                _COMMAND_FINGERPRINT.reset(token)
 
     def commit(
         self,

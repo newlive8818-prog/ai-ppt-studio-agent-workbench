@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import sys
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +23,56 @@ from tests.v16_visual_fixtures import (
 
 
 class V16VisualBridgeTests(unittest.TestCase):
+    def test_concurrent_task_bound_visual_result_is_semantically_serialized(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp)
+            content, revision, blueprint_ref = confirmed_g0(project)
+            requested = dispatch_v16({
+                "operation": "request-agent-action",
+                "project_root": str(project),
+                "expected_revision": revision,
+                "command_id": "concurrent-visual-task",
+                "action_type": "design-deck-system",
+                "target_refs": [blueprint_ref],
+                "instructions": "形成视觉方向。",
+            })["result"]
+            task_id = requested["task"]["task_id"]
+            base = {
+                "operation": "commit-artifact",
+                "project_root": str(project),
+                "expected_revision": revision + 1,
+                "command_id": "concurrent-visual-result",
+                "kind": "visual-brief",
+                "task_id": task_id,
+            }
+            barrier = threading.Barrier(2)
+
+            def commit(payload: dict) -> tuple[str, str]:
+                barrier.wait()
+                try:
+                    result = dispatch_v16({**base, "payload": payload})["result"]
+                    return "success", result["artifact_ref"]
+                except ContractValidationError:
+                    return "conflict", ""
+
+            changed = valid_visual_brief(blueprint_ref)
+            changed["design_proposition"] = "并发竞争的另一语义"
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                outcomes = list(executor.map(
+                    commit,
+                    (valid_visual_brief(blueprint_ref), changed),
+                ))
+            self.assertEqual(sorted(status for status, _ in outcomes), [
+                "conflict", "success"
+            ])
+            state = content.kernel.load()
+            self.assertEqual(state.revision, revision + 3)
+            task = content.kernel.artifacts.resolve(ArtifactReference.parse(
+                state.artifact_heads[f"agent/task/{task_id}"]
+            ))["payload"]
+            winning_ref = next(ref for status, ref in outcomes if status == "success")
+            self.assertEqual(task["result_refs"], [winning_ref])
+
     def test_task_bound_visual_result_completes_and_binds_the_agent_task(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
