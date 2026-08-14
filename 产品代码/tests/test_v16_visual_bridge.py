@@ -70,6 +70,39 @@ class V16VisualBridgeTests(unittest.TestCase):
             )["result"]
             self.assertEqual(retried, committed)
             self.assertEqual(tuple(content.kernel.events_root.iterdir()), events)
+            for forbidden_kind, forbidden_payload in (
+                (
+                    "mission",
+                    {
+                        "topic": "越权",
+                        "primary_audience": "越权",
+                        "desired_judgment_or_action": "越权",
+                    },
+                ),
+                (
+                    "material-findings",
+                    {"artifact_type": "material-inventory", "sources": []},
+                ),
+                (
+                    "content-blueprint",
+                    {"artifact_type": "raw-feedback", "feedback": "越权"},
+                ),
+            ):
+                with self.subTest(kind=forbidden_kind), self.assertRaises(
+                    ContractValidationError
+                ):
+                    dispatch_v16(
+                        {
+                            "operation": "commit-artifact",
+                            "project_root": str(project),
+                            "expected_revision": revision + 1,
+                            "command_id": f"forbidden-{forbidden_kind}",
+                            "kind": forbidden_kind,
+                            "task_id": task_id,
+                            "payload": forbidden_payload,
+                        }
+                    )
+                self.assertEqual(tuple(content.kernel.events_root.iterdir()), events)
             changed = valid_visual_brief(blueprint_ref)
             changed["design_proposition"] = "同一命令不得改写视觉命题"
             with self.assertRaises(ContractValidationError):

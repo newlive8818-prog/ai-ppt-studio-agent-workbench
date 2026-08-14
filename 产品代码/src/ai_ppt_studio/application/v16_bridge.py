@@ -349,6 +349,7 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
                     },
                 )
             else:
+                project_commands.validate_noncontent_agent_result_kind(task, kind)
                 replay = project_commands.replay_noncontent_agent_result(
                     command_id=command_id,
                     task_id=task_id,
@@ -375,6 +376,13 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
                 "Formal Agent content results require an active task identity",
                 {"artifact_type": artifact_type},
             )
+        result_fingerprint = (
+            project_commands._result_request_fingerprint(
+                kind, payload, int(request["expected_revision"])
+            )
+            if task_id
+            else ""
+        )
         if content_task is not None:
             artifact_ref, state = project_commands.commit_content_agent_result(
                 command_id=command_id,
@@ -383,35 +391,33 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
                 request_kind=kind,
                 raw_request_payload=payload,
             )
-        elif kind == "mission":
-            artifact_ref = content.save_mission_draft(
-                command_id,
-                int(request["expected_revision"]),
-                payload,
-            )
-        elif kind in {
-            "material-findings",
-            "content-blueprint",
-            "content-acceptance",
-            "feedback",
-        }:
-            artifact_ref = content.commit_public_artifact(
-                command_id,
-                int(request["expected_revision"]),
-                kind=kind,
-                payload=payload,
-            )
         else:
-            fingerprint = project_commands._result_request_fingerprint(
-                kind, payload, int(request["expected_revision"])
-            )
-            with kernel.semantic_command(fingerprint if task_id else ""):
-                artifact_ref = visual.commit_public_artifact(
-                    command_id,
-                    int(request["expected_revision"]),
-                    kind=kind,
-                    payload=payload,
-                )
+            with kernel.semantic_command(result_fingerprint):
+                if kind == "mission":
+                    artifact_ref = content.save_mission_draft(
+                        command_id,
+                        int(request["expected_revision"]),
+                        payload,
+                    )
+                elif kind in {
+                    "material-findings",
+                    "content-blueprint",
+                    "content-acceptance",
+                    "feedback",
+                }:
+                    artifact_ref = content.commit_public_artifact(
+                        command_id,
+                        int(request["expected_revision"]),
+                        kind=kind,
+                        payload=payload,
+                    )
+                else:
+                    artifact_ref = visual.commit_public_artifact(
+                        command_id,
+                        int(request["expected_revision"]),
+                        kind=kind,
+                        payload=payload,
+                    )
         if content_task is None:
             state = kernel.load()
             if task_id:

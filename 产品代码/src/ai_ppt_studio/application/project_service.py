@@ -55,6 +55,20 @@ ACTION_ROLES = {
     "coordinate-delivery": "delivery-coordinator",
 }
 
+NONCONTENT_RESULT_KINDS = {
+    "design-deck-system": frozenset({"visual-brief", "visual-contract"}),
+    "design-slide-visuals": frozenset({"concept-set", "visual-contract"}),
+    "build-native-first": frozenset({"native-anchor-set", "visual-contract"}),
+    "generate-image-assets": frozenset({"visual-contract"}),
+    "review-visual-aesthetic": frozenset({"visual-contract"}),
+    "review-visual-engineering": frozenset({"visual-contract"}),
+    "verify-target-render": frozenset({"target-render-evidence"}),
+    "govern-feedback": frozenset({"feedback"}),
+    "curate-experience": frozenset({"experience"}),
+    "evaluate-experience": frozenset({"experience"}),
+    "coordinate-delivery": frozenset({"delivery", "target-render-evidence"}),
+}
+
 def _normalize_project_id(value: str) -> str:
     identity = unicodedata.normalize("NFC", value.strip())
     if (
@@ -619,6 +633,16 @@ class ProjectCommandService:
             raise ContractValidationError(
                 "Processed Agent result command has different semantics"
             ) from None
+
+    def validate_noncontent_agent_result_kind(
+        self, task: dict[str, Any], request_kind: str
+    ) -> None:
+        action = str(task.get("action_type") or "")
+        allowed = NONCONTENT_RESULT_KINDS.get(action, frozenset())
+        if request_kind not in allowed:
+            raise ContractValidationError(
+                "Agent result kind does not match its non-content task action"
+            )
 
     def complete_agent_task(
         self,
