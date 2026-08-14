@@ -84,6 +84,75 @@ _PAGE_DECISION_SET_FIELDS = frozenset(
         "updated_at",
     }
 )
+_CONTENT_REVIEW_BATCH_FIELDS = frozenset(
+    {
+        "review_batch_id",
+        "project_id",
+        "review_type",
+        "source_version",
+        "decision_set_ref",
+        "page_snapshot_refs",
+        "decision_refs",
+        "expected_slide_count",
+        "counts",
+        "status",
+        "submitted_at",
+        "submitted_by",
+        "supersedes_ref",
+        "scope_kind",
+        "scope_id",
+        "evidence_refs",
+        "challenge_id",
+        "challenge_revision",
+        "user_action_ref",
+        "user_message_ref",
+        "confirmation_identity_type",
+        "host_assertion_sha256",
+        "confirmed_at",
+    }
+)
+_CONTENT_REVIEW_BATCH_COUNTS = frozenset(
+    {"approved", "modify", "evidence", "merge_or_delete"}
+)
+_CONTENT_REVIEW_BATCH_WITHDRAWAL_FIELDS = frozenset(
+    {
+        "withdrawal_id",
+        "project_id",
+        "review_batch_id",
+        "source_version",
+        "submitted_batch_ref",
+        "superseded_batch_ref",
+        "replacement_review_batch_id",
+        "reason",
+        "withdrawn_at",
+        "withdrawn_by",
+        "scope_kind",
+        "scope_id",
+        "evidence_refs",
+        "challenge_id",
+        "challenge_revision",
+        "user_action_ref",
+        "user_message_ref",
+        "confirmation_identity_type",
+        "host_assertion_sha256",
+        "confirmed_at",
+    }
+)
+CONTENT_REVIEW_BATCH_STATUSES = frozenset(
+    {
+        "draft",
+        "ready",
+        "submitted",
+        "plan-proposed",
+        "plan-confirmed",
+        "applied",
+        "superseded",
+    }
+)
+_SUBMITTED_CONTENT_REVIEW_BATCH_STATUSES = CONTENT_REVIEW_BATCH_STATUSES - {
+    "draft",
+    "ready",
+}
 _VISIBLE_COPY_SNAPSHOT_FIELDS = frozenset(
     {
         "project_id",
@@ -430,3 +499,519 @@ def validate_page_decision_set(payload: dict[str, Any]) -> dict[str, Any]:
             payload.get("updated_at"), field="updated_at"
         ),
     }
+
+
+def validate_persisted_page_decision_set(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Require the persisted decision-set aggregate to be byte-canonical."""
+
+    if not isinstance(payload, dict) or set(payload) != _PAGE_DECISION_SET_FIELDS:
+        raise ContractValidationError(
+            "Persisted PageDecisionSet must contain every exact formal field"
+        )
+    normalized = validate_page_decision_set(payload)
+    if normalized != payload:
+        raise ContractValidationError(
+            "Persisted PageDecisionSet payload is not canonical"
+        )
+    return normalized
+
+
+def _reference_list(
+    value: object,
+    *,
+    field: str,
+    kind: str,
+    expected_count: int,
+) -> list[str]:
+    if not isinstance(value, list) or len(value) != expected_count:
+        raise ContractValidationError(
+            f"{field} must contain exactly expected_slide_count references"
+        )
+    normalized = [
+        _artifact_ref(
+            _nonempty_text({field: item}, field),
+            field=field,
+            kind=kind,
+        )
+        for item in value
+    ]
+    if len(set(normalized)) != len(normalized):
+        raise ContractValidationError(f"{field} references must be unique")
+    return normalized
+
+
+def _batch_counts(value: object, *, expected_total: int) -> dict[str, int]:
+    if not isinstance(value, dict) or set(value) != _CONTENT_REVIEW_BATCH_COUNTS:
+        raise ContractValidationError(
+            "counts must contain exactly approved, modify, evidence, and "
+            "merge_or_delete"
+        )
+    counts: dict[str, int] = {}
+    for key in ("approved", "modify", "evidence", "merge_or_delete"):
+        count = value[key]
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise ContractValidationError(f"counts.{key} must be non-negative")
+        counts[key] = count
+    if sum(counts.values()) != expected_total:
+        raise ContractValidationError(
+            "The four-way counts must equal expected_slide_count"
+        )
+    return counts
+
+
+def _empty_submission_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    empty_text_fields = (
+        "submitted_at",
+        "submitted_by",
+        "scope_kind",
+        "scope_id",
+        "challenge_id",
+        "user_action_ref",
+        "user_message_ref",
+        "confirmation_identity_type",
+        "host_assertion_sha256",
+        "confirmed_at",
+    )
+    if any(payload.get(field) != "" for field in empty_text_fields):
+        raise ContractValidationError(
+            "Draft review batches cannot carry submission confirmation fields"
+        )
+    if payload.get("challenge_revision") != 0 or payload.get("evidence_refs") != []:
+        raise ContractValidationError(
+            "Draft review batches cannot carry a submission challenge"
+        )
+    return {
+        **{field: "" for field in empty_text_fields},
+        "evidence_refs": [],
+        "challenge_revision": 0,
+    }
+
+
+def _submitted_confirmation_fields(
+    payload: dict[str, Any],
+    *,
+    source_version: str,
+    review_batch_id: str,
+    decision_set_ref: str,
+    decision_refs: list[str],
+) -> dict[str, Any]:
+    scope_kind = _nonempty_text(payload, "scope_kind")
+    scope_id = _nonempty_text(payload, "scope_id")
+    expected_scope_id = f"{review_batch_id}:{source_version}"
+    if scope_kind != "content-review-batch-submission":
+        raise ContractValidationError(
+            "Submitted review batch scope_kind must be "
+            "content-review-batch-submission"
+        )
+    if scope_id != expected_scope_id:
+        raise ContractValidationError(
+            "Submitted review batch scope_id must bind batch and source"
+        )
+    evidence_refs = payload.get("evidence_refs")
+    expected_evidence = [source_version, decision_set_ref, *decision_refs]
+    if evidence_refs != expected_evidence:
+        raise ContractValidationError(
+            "Submitted review batch evidence_refs are not canonical"
+        )
+    challenge_id = _nonempty_text(payload, "challenge_id")
+    assertion_digest = _nonempty_text(payload, "host_assertion_sha256")
+    if (
+        len(challenge_id) != 64
+        or any(character not in "0123456789abcdef" for character in challenge_id)
+        or len(assertion_digest) != 64
+        or any(
+            character not in "0123456789abcdef"
+            for character in assertion_digest
+        )
+    ):
+        raise ContractValidationError(
+            "Submission challenge and assertion digests must be SHA-256 hex"
+        )
+    challenge_revision = _positive_int(payload, "challenge_revision")
+    identity_type = _nonempty_text(payload, "confirmation_identity_type")
+    action_ref = _optional_text(payload, "user_action_ref")
+    message_ref = _optional_text(payload, "user_message_ref")
+    if (
+        identity_type not in {"host-action", "verified-message"}
+        or (identity_type == "host-action" and (not action_ref or message_ref))
+        or (identity_type == "verified-message" and (not message_ref or action_ref))
+    ):
+        raise ContractValidationError(
+            "Submitted review batch must bind exactly one trusted identity"
+        )
+    identity = action_ref or message_ref
+    submitted_by = _nonempty_text(payload, "submitted_by")
+    submitted_at = _timestamp(payload.get("submitted_at"), field="submitted_at")
+    confirmed_at = _timestamp(payload.get("confirmed_at"), field="confirmed_at")
+    if submitted_by != identity or submitted_at != confirmed_at:
+        raise ContractValidationError(
+            "Submission identity and timestamp must match confirmation"
+        )
+    return {
+        "submitted_at": submitted_at,
+        "submitted_by": submitted_by,
+        "scope_kind": scope_kind,
+        "scope_id": scope_id,
+        "evidence_refs": list(expected_evidence),
+        "challenge_id": challenge_id,
+        "challenge_revision": challenge_revision,
+        "user_action_ref": action_ref,
+        "user_message_ref": message_ref,
+        "confirmation_identity_type": identity_type,
+        "host_assertion_sha256": assertion_digest,
+        "confirmed_at": confirmed_at,
+    }
+
+
+def validate_content_review_batch(
+    payload: dict[str, Any],
+    *,
+    authoritative_slides: list[dict[str, Any]] | None = None,
+    decisions_by_ref: dict[str, dict[str, Any]] | None = None,
+    prior_submitted: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate one exact immutable full-deck review-batch lifecycle artifact."""
+
+    if not isinstance(payload, dict) or set(payload) != _CONTENT_REVIEW_BATCH_FIELDS:
+        raise ContractValidationError(
+            "ContentReviewBatch must contain every exact formal field"
+        )
+    review_type = _nonempty_text(payload, "review_type")
+    if review_type != "content":
+        raise ContractValidationError("review_type must be content")
+    source_version = _artifact_ref(
+        _nonempty_text(payload, "source_version"),
+        field="source_version",
+        kind="content-blueprint",
+    )
+    decision_set_ref = _artifact_ref(
+        _nonempty_text(payload, "decision_set_ref"),
+        field="decision_set_ref",
+        kind="content-page-decision-set",
+    )
+    expected_slide_count = _positive_int(payload, "expected_slide_count")
+    decision_refs = _reference_list(
+        payload.get("decision_refs"),
+        field="decision_refs",
+        kind="content-page-decision",
+        expected_count=expected_slide_count,
+    )
+    page_snapshot_refs = _reference_list(
+        payload.get("page_snapshot_refs"),
+        field="page_snapshot_refs",
+        kind="content-visible-copy-snapshot",
+        expected_count=expected_slide_count,
+    )
+    counts = _batch_counts(
+        payload.get("counts"), expected_total=expected_slide_count
+    )
+    status = _nonempty_text(payload, "status")
+    if status not in CONTENT_REVIEW_BATCH_STATUSES:
+        raise ContractValidationError("ContentReviewBatch status is invalid")
+    review_batch_id = _nonempty_text(payload, "review_batch_id")
+    supersedes = _optional_text(payload, "supersedes_ref")
+    if supersedes:
+        supersedes = _artifact_ref(
+            supersedes,
+            field="supersedes_ref",
+            kind="content-review-batch",
+        )
+    if status == "superseded" and not supersedes:
+        raise ContractValidationError(
+            "A superseded batch lifecycle must reference its predecessor"
+        )
+    if status in _SUBMITTED_CONTENT_REVIEW_BATCH_STATUSES:
+        submission = _submitted_confirmation_fields(
+            payload,
+            source_version=source_version,
+            review_batch_id=review_batch_id,
+            decision_set_ref=decision_set_ref,
+            decision_refs=decision_refs,
+        )
+    else:
+        submission = _empty_submission_fields(payload)
+
+    normalized = {
+        "review_batch_id": review_batch_id,
+        "project_id": _nonempty_text(payload, "project_id"),
+        "review_type": "content",
+        "source_version": source_version,
+        "decision_set_ref": decision_set_ref,
+        "page_snapshot_refs": page_snapshot_refs,
+        "decision_refs": decision_refs,
+        "expected_slide_count": expected_slide_count,
+        "counts": counts,
+        "status": status,
+        "submitted_at": submission["submitted_at"],
+        "submitted_by": submission["submitted_by"],
+        "supersedes_ref": supersedes,
+        "scope_kind": submission["scope_kind"],
+        "scope_id": submission["scope_id"],
+        "evidence_refs": submission["evidence_refs"],
+        "challenge_id": submission["challenge_id"],
+        "challenge_revision": submission["challenge_revision"],
+        "user_action_ref": submission["user_action_ref"],
+        "user_message_ref": submission["user_message_ref"],
+        "confirmation_identity_type": submission[
+            "confirmation_identity_type"
+        ],
+        "host_assertion_sha256": submission["host_assertion_sha256"],
+        "confirmed_at": submission["confirmed_at"],
+    }
+    if normalized != payload:
+        raise ContractValidationError(
+            "ContentReviewBatch payload is not canonical"
+        )
+
+    if authoritative_slides is not None or decisions_by_ref is not None:
+        if not isinstance(authoritative_slides, list) or not isinstance(
+            decisions_by_ref, dict
+        ):
+            raise ContractValidationError(
+                "Authoritative slides and decisions must be validated together"
+            )
+        if len(authoritative_slides) != expected_slide_count:
+            raise ContractValidationError(
+                "Review batch page count differs from the blueprint"
+            )
+        remaining = 0
+        next_incomplete = ""
+        observed_counts = {key: 0 for key in _CONTENT_REVIEW_BATCH_COUNTS}
+        observed_snapshots: list[str] = []
+        for index, (slide, decision_ref) in enumerate(
+            zip(authoritative_slides, decision_refs), start=1
+        ):
+            if not isinstance(slide, dict):
+                raise ContractValidationError("Authoritative slide is invalid")
+            slide_id = slide.get("slide_id")
+            slide_order = slide.get("order")
+            decision = decisions_by_ref.get(decision_ref)
+            if (
+                not isinstance(slide_id, str)
+                or not slide_id
+                or slide_order != index
+                or not isinstance(decision, dict)
+                or decision.get("project_id") != normalized["project_id"]
+                or decision.get("review_type") != "content"
+                or decision.get("slide_id") != slide_id
+                or decision.get("slide_order") != index
+                or decision.get("review_batch_id") != review_batch_id
+                or decision.get("source_version") != source_version
+            ):
+                raise ContractValidationError(
+                    "Review batch decisions do not match authoritative page order"
+                )
+            if not decision.get("completed"):
+                remaining += 1
+                if not next_incomplete:
+                    next_incomplete = slide_id
+                continue
+            choice = decision.get("decision")
+            count_key = (
+                "merge_or_delete" if choice == "merge-or-delete" else choice
+            )
+            if count_key not in observed_counts:
+                raise ContractValidationError(
+                    "Review batch decision choice is invalid"
+                )
+            observed_counts[str(count_key)] += 1
+            observed_snapshots.append(
+                _artifact_ref(
+                    _nonempty_text(
+                        decision, "visible_copy_snapshot_ref"
+                    ),
+                    field="visible_copy_snapshot_ref",
+                    kind="content-visible-copy-snapshot",
+                )
+            )
+        if remaining:
+            raise ContentWorkflowError(
+                "CONTENT_REVIEW_BATCH_INCOMPLETE",
+                "CONTENT_REVIEW_BATCH_INCOMPLETE: all pages need a completed decision",
+                {
+                    "total": expected_slide_count,
+                    "completed": expected_slide_count - remaining,
+                    "remaining": remaining,
+                    "next_incomplete_slide_id": next_incomplete,
+                },
+            )
+        if observed_counts != counts or observed_snapshots != page_snapshot_refs:
+            raise ContractValidationError(
+                "Review batch counts or page snapshots differ from decisions"
+            )
+
+    if prior_submitted is not None:
+        if not isinstance(prior_submitted, dict):
+            raise ContractValidationError("prior_submitted must be an object")
+        immutable_fields = (
+            "review_batch_id",
+            "project_id",
+            "review_type",
+            "source_version",
+            "decision_set_ref",
+            "page_snapshot_refs",
+            "decision_refs",
+            "expected_slide_count",
+            "counts",
+            "submitted_at",
+            "submitted_by",
+            "scope_kind",
+            "scope_id",
+            "evidence_refs",
+            "challenge_id",
+            "challenge_revision",
+            "user_action_ref",
+            "user_message_ref",
+            "confirmation_identity_type",
+            "host_assertion_sha256",
+            "confirmed_at",
+        )
+        if any(
+            normalized.get(field) != prior_submitted.get(field)
+            for field in immutable_fields
+        ):
+            raise ContractValidationError(
+                "Submitted review-batch content cannot be mutated"
+            )
+    return normalized
+
+
+def validate_content_review_batch_withdrawal(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate one exact pre-plan review-batch withdrawal receipt."""
+
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != _CONTENT_REVIEW_BATCH_WITHDRAWAL_FIELDS
+    ):
+        raise ContractValidationError(
+            "ContentReviewBatchWithdrawal must contain every exact formal field"
+        )
+    source_version = _artifact_ref(
+        _nonempty_text(payload, "source_version"),
+        field="source_version",
+        kind="content-blueprint",
+    )
+    submitted_batch_ref = _artifact_ref(
+        _nonempty_text(payload, "submitted_batch_ref"),
+        field="submitted_batch_ref",
+        kind="content-review-batch",
+    )
+    superseded_batch_ref = _artifact_ref(
+        _nonempty_text(payload, "superseded_batch_ref"),
+        field="superseded_batch_ref",
+        kind="content-review-batch",
+    )
+    if superseded_batch_ref == submitted_batch_ref:
+        raise ContractValidationError(
+            "Withdrawal must preserve submitted bytes in a new superseded artifact"
+        )
+    review_batch_id = _nonempty_text(payload, "review_batch_id")
+    replacement_batch_id = _nonempty_text(
+        payload, "replacement_review_batch_id"
+    )
+    if replacement_batch_id == review_batch_id:
+        raise ContractValidationError(
+            "Withdrawal replacement batch must have a new identity"
+        )
+    reason = _nonempty_text(payload, "reason")
+    if payload.get("scope_kind") != "content-review-batch-withdrawal":
+        raise ContractValidationError(
+            "Withdrawal scope_kind must be content-review-batch-withdrawal"
+        )
+    if payload.get("scope_id") != review_batch_id:
+        raise ContractValidationError(
+            "Withdrawal scope_id must be the exact submitted batch id"
+        )
+    evidence_refs = payload.get("evidence_refs")
+    if (
+        not isinstance(evidence_refs, list)
+        or len(evidence_refs) < 4
+        or evidence_refs[0] != source_version
+        or evidence_refs[1] != submitted_batch_ref
+        or any(not isinstance(item, str) or not item for item in evidence_refs)
+    ):
+        raise ContractValidationError(
+            "Withdrawal evidence_refs must bind source, submitted batch, and decisions"
+        )
+    _artifact_ref(
+        evidence_refs[2],
+        field="evidence_refs[2]",
+        kind="content-page-decision-set",
+    )
+    ordered_decision_refs = [
+        _artifact_ref(
+            value,
+            field="evidence_refs decision",
+            kind="content-page-decision",
+        )
+        for value in evidence_refs[3:]
+    ]
+    if len(set(ordered_decision_refs)) != len(ordered_decision_refs):
+        raise ContractValidationError(
+            "Withdrawal decision evidence references must be unique"
+        )
+    challenge_id = _nonempty_text(payload, "challenge_id")
+    assertion_digest = _nonempty_text(payload, "host_assertion_sha256")
+    if (
+        len(challenge_id) != 64
+        or any(character not in "0123456789abcdef" for character in challenge_id)
+        or len(assertion_digest) != 64
+        or any(
+            character not in "0123456789abcdef"
+            for character in assertion_digest
+        )
+    ):
+        raise ContractValidationError(
+            "Withdrawal challenge and assertion digests must be SHA-256 hex"
+        )
+    challenge_revision = _positive_int(payload, "challenge_revision")
+    identity_type = _nonempty_text(payload, "confirmation_identity_type")
+    action_ref = _optional_text(payload, "user_action_ref")
+    message_ref = _optional_text(payload, "user_message_ref")
+    if (
+        identity_type not in {"host-action", "verified-message"}
+        or (identity_type == "host-action" and (not action_ref or message_ref))
+        or (identity_type == "verified-message" and (not message_ref or action_ref))
+    ):
+        raise ContractValidationError(
+            "Withdrawal must bind exactly one trusted identity"
+        )
+    identity = action_ref or message_ref
+    withdrawn_by = _nonempty_text(payload, "withdrawn_by")
+    withdrawn_at = _timestamp(payload.get("withdrawn_at"), field="withdrawn_at")
+    confirmed_at = _timestamp(payload.get("confirmed_at"), field="confirmed_at")
+    if withdrawn_by != identity or withdrawn_at != confirmed_at:
+        raise ContractValidationError(
+            "Withdrawal identity and timestamp must match confirmation"
+        )
+    normalized = {
+        "withdrawal_id": _nonempty_text(payload, "withdrawal_id"),
+        "project_id": _nonempty_text(payload, "project_id"),
+        "review_batch_id": review_batch_id,
+        "source_version": source_version,
+        "submitted_batch_ref": submitted_batch_ref,
+        "superseded_batch_ref": superseded_batch_ref,
+        "replacement_review_batch_id": replacement_batch_id,
+        "reason": reason,
+        "withdrawn_at": withdrawn_at,
+        "withdrawn_by": withdrawn_by,
+        "scope_kind": "content-review-batch-withdrawal",
+        "scope_id": review_batch_id,
+        "evidence_refs": list(evidence_refs),
+        "challenge_id": challenge_id,
+        "challenge_revision": challenge_revision,
+        "user_action_ref": action_ref,
+        "user_message_ref": message_ref,
+        "confirmation_identity_type": identity_type,
+        "host_assertion_sha256": assertion_digest,
+        "confirmed_at": confirmed_at,
+    }
+    if normalized != payload:
+        raise ContractValidationError(
+            "ContentReviewBatchWithdrawal payload is not canonical"
+        )
+    return normalized

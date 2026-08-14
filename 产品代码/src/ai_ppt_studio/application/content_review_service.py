@@ -14,9 +14,12 @@ from ai_ppt_studio.domains.content.review_contracts import (
     CONTENT_PAGE_DECISIONS,
     normalize_page_decision_choice,
     validate_content_blueprint,
+    validate_content_review_batch,
+    validate_content_review_batch_withdrawal,
     validate_page_decision,
     validate_page_decision_set,
     validate_persisted_page_decision,
+    validate_persisted_page_decision_set,
     validate_visible_copy_snapshot,
 )
 from ai_ppt_studio.domains.content.contracts import (
@@ -32,15 +35,22 @@ from ai_ppt_studio.domains.content.framework import (
 )
 from ai_ppt_studio.errors import (
     ArtifactReferenceError,
+    ConfirmationTransactionError,
     ContractValidationError,
     ContentWorkflowError,
     GateBlockedError,
     ProposalOnlyIdentityViolationError,
     RevisionConflictError,
 )
+from ai_ppt_studio.application.scoped_confirmation import (
+    ScopedConfirmationPolicy,
+)
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.state import KernelState
-from ai_ppt_studio.kernel.transactions import ProjectKernel
+from ai_ppt_studio.kernel.transactions import (
+    CONFIRMATION_LEDGER_SLOT,
+    ProjectKernel,
+)
 
 
 PAGE_DECISION_HEAD = "content/page-decisions"
@@ -49,6 +59,16 @@ PAGE_DECISION_KIND = "content-page-decision"
 VISIBLE_COPY_SNAPSHOT_KIND = "content-visible-copy-snapshot"
 BLUEPRINT_HEAD = "content/blueprint"
 BLUEPRINT_KIND = "content-blueprint"
+REVIEW_BATCH_HEAD = "content/review-batch"
+REVIEW_BATCH_KIND = "content-review-batch"
+REVIEW_BATCH_SUBMISSION_SCOPE = "content-review-batch-submission"
+REVIEW_BATCH_WITHDRAWAL_HEAD = "content/review-batch-withdrawal"
+REVIEW_BATCH_WITHDRAWAL_KIND = "content-review-batch-withdrawal"
+REVIEW_BATCH_WITHDRAWAL_SCOPE = "content-review-batch-withdrawal"
+CONTENT_REVIEW_BATCH_FOLLOW_UP = (
+    "读取已冻结的内容审核批次，结合当前完整蓝图、目录框架、证据地图和跨页关系，"
+    "先提出整套修改方案；在用户确认方案前，不生成 ContentChangeSet 或新蓝图。"
+)
 PROTECTED_HEADS = (
     "content/blueprint",
     "content/acceptance",
@@ -114,6 +134,7 @@ class ContentReviewService:
 
     def __init__(self, kernel: ProjectKernel) -> None:
         self.kernel = kernel
+        self.confirmations = ScopedConfirmationPolicy(kernel)
 
     def save_page_decision(
         self,
@@ -168,6 +189,29 @@ class ContentReviewService:
             if state.revision != expected_revision:
                 raise RevisionConflictError(expected_revision, state.revision)
             blueprint, slides = self._current_blueprint(state, source)
+            batch_ref, current_batch = self._current_review_batch(
+                state=state,
+                source_version=source,
+                review_batch_id=batch_id,
+                slides=slides,
+                allow_missing=True,
+            )
+            if current_batch is not None and current_batch["status"] in {
+                "submitted",
+                "plan-proposed",
+                "plan-confirmed",
+                "applied",
+            }:
+                raise ContentWorkflowError(
+                    "CONTENT_REVIEW_BATCH_FROZEN",
+                    "CONTENT_REVIEW_BATCH_FROZEN: the current review batch is frozen",
+                    {
+                        "batch_ref": batch_ref,
+                        "status": current_batch["status"],
+                        "source_version": source,
+                        "review_batch_id": batch_id,
+                    },
+                )
             slide = next(
                 (
                     item
@@ -320,6 +364,641 @@ class ContentReviewService:
                 self._progress(decision_set, slides),
                 committed,
             )
+
+    def submission_context(
+        self,
+        *,
+        source_version: str,
+        review_batch_id: str,
+    ) -> dict[str, Any]:
+        """Return one read-only, revision-bound complete-batch challenge."""
+
+        source = self._required_text(source_version, "source_version")
+        batch_id = self._required_text(review_batch_id, "review_batch_id")
+        state = self.kernel.load()
+        internal = self._submission_context_from_state(
+            state=state,
+            source_version=source,
+            review_batch_id=batch_id,
+        )
+        return self._public_submission_context(internal)
+
+    def submit_review_batch(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        source_version: str,
+        review_batch_id: str,
+        challenge_id: str,
+        challenge_revision: int,
+        host_confirmation_assertion: str,
+    ) -> tuple[str, str, KernelState]:
+        """Freeze one complete decision set without starting downstream work."""
+
+        command = self._required_text(command_id, "command_id")
+        source = self._required_text(source_version, "source_version")
+        batch_id = self._required_text(review_batch_id, "review_batch_id")
+        assertion = self._required_text(
+            host_confirmation_assertion, "host_confirmation_assertion"
+        )
+        fingerprint = self._command_fingerprint(
+            {
+                "operation": "submit-content-review-batch",
+                "project_id": self.kernel.project_id,
+                "source_version": source,
+                "review_batch_id": batch_id,
+                "challenge_id": challenge_id,
+                "challenge_revision": challenge_revision,
+                "host_confirmation_assertion_sha256": hashlib.sha256(
+                    assertion.encode("utf-8")
+                ).hexdigest(),
+            }
+        )
+        with self.kernel.semantic_command(fingerprint):
+            state = self.kernel.load()
+            if command in state.processed_commands:
+                replay = self.kernel.commit(
+                    command_id=command,
+                    expected_revision=expected_revision,
+                    event_type="content.review-batch-submitted",
+                    artifact_updates={},
+                    command_fingerprint=fingerprint,
+                )
+                return self._replay_batch_submission(command, replay)
+            self._require_expected_revision(expected_revision, state.revision)
+            current = self._submission_context_from_state(
+                state=state,
+                source_version=source,
+                review_batch_id=batch_id,
+            )
+            scoped, consumptions = self.confirmations.confirmation_payload(
+                current=current,
+                source_version=source,
+                challenge_id=challenge_id,
+                challenge_revision=challenge_revision,
+                host_confirmation_assertion=assertion,
+            )
+            identity = str(
+                scoped.get("user_action_ref")
+                or scoped.get("user_message_ref")
+                or ""
+            )
+            current_batch_ref = str(current.get("current_batch_ref") or "")
+            batch = validate_content_review_batch(
+                {
+                    "review_batch_id": batch_id,
+                    "project_id": state.project_id,
+                    "review_type": "content",
+                    "source_version": source,
+                    "decision_set_ref": current["decision_set_ref"],
+                    "page_snapshot_refs": current["page_snapshot_refs"],
+                    "decision_refs": current["ordered_decision_refs"],
+                    "expected_slide_count": current["expected_slide_count"],
+                    "counts": current["counts"],
+                    "status": "submitted",
+                    "submitted_at": scoped["confirmed_at"],
+                    "submitted_by": identity,
+                    "supersedes_ref": current_batch_ref,
+                    **scoped,
+                },
+                authoritative_slides=current["authoritative_slides"],
+                decisions_by_ref=current["decisions_by_ref"],
+            )
+            before_heads = dict(state.artifact_heads)
+            try:
+                committed = self.kernel.commit(
+                    command_id=command,
+                    expected_revision=expected_revision,
+                    event_type="content.review-batch-submitted",
+                    artifact_updates={
+                        REVIEW_BATCH_HEAD: (REVIEW_BATCH_KIND, batch)
+                    },
+                    confirmation_consumptions=consumptions,
+                    command_fingerprint=fingerprint,
+                )
+            except ConfirmationTransactionError as error:
+                raise ContentWorkflowError(
+                    "CONTENT_REVIEW_CONFLICT",
+                    "The trusted batch-submission transaction was rejected",
+                    {
+                        "scope_kind": REVIEW_BATCH_SUBMISSION_SCOPE,
+                        "scope_id": current["scope_id"],
+                        "kernel_error_code": error.code,
+                        "revision": self.kernel.load().revision,
+                    },
+                ) from None
+            changed = {
+                slot
+                for slot in set(before_heads) | set(committed.artifact_heads)
+                if before_heads.get(slot) != committed.artifact_heads.get(slot)
+            }
+            if changed != {REVIEW_BATCH_HEAD, CONFIRMATION_LEDGER_SLOT}:
+                raise RuntimeError(
+                    "Review-batch submission changed unexpected heads: "
+                    + ", ".join(sorted(changed))
+                )
+            self._assert_protected_heads(before_heads, committed)
+            return (
+                committed.artifact_heads[REVIEW_BATCH_HEAD],
+                CONTENT_REVIEW_BATCH_FOLLOW_UP,
+                committed,
+            )
+
+    def withdrawal_context(
+        self,
+        *,
+        source_version: str,
+        review_batch_id: str,
+    ) -> dict[str, Any]:
+        """Return the exact action context for a submitted pre-plan batch."""
+
+        source = self._required_text(source_version, "source_version")
+        batch_id = self._required_text(review_batch_id, "review_batch_id")
+        state = self.kernel.load()
+        internal = self._withdrawal_context_from_state(
+            state=state,
+            source_version=source,
+            review_batch_id=batch_id,
+        )
+        return self._public_withdrawal_context(internal)
+
+    def _withdrawal_context_from_state(
+        self,
+        *,
+        state: KernelState,
+        source_version: str,
+        review_batch_id: str,
+    ) -> dict[str, Any]:
+        source = source_version
+        batch_id = review_batch_id
+        _blueprint, slides = self._current_blueprint(state, source)
+        batch_ref, batch = self._current_review_batch(
+            state=state,
+            source_version=source,
+            review_batch_id=batch_id,
+            slides=slides,
+            allow_missing=False,
+        )
+        if batch is None or batch["status"] != "submitted":
+            raise ContentWorkflowError(
+                "CONTENT_REVIEW_BATCH_NOT_WITHDRAWABLE",
+                "CONTENT_REVIEW_BATCH_NOT_WITHDRAWABLE: only an exact submitted batch can be withdrawn",
+                {
+                    "batch_ref": batch_ref,
+                    "status": batch["status"] if batch else "missing",
+                    "source_version": source,
+                    "review_batch_id": batch_id,
+                },
+            )
+        decision_set_ref = batch["decision_set_ref"]
+        if state.artifact_heads.get(PAGE_DECISION_HEAD) != decision_set_ref:
+            self._conflict(
+                "The submitted batch decision set is no longer current",
+                {
+                    "batch_ref": batch_ref,
+                    "expected_decision_set_ref": decision_set_ref,
+                    "actual_decision_set_ref": state.artifact_heads.get(
+                        PAGE_DECISION_HEAD, ""
+                    ),
+                },
+            )
+        ordered_decision_refs = list(batch["decision_refs"])
+        base = self.confirmations.context(
+            scope_kind=REVIEW_BATCH_WITHDRAWAL_SCOPE,
+            scope_id=batch_id,
+            source_version=source,
+            evidence_refs=[
+                source,
+                batch_ref,
+                decision_set_ref,
+                *ordered_decision_refs,
+            ],
+        )
+        if base["challenge_revision"] != state.revision:
+            raise RevisionConflictError(state.revision, base["challenge_revision"])
+        return {
+            **base,
+            "review_batch_id": batch_id,
+            "submitted_batch_ref": batch_ref,
+            "decision_set_ref": decision_set_ref,
+            "ordered_decision_refs": ordered_decision_refs,
+            "page_snapshot_refs": list(batch["page_snapshot_refs"]),
+            "expected_slide_count": batch["expected_slide_count"],
+            "counts": copy.deepcopy(batch["counts"]),
+            "authoritative_slides": copy.deepcopy(slides),
+            "submitted_batch": copy.deepcopy(batch),
+        }
+
+    def withdraw_review_batch(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        source_version: str,
+        review_batch_id: str,
+        reason: str,
+        challenge_id: str,
+        challenge_revision: int,
+        host_confirmation_assertion: str,
+    ) -> tuple[str, KernelState]:
+        """Withdraw a submitted pre-plan batch into one fresh draft lineage."""
+
+        command = self._required_text(command_id, "command_id")
+        source = self._required_text(source_version, "source_version")
+        batch_id = self._required_text(review_batch_id, "review_batch_id")
+        normalized_reason = self._required_text(reason, "reason")
+        assertion = self._required_text(
+            host_confirmation_assertion, "host_confirmation_assertion"
+        )
+        fingerprint = self._command_fingerprint(
+            {
+                "operation": "withdraw-content-review-batch",
+                "project_id": self.kernel.project_id,
+                "source_version": source,
+                "review_batch_id": batch_id,
+                "reason": normalized_reason,
+                "challenge_id": challenge_id,
+                "challenge_revision": challenge_revision,
+                "host_confirmation_assertion_sha256": hashlib.sha256(
+                    assertion.encode("utf-8")
+                ).hexdigest(),
+            }
+        )
+        with self.kernel.semantic_command(fingerprint):
+            state = self.kernel.load()
+            if command in state.processed_commands:
+                replay = self.kernel.commit(
+                    command_id=command,
+                    expected_revision=expected_revision,
+                    event_type="content.review-batch-withdrawn",
+                    artifact_updates={},
+                    command_fingerprint=fingerprint,
+                )
+                return self._replay_batch_withdrawal(command, replay)
+            self._require_expected_revision(expected_revision, state.revision)
+            current = self._withdrawal_context_from_state(
+                state=state,
+                source_version=source,
+                review_batch_id=batch_id,
+            )
+            if current["challenge_revision"] != state.revision:
+                raise RevisionConflictError(
+                    state.revision, current["challenge_revision"]
+                )
+            scoped, consumptions = self.confirmations.confirmation_payload(
+                current=current,
+                source_version=source,
+                challenge_id=challenge_id,
+                challenge_revision=challenge_revision,
+                host_confirmation_assertion=assertion,
+            )
+            identity = str(
+                scoped.get("user_action_ref")
+                or scoped.get("user_message_ref")
+                or ""
+            )
+            withdrawn_at = str(scoped["confirmed_at"])
+            new_batch_id = str(uuid.uuid4())
+            old_decisions = [
+                (
+                    reference,
+                    self._resolve_decision(reference),
+                )
+                for reference in current["ordered_decision_refs"]
+            ]
+            cloned_decisions: list[dict[str, Any]] = []
+            cloned_rows: list[dict[str, Any]] = []
+            for old_ref, old_decision in old_decisions:
+                clone = validate_page_decision(
+                    {
+                        **old_decision,
+                        "page_decision_id": str(uuid.uuid4()),
+                        "review_batch_id": new_batch_id,
+                        "saved_at": withdrawn_at,
+                        "supersedes_decision_ref": old_ref,
+                    }
+                )
+                clone_ref = str(
+                    self.kernel.artifacts.reference_for(
+                        PAGE_DECISION_KIND, clone
+                    )
+                )
+                cloned_decisions.append(clone)
+                cloned_rows.append(
+                    {
+                        "slide_id": clone["slide_id"],
+                        "slide_order": clone["slide_order"],
+                        "decision_ref": clone_ref,
+                    }
+                )
+            new_set = validate_page_decision_set(
+                {
+                    "decision_set_id": str(uuid.uuid4()),
+                    "review_batch_id": new_batch_id,
+                    "project_id": state.project_id,
+                    "review_type": "content",
+                    "source_version": source,
+                    "expected_slide_count": current["expected_slide_count"],
+                    "status": "draft",
+                    "decision_refs": cloned_rows,
+                    "updated_at": withdrawn_at,
+                }
+            )
+            new_set_ref = str(
+                self.kernel.artifacts.reference_for(
+                    PAGE_DECISION_SET_KIND, new_set
+                )
+            )
+            submitted_batch_ref = str(current["submitted_batch_ref"])
+            submitted_batch = copy.deepcopy(current["submitted_batch"])
+            superseded_batch = validate_content_review_batch(
+                {
+                    **submitted_batch,
+                    "status": "superseded",
+                    "supersedes_ref": submitted_batch_ref,
+                },
+                authoritative_slides=current["authoritative_slides"],
+                decisions_by_ref={
+                    reference: decision
+                    for reference, decision in old_decisions
+                },
+                prior_submitted=submitted_batch,
+            )
+            superseded_batch_ref = str(
+                self.kernel.artifacts.reference_for(
+                    REVIEW_BATCH_KIND, superseded_batch
+                )
+            )
+            cloned_by_ref = {
+                row["decision_ref"]: decision
+                for row, decision in zip(cloned_rows, cloned_decisions)
+            }
+            draft_batch = validate_content_review_batch(
+                {
+                    "review_batch_id": new_batch_id,
+                    "project_id": state.project_id,
+                    "review_type": "content",
+                    "source_version": source,
+                    "decision_set_ref": new_set_ref,
+                    "page_snapshot_refs": list(
+                        current["page_snapshot_refs"]
+                    ),
+                    "decision_refs": [
+                        row["decision_ref"] for row in cloned_rows
+                    ],
+                    "expected_slide_count": current[
+                        "expected_slide_count"
+                    ],
+                    "counts": copy.deepcopy(current["counts"]),
+                    "status": "draft",
+                    "submitted_at": "",
+                    "submitted_by": "",
+                    "supersedes_ref": "",
+                    "scope_kind": "",
+                    "scope_id": "",
+                    "evidence_refs": [],
+                    "challenge_id": "",
+                    "challenge_revision": 0,
+                    "user_action_ref": "",
+                    "user_message_ref": "",
+                    "confirmation_identity_type": "",
+                    "host_assertion_sha256": "",
+                    "confirmed_at": "",
+                },
+                authoritative_slides=current["authoritative_slides"],
+                decisions_by_ref=cloned_by_ref,
+            )
+            withdrawal = validate_content_review_batch_withdrawal(
+                {
+                    "withdrawal_id": str(uuid.uuid4()),
+                    "project_id": state.project_id,
+                    "review_batch_id": batch_id,
+                    "source_version": source,
+                    "submitted_batch_ref": submitted_batch_ref,
+                    "superseded_batch_ref": superseded_batch_ref,
+                    "replacement_review_batch_id": new_batch_id,
+                    "reason": normalized_reason,
+                    "withdrawn_at": withdrawn_at,
+                    "withdrawn_by": identity,
+                    **scoped,
+                }
+            )
+            before_heads = dict(state.artifact_heads)
+            try:
+                committed = self.kernel.commit(
+                    command_id=command,
+                    expected_revision=expected_revision,
+                    event_type="content.review-batch-withdrawn",
+                    artifact_updates={
+                        REVIEW_BATCH_WITHDRAWAL_HEAD: (
+                            REVIEW_BATCH_WITHDRAWAL_KIND,
+                            withdrawal,
+                        ),
+                        REVIEW_BATCH_HEAD: (REVIEW_BATCH_KIND, draft_batch),
+                        PAGE_DECISION_HEAD: (
+                            PAGE_DECISION_SET_KIND,
+                            new_set,
+                        ),
+                    },
+                    detached_artifacts=(
+                        *tuple(
+                            (PAGE_DECISION_KIND, decision)
+                            for decision in cloned_decisions
+                        ),
+                        (REVIEW_BATCH_KIND, superseded_batch),
+                    ),
+                    confirmation_consumptions=consumptions,
+                    command_fingerprint=fingerprint,
+                )
+            except ConfirmationTransactionError as error:
+                raise ContentWorkflowError(
+                    "CONTENT_REVIEW_CONFLICT",
+                    "The trusted batch-withdrawal transaction was rejected",
+                    {
+                        "scope_kind": REVIEW_BATCH_WITHDRAWAL_SCOPE,
+                        "scope_id": batch_id,
+                        "kernel_error_code": error.code,
+                        "revision": self.kernel.load().revision,
+                    },
+                ) from None
+            changed = {
+                slot
+                for slot in set(before_heads) | set(committed.artifact_heads)
+                if before_heads.get(slot) != committed.artifact_heads.get(slot)
+            }
+            expected_changed = {
+                REVIEW_BATCH_WITHDRAWAL_HEAD,
+                REVIEW_BATCH_HEAD,
+                PAGE_DECISION_HEAD,
+                CONFIRMATION_LEDGER_SLOT,
+            }
+            if changed != expected_changed:
+                raise RuntimeError(
+                    "Review-batch withdrawal changed unexpected heads: "
+                    + ", ".join(sorted(changed))
+                )
+            self._assert_protected_heads(before_heads, committed)
+            return new_batch_id, committed
+
+    def _submission_context_from_state(
+        self,
+        *,
+        state: KernelState,
+        source_version: str,
+        review_batch_id: str,
+    ) -> dict[str, Any]:
+        _blueprint, slides = self._current_blueprint(state, source_version)
+        batch_ref, batch = self._current_review_batch(
+            state=state,
+            source_version=source_version,
+            review_batch_id=review_batch_id,
+            slides=slides,
+            allow_missing=True,
+        )
+        if batch is not None and batch["status"] != "draft":
+            raise ContentWorkflowError(
+                "CONTENT_REVIEW_BATCH_FROZEN",
+                "CONTENT_REVIEW_BATCH_FROZEN: the current review batch is frozen",
+                {
+                    "batch_ref": batch_ref,
+                    "status": batch["status"],
+                    "source_version": source_version,
+                    "review_batch_id": review_batch_id,
+                },
+            )
+        decision_set_ref, decision_set = self._current_decision_set(
+            state=state,
+            source_version=source_version,
+            review_batch_id=review_batch_id,
+            slides=slides,
+        )
+        if decision_set is None:
+            self._incomplete(slides, {})
+        decisions_by_ref = {
+            row["decision_ref"]: self._resolve_decision(row["decision_ref"])
+            for row in decision_set["decision_refs"]
+        }
+        progress = self._progress(decision_set, slides)
+        if progress["remaining"]:
+            raise ContentWorkflowError(
+                "CONTENT_REVIEW_BATCH_INCOMPLETE",
+                "CONTENT_REVIEW_BATCH_INCOMPLETE: all pages need a completed decision",
+                {**progress, "decision_set_ref": decision_set_ref},
+            )
+        ordered_decision_refs = [
+            row["decision_ref"] for row in decision_set["decision_refs"]
+        ]
+        if len(ordered_decision_refs) != len(slides):
+            self._incomplete(
+                slides,
+                {decision["slide_id"]: decision for decision in decisions_by_ref.values()},
+                decision_set_ref=decision_set_ref,
+            )
+        page_snapshot_refs = [
+            decisions_by_ref[reference]["visible_copy_snapshot_ref"]
+            for reference in ordered_decision_refs
+        ]
+        base = self.confirmations.context(
+            scope_kind=REVIEW_BATCH_SUBMISSION_SCOPE,
+            scope_id=f"{review_batch_id}:{source_version}",
+            source_version=source_version,
+            evidence_refs=[
+                source_version,
+                decision_set_ref,
+                *ordered_decision_refs,
+            ],
+        )
+        if base["challenge_revision"] != state.revision:
+            raise RevisionConflictError(state.revision, base["challenge_revision"])
+        return {
+            **base,
+            "review_batch_id": review_batch_id,
+            "decision_set_ref": decision_set_ref,
+            "ordered_decision_refs": ordered_decision_refs,
+            "page_snapshot_refs": page_snapshot_refs,
+            "expected_slide_count": len(slides),
+            "counts": copy.deepcopy(progress["counts"]),
+            "current_batch_ref": batch_ref,
+            "authoritative_slides": copy.deepcopy(slides),
+            "decisions_by_ref": copy.deepcopy(decisions_by_ref),
+        }
+
+    @staticmethod
+    def _public_submission_context(internal: dict[str, Any]) -> dict[str, Any]:
+        fields = (
+            "project_id",
+            "project_root",
+            "scope_kind",
+            "scope_id",
+            "source_version",
+            "evidence_refs",
+            "challenge_id",
+            "challenge_revision",
+            "review_batch_id",
+            "decision_set_ref",
+            "ordered_decision_refs",
+            "page_snapshot_refs",
+            "expected_slide_count",
+            "counts",
+            "current_batch_ref",
+        )
+        return {field: copy.deepcopy(internal[field]) for field in fields}
+
+    @staticmethod
+    def _public_withdrawal_context(internal: dict[str, Any]) -> dict[str, Any]:
+        fields = (
+            "project_id",
+            "project_root",
+            "scope_kind",
+            "scope_id",
+            "source_version",
+            "evidence_refs",
+            "challenge_id",
+            "challenge_revision",
+            "review_batch_id",
+            "submitted_batch_ref",
+            "decision_set_ref",
+            "ordered_decision_refs",
+            "page_snapshot_refs",
+            "expected_slide_count",
+            "counts",
+        )
+        return {field: copy.deepcopy(internal[field]) for field in fields}
+
+    def _incomplete(
+        self,
+        slides: list[dict[str, Any]],
+        decisions_by_slide: dict[str, dict[str, Any]],
+        *,
+        decision_set_ref: str = "",
+    ) -> None:
+        completed = sum(
+            1
+            for slide in slides
+            if decisions_by_slide.get(slide["slide_id"], {}).get("completed")
+        )
+        next_incomplete = next(
+            (
+                slide["slide_id"]
+                for slide in slides
+                if not decisions_by_slide.get(slide["slide_id"], {}).get(
+                    "completed"
+                )
+            ),
+            "",
+        )
+        raise ContentWorkflowError(
+            "CONTENT_REVIEW_BATCH_INCOMPLETE",
+            "CONTENT_REVIEW_BATCH_INCOMPLETE: all pages need a completed decision",
+            {
+                "total": len(slides),
+                "completed": completed,
+                "remaining": len(slides) - completed,
+                "next_incomplete_slide_id": next_incomplete,
+                "decision_set_ref": decision_set_ref,
+            },
+        )
 
     def _current_blueprint(
         self,
@@ -936,8 +1615,9 @@ class ContentReviewService:
                 raise ArtifactReferenceError(
                     "The page-decision head has the wrong kind"
                 )
-            payload = validate_page_decision_set(
-                self.kernel.artifacts.resolve(reference)["payload"]
+            raw_payload = self.kernel.artifacts.resolve(reference)["payload"]
+            payload = validate_persisted_page_decision_set(
+                raw_payload
             )
         except (
             ArtifactReferenceError,
@@ -986,6 +1666,219 @@ class ContentReviewService:
             project_id=state.project_id,
         )
         return decision_set_ref, payload
+
+    def _current_review_batch(
+        self,
+        *,
+        state: KernelState,
+        source_version: str,
+        review_batch_id: str,
+        slides: list[dict[str, Any]],
+        allow_missing: bool,
+    ) -> tuple[str, dict[str, Any] | None]:
+        batch_ref = state.artifact_heads.get(REVIEW_BATCH_HEAD, "")
+        if not batch_ref:
+            if allow_missing:
+                return "", None
+            self._conflict("A current content review batch is required", {})
+        batch = self._resolve_review_batch_ref(
+            batch_ref,
+            state=state,
+            slides=(
+                slides
+                if self._batch_source_hint(batch_ref) == source_version
+                else None
+            ),
+        )
+        if batch["source_version"] != source_version:
+            self._resolve_blueprint(
+                batch["source_version"], state=state, require_current=False
+            )
+            if allow_missing:
+                return batch_ref, None
+            self._conflict(
+                "The current review batch belongs to another source",
+                {
+                    "batch_ref": batch_ref,
+                    "expected_source_version": source_version,
+                    "actual_source_version": batch["source_version"],
+                },
+            )
+        if batch["review_batch_id"] != review_batch_id:
+            self._conflict(
+                "The current source already has a different review batch",
+                {
+                    "batch_ref": batch_ref,
+                    "expected_review_batch_id": batch["review_batch_id"],
+                    "actual_review_batch_id": review_batch_id,
+                },
+            )
+        return batch_ref, batch
+
+    def _batch_source_hint(self, batch_ref: str) -> str:
+        try:
+            reference = ArtifactReference.parse(batch_ref)
+            if reference.kind != REVIEW_BATCH_KIND:
+                raise ArtifactReferenceError("Review-batch head kind is invalid")
+            payload = self.kernel.artifacts.resolve(reference)["payload"]
+            if not isinstance(payload, dict):
+                raise TypeError("Review-batch payload is not an object")
+            source = payload.get("source_version")
+            if not isinstance(source, str) or not source:
+                raise ValueError("Review-batch source is missing")
+            return source
+        except (
+            ArtifactReferenceError,
+            KeyError,
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
+            self._conflict(
+                "The current review batch cannot be resolved safely",
+                {"batch_ref": batch_ref, "reason": str(error)},
+            )
+
+    def _resolve_review_batch_ref(
+        self,
+        batch_ref: str,
+        *,
+        state: KernelState,
+        slides: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
+        try:
+            reference = ArtifactReference.parse(batch_ref)
+            if reference.kind != REVIEW_BATCH_KIND:
+                raise ArtifactReferenceError("Review-batch kind is invalid")
+            raw = self.kernel.artifacts.resolve(reference)["payload"]
+            structural = validate_content_review_batch(raw)
+            source_slides = slides
+            if source_slides is None:
+                _blueprint, source_slides = self._resolve_blueprint(
+                    structural["source_version"],
+                    state=state,
+                    require_current=False,
+                )
+            decisions = {
+                decision_ref: self._resolve_decision(decision_ref)
+                for decision_ref in structural["decision_refs"]
+            }
+            batch = validate_content_review_batch(
+                raw,
+                authoritative_slides=source_slides,
+                decisions_by_ref=decisions,
+            )
+            if batch["project_id"] != state.project_id:
+                raise ContractValidationError(
+                    "Review batch belongs to another project"
+                )
+            decision_set = self._resolve_decision_set_reference(
+                batch["decision_set_ref"]
+            )
+            if (
+                decision_set["project_id"] != state.project_id
+                or decision_set["review_batch_id"] != batch["review_batch_id"]
+                or decision_set["source_version"] != batch["source_version"]
+                or decision_set["expected_slide_count"]
+                != batch["expected_slide_count"]
+                or [
+                    row["decision_ref"]
+                    for row in decision_set["decision_refs"]
+                ]
+                != batch["decision_refs"]
+            ):
+                raise ContractValidationError(
+                    "Review batch differs from its decision-set source"
+                )
+            if batch["status"] not in {"draft", "ready"}:
+                self._validate_review_batch_confirmation(
+                    batch_ref=batch_ref,
+                    batch=batch,
+                    state=state,
+                )
+        except (
+            ArtifactReferenceError,
+            ConfirmationTransactionError,
+            ContractValidationError,
+            ContentWorkflowError,
+            KeyError,
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
+            self._conflict(
+                "The current review batch cannot be resolved safely",
+                {"batch_ref": batch_ref, "reason": str(error)},
+            )
+        return batch
+
+    def _resolve_decision_set_reference(self, reference_value: str) -> dict[str, Any]:
+        reference = ArtifactReference.parse(reference_value)
+        if reference.kind != PAGE_DECISION_SET_KIND:
+            raise ArtifactReferenceError("Decision-set reference kind is invalid")
+        return validate_persisted_page_decision_set(
+            self.kernel.artifacts.resolve(reference)["payload"]
+        )
+
+    def _validate_review_batch_confirmation(
+        self,
+        *,
+        batch_ref: str,
+        batch: dict[str, Any],
+        state: KernelState,
+    ) -> None:
+        challenge_body = {
+            "project_id": state.project_id,
+            "project_root": str(self.kernel.project_root),
+            "scope_kind": batch["scope_kind"],
+            "scope_id": batch["scope_id"],
+            "source_version": batch["source_version"],
+            "evidence_refs": batch["evidence_refs"],
+            "challenge_revision": batch["challenge_revision"],
+        }
+        if self.confirmations.challenge_id(challenge_body) != batch["challenge_id"]:
+            raise ContractValidationError(
+                "Review-batch confirmation challenge is inconsistent"
+            )
+        identity = batch["user_action_ref"] or batch["user_message_ref"]
+        expected_owner = f"{batch['scope_kind']}:{batch['scope_id']}"
+        bound_ref = self.kernel.confirmation_artifact_binding(identity)
+        if batch["status"] == "submitted":
+            expected_binding = batch_ref
+        else:
+            expected_binding = self._submitted_ancestor_ref(batch)
+        if (
+            self.kernel.confirmation_owner(identity) != expected_owner
+            or bound_ref != expected_binding
+        ):
+            raise ContractValidationError(
+                "Review-batch confirmation ledger binding is invalid"
+            )
+
+    def _submitted_ancestor_ref(self, batch: dict[str, Any]) -> str:
+        reference = batch.get("supersedes_ref", "")
+        seen: set[str] = set()
+        while reference:
+            if reference in seen:
+                raise ContractValidationError("Review-batch lifecycle is cyclic")
+            seen.add(reference)
+            parsed = ArtifactReference.parse(reference)
+            if parsed.kind != REVIEW_BATCH_KIND:
+                raise ArtifactReferenceError(
+                    "Review-batch lifecycle reference kind is invalid"
+                )
+            raw = self.kernel.artifacts.resolve(parsed)["payload"]
+            ancestor = validate_content_review_batch(raw)
+            validate_content_review_batch(
+                batch,
+                prior_submitted=ancestor,
+            )
+            if ancestor["status"] == "submitted":
+                return reference
+            reference = ancestor["supersedes_ref"]
+        raise ContractValidationError(
+            "Review-batch lifecycle lacks a submitted ancestor"
+        )
 
     def _validate_decision_set_lineage(
         self,
@@ -1233,6 +2126,145 @@ class ContentReviewService:
             state,
         )
 
+    def _replay_batch_submission(
+        self,
+        command_id: str,
+        state: KernelState,
+    ) -> tuple[str, str, KernelState]:
+        revision = state.processed_commands[command_id]
+        try:
+            event = json.loads(
+                (
+                    self.kernel.events_root / f"r{revision:08d}.json"
+                ).read_text(encoding="utf-8")
+            )
+            if event.get("event_type") != "content.review-batch-submitted":
+                raise ValueError("Processed command is not a batch submission")
+            batch_ref = event["artifact_heads"][REVIEW_BATCH_HEAD]
+            batch = self._resolve_review_batch_ref(
+                batch_ref,
+                state=state,
+                slides=None,
+            )
+            if batch["status"] != "submitted":
+                raise ValueError("Processed submission batch is not submitted")
+        except (
+            ArtifactReferenceError,
+            ContractValidationError,
+            ContentWorkflowError,
+            KeyError,
+            OSError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as error:
+            raise ContractValidationError(
+                "Processed review-batch submission receipt is unavailable"
+            ) from error
+        return batch_ref, CONTENT_REVIEW_BATCH_FOLLOW_UP, state
+
+    def _replay_batch_withdrawal(
+        self,
+        command_id: str,
+        state: KernelState,
+    ) -> tuple[str, KernelState]:
+        revision = state.processed_commands[command_id]
+        try:
+            event = json.loads(
+                (
+                    self.kernel.events_root / f"r{revision:08d}.json"
+                ).read_text(encoding="utf-8")
+            )
+            if event.get("event_type") != "content.review-batch-withdrawn":
+                raise ValueError("Processed command is not a batch withdrawal")
+            withdrawal_ref = event["artifact_heads"][
+                REVIEW_BATCH_WITHDRAWAL_HEAD
+            ]
+            reference = ArtifactReference.parse(withdrawal_ref)
+            if reference.kind != REVIEW_BATCH_WITHDRAWAL_KIND:
+                raise ArtifactReferenceError(
+                    "Processed withdrawal kind is invalid"
+                )
+            withdrawal = validate_content_review_batch_withdrawal(
+                self.kernel.artifacts.resolve(reference)["payload"]
+            )
+            self._validate_withdrawal_confirmation(
+                withdrawal_ref=withdrawal_ref,
+                withdrawal=withdrawal,
+                state=state,
+            )
+            replacement_batch_id = withdrawal[
+                "replacement_review_batch_id"
+            ]
+            replacement_ref = event["artifact_heads"][REVIEW_BATCH_HEAD]
+            replacement = self._resolve_review_batch_ref(
+                replacement_ref,
+                state=state,
+                slides=None,
+            )
+            if (
+                replacement["status"] != "draft"
+                or replacement["review_batch_id"] != replacement_batch_id
+            ):
+                raise ValueError(
+                    "Processed withdrawal replacement batch is invalid"
+                )
+        except (
+            ArtifactReferenceError,
+            ContractValidationError,
+            ContentWorkflowError,
+            KeyError,
+            OSError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as error:
+            raise ContractValidationError(
+                "Processed review-batch withdrawal receipt is unavailable"
+            ) from error
+        return replacement_batch_id, state
+
+    def _validate_withdrawal_confirmation(
+        self,
+        *,
+        withdrawal_ref: str,
+        withdrawal: dict[str, Any],
+        state: KernelState,
+    ) -> None:
+        challenge_body = {
+            "project_id": state.project_id,
+            "project_root": str(self.kernel.project_root),
+            "scope_kind": withdrawal["scope_kind"],
+            "scope_id": withdrawal["scope_id"],
+            "source_version": withdrawal["source_version"],
+            "evidence_refs": withdrawal["evidence_refs"],
+            "challenge_revision": withdrawal["challenge_revision"],
+        }
+        identity = (
+            withdrawal["user_action_ref"]
+            or withdrawal["user_message_ref"]
+        )
+        expected_owner = (
+            f"{withdrawal['scope_kind']}:{withdrawal['scope_id']}"
+        )
+        try:
+            owner = self.kernel.confirmation_owner(identity)
+            binding = self.kernel.confirmation_artifact_binding(identity)
+        except ConfirmationTransactionError as error:
+            raise ContractValidationError(
+                "Withdrawal confirmation ledger is corrupt"
+            ) from error
+        if (
+            withdrawal["project_id"] != state.project_id
+            or self.confirmations.challenge_id(challenge_body)
+            != withdrawal["challenge_id"]
+            or owner != expected_owner
+            or binding != withdrawal_ref
+        ):
+            raise ContractValidationError(
+                "Withdrawal confirmation binding is invalid"
+            )
+
     @staticmethod
     def _assert_only_decision_head_changed(
         before_heads: dict[str, str],
@@ -1275,6 +2307,19 @@ class ContentReviewService:
         if not isinstance(value, str) or not value.strip():
             raise ContractValidationError(f"{field} must be a non-empty string")
         return value.strip()
+
+    @staticmethod
+    def _require_expected_revision(expected: object, actual: int) -> None:
+        if (
+            isinstance(expected, bool)
+            or not isinstance(expected, int)
+            or expected < 0
+        ):
+            raise ContractValidationError(
+                "expected_revision must be a non-negative integer"
+            )
+        if expected != actual:
+            raise RevisionConflictError(expected, actual)
 
     @staticmethod
     def _conflict(message: str, details: dict[str, Any]) -> None:
