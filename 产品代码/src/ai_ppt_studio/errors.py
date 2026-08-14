@@ -45,6 +45,26 @@ class ContractValidationError(AiPptError):
     """Raised when a schema 3.0 domain contract is invalid."""
 
 
+class TransactionRollbackError(AiPptError):
+    """Raised when a failed transaction cannot be rolled back completely."""
+
+    def __init__(
+        self,
+        *,
+        rollback_errors: tuple[dict[str, str], ...],
+        state_restored: bool,
+        preserved_exposed_transaction: bool,
+    ) -> None:
+        self.code = "TRANSACTION_ROLLBACK_FAILED"
+        self.rollback_errors = rollback_errors
+        self.state_restored = state_restored
+        self.preserved_exposed_transaction = preserved_exposed_transaction
+        super().__init__(
+            "Transaction rollback was incomplete; inspect rollback_errors "
+            "and the chained original failure"
+        )
+
+
 class MissionNotConfirmedError(AiPptError):
     """Raised before formal content work without a current user confirmation."""
 

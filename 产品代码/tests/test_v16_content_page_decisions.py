@@ -1279,6 +1279,91 @@ class ContentReviewServiceTests(unittest.TestCase):
         self.assertEqual(object_files(self.content), objects)
         self.assertEqual(event_files(self.content), events)
 
+    def test_persisted_page_decision_requires_every_exact_canonical_field(self) -> None:
+        corruptions = {
+            "missing-comment": lambda decision: decision.pop("comment"),
+            "missing-completed": lambda decision: decision.pop("completed"),
+            "missing-supersedes": lambda decision: decision.pop(
+                "supersedes_decision_ref"
+            ),
+            "noncanonical-approved-comment": lambda decision: decision.update(
+                {"comment": "must be normalized away"}
+            ),
+        }
+        for label, corrupt in corruptions.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp:
+                content = ContentService.initialize(
+                    Path(temp), project_id=f"persisted-decision-{label}"
+                )
+                source, _blueprint = accept_blueprint(content, slide_count=2)
+                review = ContentReviewService(content.kernel)
+                page, _progress, _state = review.save_page_decision(
+                    command_id=f"authentic-{label}",
+                    expected_revision=content.kernel.load().revision,
+                    source_version=source,
+                    review_batch_id=f"batch-{label}",
+                    slide_id="s1",
+                    decision="approved",
+                    comment="",
+                )
+                raw_decision = copy.deepcopy(
+                    resolve_payload(content, page["page_decision_ref"])
+                )
+                corrupt(raw_decision)
+                corrupt_ref = str(
+                    content.kernel.artifacts.put(
+                        "content-page-decision", raw_decision
+                    )
+                )
+                set_ref = content.kernel.load().artifact_heads[
+                    "content/page-decisions"
+                ]
+                decision_set = resolve_payload(content, set_ref)
+                decision_set["decision_refs"][0]["decision_ref"] = corrupt_ref
+                content.kernel.commit(
+                    command_id=f"install-corrupt-{label}",
+                    expected_revision=content.kernel.load().revision,
+                    event_type="test.install-corrupt-page-decision",
+                    artifact_updates={
+                        "content/page-decisions": (
+                            "content-page-decision-set",
+                            decision_set,
+                        )
+                    },
+                )
+                before = content.kernel.load()
+                before_state = content.kernel.state_path.read_bytes()
+                before_objects = object_files(content)
+                before_events = {
+                    path.name: path.read_bytes()
+                    for path in content.kernel.events_root.glob("r*.json")
+                }
+                with self.assertRaises(ContentWorkflowError) as caught:
+                    review.save_page_decision(
+                        command_id=f"reject-corrupt-{label}",
+                        expected_revision=before.revision,
+                        source_version=source,
+                        review_batch_id=f"batch-{label}",
+                        slide_id="s2",
+                        decision="approved",
+                        comment="",
+                    )
+                self.assertEqual(
+                    caught.exception.code, "CONTENT_REVIEW_CONFLICT"
+                )
+                self.assertEqual(content.kernel.load(), before)
+                self.assertEqual(
+                    content.kernel.state_path.read_bytes(), before_state
+                )
+                self.assertEqual(object_files(content), before_objects)
+                self.assertEqual(
+                    {
+                        path.name: path.read_bytes()
+                        for path in content.kernel.events_root.glob("r*.json")
+                    },
+                    before_events,
+                )
+
     def test_command_replay_is_exact_and_semantic_collision_fails_closed(self) -> None:
         revision = self.content.kernel.load().revision
         first = self.save(

@@ -16,6 +16,7 @@ from ai_ppt_studio.domains.content.review_contracts import (
     validate_content_blueprint,
     validate_page_decision,
     validate_page_decision_set,
+    validate_persisted_page_decision,
     validate_visible_copy_snapshot,
 )
 from ai_ppt_studio.domains.content.contracts import (
@@ -1041,7 +1042,7 @@ class ContentReviewService:
             reference = ArtifactReference.parse(reference_value)
             if reference.kind != PAGE_DECISION_KIND:
                 raise ArtifactReferenceError("PageDecision kind is invalid")
-            return validate_page_decision(
+            return validate_persisted_page_decision(
                 self.kernel.artifacts.resolve(reference)["payload"]
             )
         except (

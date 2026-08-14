@@ -324,6 +324,23 @@ def validate_page_decision(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def validate_persisted_page_decision(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Require every persisted PageDecision field in canonical form."""
+
+    if not isinstance(payload, dict) or set(payload) != _PAGE_DECISION_FIELDS:
+        raise ContractValidationError(
+            "Persisted PageDecision must contain every exact formal field"
+        )
+    normalized = validate_page_decision(payload)
+    if normalized != payload:
+        raise ContractValidationError(
+            "Persisted PageDecision payload is not canonical"
+        )
+    return normalized
+
+
 def validate_page_decision_set(payload: dict[str, Any]) -> dict[str, Any]:
     """Validate the source-bound aggregate of current page decisions."""
 
