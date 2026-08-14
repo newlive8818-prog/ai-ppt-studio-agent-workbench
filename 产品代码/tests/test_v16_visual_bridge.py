@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.application.v16_bridge import dispatch_v16
+from ai_ppt_studio.errors import ContractValidationError
 from ai_ppt_studio.kernel.references import ArtifactReference
 from tests.v16_visual_fixtures import (
     confirmed_g0,
@@ -55,6 +56,35 @@ class V16VisualBridgeTests(unittest.TestCase):
             )["payload"]
             self.assertEqual(task["status"], "completed")
             self.assertEqual(task["result_refs"], [committed["artifact_ref"]])
+            events = tuple(content.kernel.events_root.iterdir())
+            retried = dispatch_v16(
+                {
+                    "operation": "commit-artifact",
+                    "project_root": str(project),
+                    "expected_revision": revision + 1,
+                    "command_id": "visual-task-result",
+                    "kind": "visual-brief",
+                    "task_id": task_id,
+                    "payload": valid_visual_brief(blueprint_ref),
+                }
+            )["result"]
+            self.assertEqual(retried, committed)
+            self.assertEqual(tuple(content.kernel.events_root.iterdir()), events)
+            changed = valid_visual_brief(blueprint_ref)
+            changed["design_proposition"] = "同一命令不得改写视觉命题"
+            with self.assertRaises(ContractValidationError):
+                dispatch_v16(
+                    {
+                        "operation": "commit-artifact",
+                        "project_root": str(project),
+                        "expected_revision": revision + 1,
+                        "command_id": "visual-task-result",
+                        "kind": "visual-brief",
+                        "task_id": task_id,
+                        "payload": changed,
+                    }
+                )
+            self.assertEqual(tuple(content.kernel.events_root.iterdir()), events)
 
     def test_existing_commit_and_internal_gate_operations_route_to_visual_service(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

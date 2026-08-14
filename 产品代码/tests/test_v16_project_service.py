@@ -24,6 +24,10 @@ from ai_ppt_studio.application.framework_discussion_service import (
     FrameworkDiscussionService,
 )
 from ai_ppt_studio.application.project_service import ProjectCommandService
+from ai_ppt_studio.application.content_action_policy import (
+    CONTENT_ACTION_CONTRACTS,
+    CONTENT_RESULT_CONTRACTS,
+)
 from ai_ppt_studio.application.scoped_confirmation import (
     HOST_CONFIRMATION_SECRET_ENV,
 )
@@ -1140,6 +1144,61 @@ class V16ProjectServiceTests(unittest.TestCase):
                 self.assertEqual(kernel.load(), before)
                 self.assertEqual(tuple(kernel.events_root.iterdir()), events)
                 self.assertEqual(tuple(kernel.artifacts.objects_root.rglob("*")), objects)
+
+    def test_content_actions_without_direct_result_contract_fail_closed(self) -> None:
+        unsupported = set(CONTENT_ACTION_CONTRACTS) - set(CONTENT_RESULT_CONTRACTS)
+        self.assertEqual(unsupported, {
+            "build-content-framework",
+            "expand-full-content-blueprint",
+            "repair-content",
+            "aggregate-content-reviews",
+            "propose-content-batch-revision-plan",
+            "apply-content-batch-revision",
+        })
+        with tempfile.TemporaryDirectory() as temp:
+            config, _profile = runtime_config(Path(temp))
+            kernel = ProjectService(config).create_project("framework direct result")
+            content = ContentService(kernel)
+            mission_ref = content.save_mission_draft("framework-result-mission", 1, {
+                "topic": "经营一体化", "primary_audience": "决策者",
+                "desired_judgment_or_action": "确认目录框架",
+            })
+            confirmation_ref = content.confirm_mission(
+                "framework-result-confirm", 2,
+                mission_draft_ref=mission_ref,
+                material_mode="no-materials-confirmed",
+                material_inventory_ref="",
+                user_action_ref="test-user-action://framework-result",
+                user_message_ref="",
+            )
+            requested = dispatch_v16({
+                "operation": "request-agent-action",
+                "project_root": str(kernel.project_root),
+                "expected_revision": 3,
+                "command_id": "framework-result-task",
+                "action_type": "build-content-framework",
+                "target_refs": [mission_ref, confirmation_ref],
+                "instructions": "形成章节框架。",
+            })["result"]
+            before = kernel.load()
+            events = tuple(kernel.events_root.iterdir())
+            with self.assertRaises(ContentWorkflowError) as caught:
+                dispatch_v16({
+                    "operation": "commit-artifact",
+                    "project_root": str(kernel.project_root),
+                    "expected_revision": before.revision,
+                    "command_id": "framework-result-mission-bypass",
+                    "kind": "mission",
+                    "task_id": requested["task"]["task_id"],
+                    "payload": {
+                        "topic": "越权改写",
+                        "primary_audience": "越权",
+                        "desired_judgment_or_action": "越权",
+                    },
+                })
+            self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+            self.assertEqual(kernel.load(), before)
+            self.assertEqual(tuple(kernel.events_root.iterdir()), events)
 
     def test_atomic_content_result_rejects_reused_command_identity_zero_write(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

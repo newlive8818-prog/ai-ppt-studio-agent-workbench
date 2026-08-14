@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import sys
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.errors import (
+    ContractValidationError,
     GateMutationError,
     ProjectIdentityError,
     RevisionConflictError,
@@ -64,6 +67,61 @@ class ProjectKernelTests(unittest.TestCase):
                     event_type="mission.committed",
                     artifact_updates={},
                 )
+
+    def test_fingerprinted_command_replay_rejects_different_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            kernel = ProjectKernel.initialize(Path(temp), project_id="p1")
+            first = kernel.commit(
+                command_id="fingerprinted",
+                expected_revision=0,
+                event_type="agent.content-result-committed",
+                artifact_updates={"result": ("result", {"value": 1})},
+                command_fingerprint="a" * 64,
+            )
+            repeated = kernel.commit(
+                command_id="fingerprinted",
+                expected_revision=0,
+                event_type="agent.content-result-committed",
+                artifact_updates={"result": ("result", {"value": 1})},
+                command_fingerprint="a" * 64,
+            )
+            self.assertEqual(repeated, first)
+            with self.assertRaises(ContractValidationError):
+                kernel.commit(
+                    command_id="fingerprinted",
+                    expected_revision=0,
+                    event_type="agent.content-result-committed",
+                    artifact_updates={"result": ("result", {"value": 2})},
+                    command_fingerprint="b" * 64,
+                )
+            self.assertEqual(kernel.load(), first)
+
+    def test_concurrent_fingerprinted_command_collision_has_one_winner(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            kernel = ProjectKernel.initialize(Path(temp), project_id="p1")
+            barrier = threading.Barrier(2)
+
+            def commit(value: int) -> tuple[str, int]:
+                barrier.wait()
+                try:
+                    state = kernel.commit(
+                        command_id="concurrent-result",
+                        expected_revision=0,
+                        event_type="agent.content-result-committed",
+                        artifact_updates={"result": ("result", {"value": value})},
+                        command_fingerprint=str(value) * 64,
+                    )
+                    return "success", state.revision
+                except ContractValidationError:
+                    return "conflict", kernel.load().revision
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                outcomes = list(executor.map(commit, (1, 2)))
+            self.assertEqual(sorted(status for status, _ in outcomes), [
+                "conflict", "success"
+            ])
+            self.assertEqual(kernel.load().revision, 1)
+            self.assertEqual(len(tuple(kernel.events_root.iterdir())), 1)
 
     def test_state_is_visibility_boundary_when_state_write_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

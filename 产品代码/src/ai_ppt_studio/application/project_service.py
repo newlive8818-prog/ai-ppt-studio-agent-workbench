@@ -569,6 +569,57 @@ class ProjectCommandService:
                 {"command_id": command_id, "task_id": task_id, "revision": revision},
             ) from None
 
+    @staticmethod
+    def _result_request_fingerprint(
+        request_kind: str,
+        payload: dict[str, Any],
+        expected_revision: int,
+    ) -> str:
+        return hashlib.sha256(
+            canonical_json({
+                "request_kind": request_kind,
+                "payload": payload,
+                "expected_revision": expected_revision,
+            })
+        ).hexdigest()
+
+    def replay_noncontent_agent_result(
+        self,
+        *,
+        command_id: str,
+        task_id: str,
+        request_kind: str,
+        payload: dict[str, Any],
+        expected_revision: int,
+    ) -> tuple[str, KernelState] | None:
+        """Return an exact generic result replay or reject command collision."""
+
+        state = self.kernel.load()
+        if command_id not in state.processed_commands:
+            return None
+        task = self.require_active_agent_task(task_id)
+        completion = task.get("completion_result")
+        fingerprint = self._result_request_fingerprint(
+            request_kind, payload, expected_revision
+        )
+        try:
+            if (
+                task.get("status") != "completed"
+                or task.get("completion_command_id") != command_id
+                or not isinstance(completion, dict)
+                or completion.get("request_fingerprint") != fingerprint
+            ):
+                raise ValueError("Processed command has different semantics")
+            result_ref = str(completion.get("result_ref") or "")
+            self.kernel.artifacts.resolve(ArtifactReference.parse(result_ref))
+            if task.get("result_refs") != [result_ref]:
+                raise ValueError("Completed task result binding differs")
+            return result_ref, state
+        except (ArtifactReferenceError, TypeError, ValueError):
+            raise ContractValidationError(
+                "Processed Agent result command has different semantics"
+            ) from None
+
     def complete_agent_task(
         self,
         command_id: str,
@@ -576,6 +627,10 @@ class ProjectCommandService:
         *,
         task_id: str,
         result_ref: str,
+        completion_command_id: str = "",
+        request_kind: str = "",
+        request_payload: dict[str, Any] | None = None,
+        result_expected_revision: int | None = None,
     ) -> KernelState:
         """Bind a validated immutable result and complete the active task."""
 
@@ -591,6 +646,18 @@ class ProjectCommandService:
             "result_refs": result_refs,
             "error": None,
         }
+        if completion_command_id:
+            completed["completion_command_id"] = completion_command_id
+            completed["completion_result"] = {
+                "result_ref": result_ref,
+                "request_fingerprint": hashlib.sha256(
+                    canonical_json({
+                        "request_kind": request_kind,
+                        "payload": request_payload or {},
+                        "expected_revision": result_expected_revision,
+                    })
+                ).hexdigest(),
+            }
         return self.kernel.commit(
             command_id=command_id,
             expected_revision=expected_revision,
@@ -617,7 +684,15 @@ class ProjectCommandService:
         )
         from ai_ppt_studio.errors import ContentWorkflowError
 
-        before = self.kernel.load()
+        replay = self.replay_content_agent_result(
+            command_id=command_id,
+            task_id=task_id,
+            request_kind=request_kind,
+            payload=raw_request_payload,
+            expected_revision=expected_revision,
+        )
+        if replay is not None:
+            return replay
         task, _context = self.preflight_content_agent_result(
             task_id=task_id,
             request_kind=request_kind,
@@ -683,25 +758,32 @@ class ProjectCommandService:
                 "artifact_slot": artifact_slot,
                 "artifact_kind": artifact_kind,
                 "result_ref": result_ref,
-                "request_fingerprint": hashlib.sha256(
-                    canonical_json({
-                        "request_kind": request_kind,
-                        "payload": raw_request_payload,
-                        "expected_revision": expected_revision,
-                    })
-                ).hexdigest(),
+                "request_fingerprint": self._result_request_fingerprint(
+                    request_kind, raw_request_payload, expected_revision
+                ),
             },
         }
-        state = self.kernel.commit(
-            command_id=command_id,
-            expected_revision=expected_revision,
-            event_type="agent.content-result-committed",
-            artifact_updates={
-                artifact_slot: (artifact_kind, artifact_payload),
-                "agent/task/active": ("agent-task", completed),
-                f"agent/task/{task_id}": ("agent-task", completed),
-            },
+        request_fingerprint = self._result_request_fingerprint(
+            request_kind, raw_request_payload, expected_revision
         )
+        try:
+            state = self.kernel.commit(
+                command_id=command_id,
+                expected_revision=expected_revision,
+                event_type="agent.content-result-committed",
+                artifact_updates={
+                    artifact_slot: (artifact_kind, artifact_payload),
+                    "agent/task/active": ("agent-task", completed),
+                    f"agent/task/{task_id}": ("agent-task", completed),
+                },
+                command_fingerprint=request_fingerprint,
+            )
+        except ContractValidationError:
+            raise ContentWorkflowError(
+                "CONTENT_REVIEW_CONFLICT",
+                "Processed content result command has different semantics",
+                {"command_id": command_id, "task_id": task_id},
+            ) from None
         return state.artifact_heads[artifact_slot], state
 
     def submit_human_decision(

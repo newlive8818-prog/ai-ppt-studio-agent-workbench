@@ -9,6 +9,7 @@ from typing import Any
 
 from ai_ppt_studio.application.content_service import ContentService
 from ai_ppt_studio.application.content_action_policy import (
+    CONTENT_ACTION_CONTRACTS,
     CONTENT_RESULT_CONTRACTS,
     FORMAL_AGENT_CONTENT_ARTIFACT_TYPES,
 )
@@ -314,27 +315,58 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
         content_task = None
         command_id = _command_id(operation, request)
         if task_id:
-            replay = project_commands.replay_content_agent_result(
-                command_id=command_id,
-                task_id=task_id,
-                request_kind=kind,
-                payload=payload,
-                expected_revision=int(request["expected_revision"]),
-            )
-            if replay is not None:
-                artifact_ref, state = replay
-                return {
-                    "ok": True,
-                    "operation": operation,
-                    "selected_project_root": str(project_root),
-                    "result": {
-                        "artifact_ref": artifact_ref,
-                        "snapshot": _snapshot(state, project_root),
-                    },
-                }
-            active_task = project_commands.require_active_agent_task(task_id)
-            if str(active_task.get("action_type") or "") in CONTENT_RESULT_CONTRACTS:
+            task = project_commands.require_active_agent_task(task_id)
+            if str(task.get("action_type") or "") in CONTENT_RESULT_CONTRACTS:
+                replay = project_commands.replay_content_agent_result(
+                    command_id=command_id,
+                    task_id=task_id,
+                    request_kind=kind,
+                    payload=payload,
+                    expected_revision=int(request["expected_revision"]),
+                )
+                if replay is not None:
+                    artifact_ref, state = replay
+                    return {
+                        "ok": True,
+                        "operation": operation,
+                        "selected_project_root": str(project_root),
+                        "result": {
+                            "artifact_ref": artifact_ref,
+                            "snapshot": _snapshot(state, project_root),
+                        },
+                    }
+                active_task = project_commands.require_active_agent_task(task_id)
                 content_task = active_task
+            elif str(task.get("action_type") or "") in CONTENT_ACTION_CONTRACTS:
+                from ai_ppt_studio.errors import ContentWorkflowError
+
+                raise ContentWorkflowError(
+                    "CONTENT_REVIEW_CONFLICT",
+                    "Content action has no direct artifact result contract",
+                    {
+                        "task_id": task_id,
+                        "action_type": str(task.get("action_type") or ""),
+                    },
+                )
+            else:
+                replay = project_commands.replay_noncontent_agent_result(
+                    command_id=command_id,
+                    task_id=task_id,
+                    request_kind=kind,
+                    payload=payload,
+                    expected_revision=int(request["expected_revision"]),
+                )
+                if replay is not None:
+                    artifact_ref, state = replay
+                    return {
+                        "ok": True,
+                        "operation": operation,
+                        "selected_project_root": str(project_root),
+                        "result": {
+                            "artifact_ref": artifact_ref,
+                            "snapshot": _snapshot(state, project_root),
+                        },
+                    }
         elif artifact_type in FORMAL_AGENT_CONTENT_ARTIFACT_TYPES:
             from ai_ppt_studio.errors import ContentWorkflowError
 
@@ -370,12 +402,16 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
                 payload=payload,
             )
         else:
-            artifact_ref = visual.commit_public_artifact(
-                command_id,
-                int(request["expected_revision"]),
-                kind=kind,
-                payload=payload,
+            fingerprint = project_commands._result_request_fingerprint(
+                kind, payload, int(request["expected_revision"])
             )
+            with kernel.semantic_command(fingerprint if task_id else ""):
+                artifact_ref = visual.commit_public_artifact(
+                    command_id,
+                    int(request["expected_revision"]),
+                    kind=kind,
+                    payload=payload,
+                )
         if content_task is None:
             state = kernel.load()
             if task_id:
@@ -384,6 +420,10 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
                     state.revision,
                     task_id=task_id,
                     result_ref=artifact_ref,
+                    completion_command_id=command_id,
+                    request_kind=kind,
+                    request_payload=payload,
+                    result_expected_revision=int(request["expected_revision"]),
                 )
         return {
             "ok": True,

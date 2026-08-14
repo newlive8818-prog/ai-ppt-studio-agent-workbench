@@ -7,6 +7,7 @@ import hashlib
 import json
 import uuid
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Iterator
@@ -27,6 +28,9 @@ from ai_ppt_studio.kernel.state import KernelState
 
 CONFIRMATION_LEDGER_SLOT = "kernel/confirmation-consumptions"
 CONFIRMATION_LEDGER_KIND = "confirmation-consumption-ledger"
+_COMMAND_FINGERPRINT: ContextVar[str] = ContextVar(
+    "ai_ppt_studio_command_fingerprint", default=""
+)
 
 
 class ProjectKernel:
@@ -71,6 +75,16 @@ class ProjectKernel:
             finally:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
+    @contextmanager
+    def semantic_command(self, fingerprint: str) -> Iterator[None]:
+        """Bind trusted request semantics to all commits in this call context."""
+
+        token = _COMMAND_FINGERPRINT.set(fingerprint)
+        try:
+            yield
+        finally:
+            _COMMAND_FINGERPRINT.reset(token)
+
     def commit(
         self,
         *,
@@ -82,7 +96,9 @@ class ProjectKernel:
         confirmation_consumptions: tuple[object, ...] = (),
         content_framework_reset: object | None = None,
         gate_mutation: object | None = None,
+        command_fingerprint: str = "",
     ) -> KernelState:
+        command_fingerprint = command_fingerprint or _COMMAND_FINGERPRINT.get()
         with self._locked():
             state = self.load()
             if command_id in state.processed_commands:
@@ -91,6 +107,22 @@ class ProjectKernel:
                         "CONFIRMATION_COMMAND_REPLAYED",
                         "Confirmation identity cannot replay a processed command"
                     )
+                if command_fingerprint:
+                    revision = state.processed_commands[command_id]
+                    try:
+                        event = json.loads(
+                            (self.events_root / f"r{revision:08d}.json").read_text(
+                                encoding="utf-8"
+                            )
+                        )
+                    except (OSError, json.JSONDecodeError) as exc:
+                        raise ContractValidationError(
+                            "Processed command receipt is unavailable"
+                        ) from exc
+                    if event.get("command_fingerprint") != command_fingerprint:
+                        raise ContractValidationError(
+                            "Processed command has different semantics"
+                        )
                 return state
             if state.revision != expected_revision:
                 raise RevisionConflictError(expected_revision, state.revision)
@@ -306,6 +338,11 @@ class ProjectKernel:
                 "gate_updates": gate_updates,
                 "gate_evidence_refs": (
                     list(authorized_gate.evidence_refs) if authorized_gate else []
+                ),
+                **(
+                    {"command_fingerprint": command_fingerprint}
+                    if command_fingerprint
+                    else {}
                 ),
             }
             atomic_write_json(
