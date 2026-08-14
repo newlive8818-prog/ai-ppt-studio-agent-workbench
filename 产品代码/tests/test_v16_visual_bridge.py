@@ -199,6 +199,57 @@ class V16VisualBridgeTests(unittest.TestCase):
                 )
             self.assertEqual(tuple(content.kernel.events_root.iterdir()), events)
 
+            newer = dispatch_v16({
+                "operation": "request-agent-action",
+                "project_root": str(project),
+                "expected_revision": revision + 2,
+                "command_id": "newer-visual-task",
+                "action_type": "design-deck-system",
+                "target_refs": [blueprint_ref],
+                "instructions": "新的任务保持排队。",
+            })["result"]
+            newer_task_id = newer["task"]["task_id"]
+            before_replay = content.kernel.load()
+            replay_events = tuple(content.kernel.events_root.iterdir())
+            replay_objects = tuple(content.kernel.artifacts.objects_root.rglob("*"))
+            historical = dispatch_v16({
+                "operation": "commit-artifact",
+                "project_root": str(project),
+                "expected_revision": revision + 1,
+                "command_id": "visual-task-result",
+                "kind": "visual-brief",
+                "task_id": task_id,
+                "payload": valid_visual_brief(blueprint_ref),
+            })["result"]
+            self.assertEqual(historical["artifact_ref"], committed["artifact_ref"])
+            self.assertEqual(historical["snapshot"]["revision"], before_replay.revision)
+            self.assertEqual(content.kernel.load(), before_replay)
+            self.assertEqual(tuple(content.kernel.events_root.iterdir()), replay_events)
+            self.assertEqual(
+                tuple(content.kernel.artifacts.objects_root.rglob("*")),
+                replay_objects,
+            )
+            active = content.kernel.artifacts.resolve(ArtifactReference.parse(
+                before_replay.artifact_heads["agent/task/active"]
+            ))["payload"]
+            self.assertEqual(active["task_id"], newer_task_id)
+            self.assertEqual(active["status"], "queued")
+
+            changed_historical = valid_visual_brief(blueprint_ref)
+            changed_historical["design_proposition"] = "历史命令语义已改变"
+            with self.assertRaises(ContractValidationError):
+                dispatch_v16({
+                    "operation": "commit-artifact",
+                    "project_root": str(project),
+                    "expected_revision": revision + 1,
+                    "command_id": "visual-task-result",
+                    "kind": "visual-brief",
+                    "task_id": task_id,
+                    "payload": changed_historical,
+                })
+            self.assertEqual(content.kernel.load(), before_replay)
+            self.assertEqual(tuple(content.kernel.events_root.iterdir()), replay_events)
+
     def test_task_bound_visual_result_failure_is_zero_write_and_task_stays_queued(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)

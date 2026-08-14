@@ -315,7 +315,7 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
         content_task = None
         command_id = _command_id(operation, request)
         if task_id:
-            task = project_commands.require_active_agent_task(task_id)
+            task = project_commands.resolve_agent_task(task_id)
             if str(task.get("action_type") or "") in CONTENT_RESULT_CONTRACTS:
                 replay = project_commands.replay_content_agent_result(
                     command_id=command_id,

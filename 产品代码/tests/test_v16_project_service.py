@@ -968,6 +968,68 @@ class V16ProjectServiceTests(unittest.TestCase):
                 self.assertEqual(kernel.load().revision, 9)
                 self.assertEqual(tuple(kernel.events_root.iterdir()), events)
 
+            newer = dispatch_v16({
+                "operation": "request-agent-action",
+                "project_root": project_root,
+                "expected_revision": 9,
+                "command_id": "newer-task-after-content-result",
+                "action_type": "design-deck-system",
+                "target_refs": [committed["artifact_ref"]],
+                "instructions": "新任务保持排队，不得影响历史重放。",
+            })["result"]
+            before_replay = kernel.load()
+            replay_events = tuple(kernel.events_root.iterdir())
+            replay_objects = tuple(kernel.artifacts.objects_root.rglob("*"))
+            historical = dispatch_v16({
+                "operation": "commit-artifact",
+                "project_root": project_root,
+                "command_id": "content-result-exact-replay",
+                "expected_revision": 8,
+                "kind": "content-blueprint",
+                "task_id": task_id,
+                "payload": {
+                    "artifact_type": "presales-content-strategy",
+                    "mission_ref": mission_ref,
+                    "material_inventory_ref": material_ref,
+                    "content_identity_mode": "material-backed",
+                    "decision_stage": "方案建议",
+                    "core_tension": "待联合验证",
+                },
+            })["result"]
+            self.assertEqual(historical["artifact_ref"], committed["artifact_ref"])
+            self.assertEqual(historical["snapshot"]["revision"], before_replay.revision)
+            self.assertEqual(kernel.load(), before_replay)
+            self.assertEqual(tuple(kernel.events_root.iterdir()), replay_events)
+            self.assertEqual(
+                tuple(kernel.artifacts.objects_root.rglob("*")), replay_objects
+            )
+            active = kernel.artifacts.resolve(ArtifactReference.parse(
+                before_replay.artifact_heads["agent/task/active"]
+            ))["payload"]
+            self.assertEqual(active["task_id"], newer["task"]["task_id"])
+            self.assertEqual(active["status"], "queued")
+
+            changed_historical = {
+                "artifact_type": "presales-content-strategy",
+                "mission_ref": mission_ref,
+                "material_inventory_ref": material_ref,
+                "content_identity_mode": "material-backed",
+                "decision_stage": "方案建议",
+                "core_tension": "历史语义已改变",
+            }
+            with self.assertRaises(ContentWorkflowError):
+                dispatch_v16({
+                    "operation": "commit-artifact",
+                    "project_root": project_root,
+                    "command_id": "content-result-exact-replay",
+                    "expected_revision": 8,
+                    "kind": "content-blueprint",
+                    "task_id": task_id,
+                    "payload": changed_historical,
+                })
+            self.assertEqual(kernel.load(), before_replay)
+            self.assertEqual(tuple(kernel.events_root.iterdir()), replay_events)
+
     def test_stale_agent_result_after_framework_reset_is_rejected_zero_write(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             config, _profile = runtime_config(Path(temp))

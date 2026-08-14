@@ -532,14 +532,30 @@ class ProjectCommandService:
         task_ref = state.artifact_heads.get("agent/task/active", "")
         if not task_ref:
             raise ContractValidationError("No active Agent task is available")
-        reference = ArtifactReference.parse(task_ref)
-        if reference.kind != "agent-task":
-            raise ContractValidationError("Active Agent task reference has the wrong kind")
-        task = self.kernel.artifacts.resolve(reference)["payload"]
-        if task.get("task_id") != identity:
+        exact_ref = state.artifact_heads.get(f"agent/task/{identity}", "")
+        if exact_ref != task_ref:
             raise ContractValidationError(
                 "Artifact result task_id must match the active Agent task"
             )
+        return self.resolve_agent_task(identity)
+
+    def resolve_agent_task(self, task_id: str) -> dict[str, Any]:
+        """Resolve an immutable exact task receipt without requiring it is active."""
+
+        identity = task_id.strip()
+        if not identity:
+            raise ContractValidationError("Agent task ID cannot be empty")
+        task_ref = self.kernel.load().artifact_heads.get(
+            f"agent/task/{identity}", ""
+        )
+        if not task_ref:
+            raise ContractValidationError("Exact Agent task receipt is unavailable")
+        reference = ArtifactReference.parse(task_ref)
+        if reference.kind != "agent-task":
+            raise ContractValidationError("Agent task reference has the wrong kind")
+        task = self.kernel.artifacts.resolve(reference)["payload"]
+        if task.get("task_id") != identity:
+            raise ContractValidationError("Agent task receipt identity is invalid")
         return dict(task)
 
     def preflight_content_agent_result(
@@ -737,7 +753,7 @@ class ProjectCommandService:
         state = self.kernel.load()
         if command_id not in state.processed_commands:
             return None
-        task = self.require_active_agent_task(task_id)
+        task = self.resolve_agent_task(task_id)
         completion = task.get("completion_result")
         fingerprint = self._result_request_fingerprint(
             request_kind, payload, expected_revision
