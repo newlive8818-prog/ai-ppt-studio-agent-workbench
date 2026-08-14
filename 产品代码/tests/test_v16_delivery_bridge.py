@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.application.v16_bridge import dispatch_v16
 from ai_ppt_studio.errors import ContractValidationError
+from ai_ppt_studio.kernel.references import ArtifactReference
 from tests.v16_delivery_fixtures import (
     package_artifacts,
     prepared_delivery_ready,
@@ -18,6 +19,59 @@ from tests.v16_delivery_fixtures import (
 
 
 class V16DeliveryBridgeTests(unittest.TestCase):
+    def test_task_bound_delivery_result_is_one_atomic_revision_and_replays_exactly(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp)
+            delivery, revision, refs = prepared_delivery_ready(
+                project, slide_count=2
+            )
+            payload = {
+                **valid_package_payload(refs, package_artifacts(delivery, refs)),
+                "artifact_type": "delivery-package",
+            }
+            requested = dispatch_v16({
+                "operation": "request-agent-action",
+                "project_root": str(project),
+                "expected_revision": revision,
+                "command_id": "atomic-delivery-task",
+                "action_type": "coordinate-delivery",
+                "target_refs": [refs["build"]],
+                "instructions": "组织当前最终交付包。",
+            })["result"]
+            task_id = requested["task"]["task_id"]
+            event_count = len(tuple(delivery.kernel.events_root.iterdir()))
+            committed = dispatch_v16({
+                "operation": "commit-artifact",
+                "project_root": str(project),
+                "expected_revision": revision + 1,
+                "command_id": "atomic-delivery-result",
+                "kind": "delivery",
+                "task_id": task_id,
+                "payload": payload,
+            })["result"]
+            self.assertEqual(committed["snapshot"]["revision"], revision + 2)
+            self.assertEqual(
+                len(tuple(delivery.kernel.events_root.iterdir())), event_count + 1
+            )
+            task = delivery.kernel.artifacts.resolve(ArtifactReference.parse(
+                committed["snapshot"]["artifacts"][f"agent/task/{task_id}"]
+            ))["payload"]
+            self.assertEqual(task["status"], "completed")
+            self.assertEqual(task["result_refs"], [committed["artifact_ref"]])
+            events = tuple(delivery.kernel.events_root.iterdir())
+
+            replayed = dispatch_v16({
+                "operation": "commit-artifact",
+                "project_root": str(project),
+                "expected_revision": revision + 1,
+                "command_id": "atomic-delivery-result",
+                "kind": "delivery",
+                "task_id": task_id,
+                "payload": payload,
+            })["result"]
+            self.assertEqual(replayed, committed)
+            self.assertEqual(tuple(delivery.kernel.events_root.iterdir()), events)
+
     def test_existing_public_operations_cover_package_chat_projection_g4_and_reopen(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)

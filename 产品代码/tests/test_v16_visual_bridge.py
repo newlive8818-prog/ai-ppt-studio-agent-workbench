@@ -6,6 +6,7 @@ import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -13,6 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from ai_ppt_studio.application.v16_bridge import dispatch_v16
 from ai_ppt_studio.errors import ContractValidationError
 from ai_ppt_studio.kernel.references import ArtifactReference
+from ai_ppt_studio.kernel.transactions import ProjectKernel
 from tests.v16_visual_fixtures import (
     confirmed_g0,
     passing_visual_review,
@@ -66,7 +68,7 @@ class V16VisualBridgeTests(unittest.TestCase):
                 "conflict", "success"
             ])
             state = content.kernel.load()
-            self.assertEqual(state.revision, revision + 3)
+            self.assertEqual(state.revision, revision + 2)
             task = content.kernel.artifacts.resolve(ArtifactReference.parse(
                 state.artifact_heads[f"agent/task/{task_id}"]
             ))["payload"]
@@ -101,7 +103,7 @@ class V16VisualBridgeTests(unittest.TestCase):
                 }
             )["result"]
 
-            self.assertEqual(committed["snapshot"]["revision"], revision + 3)
+            self.assertEqual(committed["snapshot"]["revision"], revision + 2)
             task_ref = committed["snapshot"]["artifacts"][f"agent/task/{task_id}"]
             task = content.kernel.artifacts.resolve(
                 ArtifactReference.parse(task_ref)
@@ -196,6 +198,67 @@ class V16VisualBridgeTests(unittest.TestCase):
                     }
                 )
             self.assertEqual(tuple(content.kernel.events_root.iterdir()), events)
+
+    def test_task_bound_visual_result_failure_is_zero_write_and_task_stays_queued(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp)
+            content, revision, blueprint_ref = confirmed_g0(project)
+            requested = dispatch_v16({
+                "operation": "request-agent-action",
+                "project_root": str(project),
+                "expected_revision": revision,
+                "command_id": "atomic-visual-task",
+                "action_type": "design-deck-system",
+                "target_refs": [blueprint_ref],
+                "instructions": "形成视觉方向。",
+            })["result"]
+            task_id = requested["task"]["task_id"]
+            before = content.kernel.load()
+            events = tuple(content.kernel.events_root.iterdir())
+            objects = tuple(content.kernel.artifacts.objects_root.rglob("*"))
+            real_commit = ProjectKernel.commit
+
+            def fail_result_transaction(kernel: ProjectKernel, **kwargs):
+                if kwargs.get("command_id") == "atomic-visual-result":
+                    raise OSError("injected atomic result failure")
+                return real_commit(kernel, **kwargs)
+
+            with patch.object(ProjectKernel, "commit", fail_result_transaction):
+                with self.assertRaisesRegex(OSError, "injected atomic result failure"):
+                    dispatch_v16({
+                        "operation": "commit-artifact",
+                        "project_root": str(project),
+                        "expected_revision": before.revision,
+                        "command_id": "atomic-visual-result",
+                        "kind": "visual-brief",
+                        "task_id": task_id,
+                        "payload": valid_visual_brief(blueprint_ref),
+                    })
+
+            self.assertEqual(content.kernel.load(), before)
+            self.assertEqual(tuple(content.kernel.events_root.iterdir()), events)
+            self.assertEqual(
+                tuple(content.kernel.artifacts.objects_root.rglob("*")), objects
+            )
+            task = content.kernel.artifacts.resolve(ArtifactReference.parse(
+                before.artifact_heads[f"agent/task/{task_id}"]
+            ))["payload"]
+            self.assertEqual(task["status"], "queued")
+            self.assertNotIn("visual/brief", before.artifact_heads)
+
+            retried = dispatch_v16({
+                "operation": "commit-artifact",
+                "project_root": str(project),
+                "expected_revision": before.revision,
+                "command_id": "atomic-visual-result",
+                "kind": "visual-brief",
+                "task_id": task_id,
+                "payload": valid_visual_brief(blueprint_ref),
+            })["result"]
+            self.assertEqual(retried["snapshot"]["revision"], before.revision + 1)
+            self.assertEqual(
+                len(tuple(content.kernel.events_root.iterdir())), len(events) + 1
+            )
 
     def test_visual_reviewer_task_cannot_write_the_other_reviewer_slot(self) -> None:
         cases = (

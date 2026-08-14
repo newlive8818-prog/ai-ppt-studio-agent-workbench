@@ -10,6 +10,7 @@ import os
 import re
 import unicodedata
 import uuid
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -92,6 +93,107 @@ NONCONTENT_RESULT_CONTRACTS = {
         ("target-render-evidence", ""),
     }),
 }
+
+
+@dataclass(frozen=True)
+class PreparedArtifactTransaction:
+    """A fully validated service transaction that has not written anything."""
+
+    event_type: str
+    artifact_updates: dict[str, tuple[str, dict[str, Any]]]
+    artifact_removals: tuple[str, ...] = ()
+    gate_mutation: object | None = None
+    result_ref: str = ""
+
+
+class _ReadOnlyPreparationArtifacts:
+    """Allow validation and deterministic references, but forbid object writes."""
+
+    def __init__(self, repository: Any) -> None:
+        self._repository = repository
+
+    def resolve(self, reference: ArtifactReference) -> dict[str, Any]:
+        return self._repository.resolve(reference)
+
+    def reference_for(
+        self, kind: str, payload: dict[str, Any]
+    ) -> ArtifactReference:
+        return self._repository.reference_for(kind, payload)
+
+    def put(self, kind: str, payload: dict[str, Any]) -> ArtifactReference:
+        raise ContractValidationError(
+            "Prepared Agent results cannot persist objects before atomic commit"
+        )
+
+
+class _PreparationKernel:
+    """Capture one existing service commit as a side-effect-free transaction."""
+
+    def __init__(self, kernel: ProjectKernel) -> None:
+        self._kernel = kernel
+        self.project_id = kernel.project_id
+        self.artifacts = _ReadOnlyPreparationArtifacts(kernel.artifacts)
+        self.prepared: PreparedArtifactTransaction | None = None
+
+    def load(self) -> KernelState:
+        return self._kernel.load()
+
+    def commit(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        event_type: str,
+        artifact_updates: dict[str, tuple[str, dict[str, Any]]],
+        artifact_removals: tuple[str, ...] = (),
+        confirmation_consumptions: tuple[object, ...] = (),
+        content_framework_reset: object | None = None,
+        gate_mutation: object | None = None,
+        command_fingerprint: str = "",
+    ) -> KernelState:
+        state = self.load()
+        if state.revision != expected_revision:
+            from ai_ppt_studio.errors import RevisionConflictError
+
+            raise RevisionConflictError(expected_revision, state.revision)
+        if self.prepared is not None:
+            raise ContractValidationError(
+                "A prepared Agent result must contain exactly one service transaction"
+            )
+        if confirmation_consumptions or content_framework_reset is not None:
+            raise ContractValidationError(
+                "Non-content Agent results cannot consume content confirmations"
+            )
+        if set(artifact_updates).intersection(artifact_removals):
+            raise ContractValidationError(
+                "Prepared transaction cannot update and remove the same head"
+            )
+        prepared = PreparedArtifactTransaction(
+            event_type=event_type,
+            artifact_updates={
+                slot: (kind, dict(payload))
+                for slot, (kind, payload) in artifact_updates.items()
+            },
+            artifact_removals=tuple(artifact_removals),
+            gate_mutation=gate_mutation,
+        )
+        self.prepared = prepared
+        heads = dict(state.artifact_heads)
+        for slot in artifact_removals:
+            heads.pop(slot, None)
+        for slot, (kind, payload) in artifact_updates.items():
+            heads[slot] = str(self.artifacts.reference_for(kind, payload))
+        gate_status = dict(state.gate_status)
+        if gate_mutation is not None:
+            from ai_ppt_studio.kernel.gates import validate_gate_mutation
+
+            gate_status.update(validate_gate_mutation(gate_mutation).updates)
+        return replace(
+            state,
+            revision=state.revision + 1,
+            artifact_heads=heads,
+            gate_status=gate_status,
+        )
 
 def _normalize_project_id(value: str) -> str:
     identity = unicodedata.normalize("NFC", value.strip())
@@ -641,15 +743,23 @@ class ProjectCommandService:
             request_kind, payload, expected_revision
         )
         try:
+            result_ref = str(completion.get("result_ref") or "") if isinstance(
+                completion, dict
+            ) else ""
+            result_reference = ArtifactReference.parse(result_ref)
             if (
                 task.get("status") != "completed"
                 or task.get("completion_command_id") != command_id
                 or not isinstance(completion, dict)
+                or completion.get("action_type") != task.get("action_type")
+                or completion.get("artifact_kind") != result_reference.kind
+                or state.artifact_heads.get(
+                    str(completion.get("artifact_slot") or "")
+                ) != result_ref
                 or completion.get("request_fingerprint") != fingerprint
             ):
                 raise ValueError("Processed command has different semantics")
-            result_ref = str(completion.get("result_ref") or "")
-            self.kernel.artifacts.resolve(ArtifactReference.parse(result_ref))
+            self.kernel.artifacts.resolve(result_reference)
             if task.get("result_refs") != [result_ref]:
                 raise ValueError("Completed task result binding differs")
             return result_ref, state
@@ -687,6 +797,183 @@ class ProjectCommandService:
             raise ContractValidationError(
                 "Visual review result does not match its reviewer task identity"
             )
+
+    def preflight_noncontent_agent_result(
+        self,
+        *,
+        task_id: str,
+        request_kind: str,
+        payload: dict[str, Any],
+        expected_revision: int,
+    ) -> dict[str, Any]:
+        """Validate exact queued task and immutable ContextPack provenance."""
+
+        state = self.kernel.load()
+        task = self.require_active_agent_task(task_id)
+        try:
+            if state.revision != expected_revision or task.get("status") != "queued":
+                raise ValueError("Agent task is not current and queued")
+            action = str(task.get("action_type") or "")
+            if action not in NONCONTENT_RESULT_CONTRACTS:
+                raise ValueError("Agent task has no non-content result contract")
+            if task.get("role_id") != ACTION_ROLES.get(action):
+                raise ValueError("Agent task role does not match its action")
+            input_revision = task.get("input_revision")
+            if isinstance(input_revision, bool) or not isinstance(input_revision, int):
+                raise ValueError("Agent task input revision is invalid")
+            context_ref = str(task.get("context_pack_ref") or "")
+            context_reference = ArtifactReference.parse(context_ref)
+            if context_reference.kind != "context-pack":
+                raise ValueError("Agent ContextPack kind is invalid")
+            if state.artifact_heads.get(f"agent/context/{task_id}") != context_ref:
+                raise ValueError("Agent ContextPack is not the exact task context")
+            context = self.kernel.artifacts.resolve(context_reference)["payload"]
+            layers = context.get("layers", {})
+            if (
+                context.get("project_id") != state.project_id
+                or context.get("project_revision") != input_revision
+                or context.get("artifact_version_refs") != task.get("target_refs")
+                or layers.get("role_contract", {}).get("role_id")
+                != task.get("role_id")
+                or layers.get("task_contract", {}).get("task_type") != action
+                or layers.get("task_contract", {}).get("target_refs")
+                != task.get("target_refs")
+            ):
+                raise ValueError("Agent ContextPack provenance is inconsistent")
+            for value in list(task.get("target_refs") or []):
+                self.kernel.artifacts.resolve(ArtifactReference.parse(value))
+            self.validate_noncontent_agent_result_kind(task, request_kind, payload)
+        except (ArtifactReferenceError, KeyError, TypeError, ValueError) as error:
+            raise ContractValidationError(
+                "Agent result provenance is stale or inconsistent"
+            ) from error
+        return task
+
+    def _prepare_noncontent_agent_result(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        request_kind: str,
+        payload: dict[str, Any],
+    ) -> PreparedArtifactTransaction:
+        """Run the established public route against a no-write kernel."""
+
+        preparation = _PreparationKernel(self.kernel)
+        from ai_ppt_studio.application.content_service import ContentService
+        from ai_ppt_studio.application.visual_service import VisualService
+
+        if request_kind in {
+            "material-findings",
+            "content-blueprint",
+            "content-acceptance",
+            "feedback",
+        }:
+            result_ref = ContentService(preparation).commit_public_artifact(
+                command_id,
+                expected_revision,
+                kind=request_kind,
+                payload=payload,
+            )
+        else:
+            result_ref = VisualService(preparation).commit_public_artifact(
+                command_id,
+                expected_revision,
+                kind=request_kind,
+                payload=payload,
+            )
+        if preparation.prepared is None:
+            raise ContractValidationError(
+                "Agent result route did not prepare a formal transaction"
+            )
+        return replace(preparation.prepared, result_ref=result_ref)
+
+    def commit_noncontent_agent_result(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        task_id: str,
+        request_kind: str,
+        raw_request_payload: dict[str, Any],
+    ) -> tuple[str, KernelState]:
+        """Publish a non-content result and complete its task in one commit."""
+
+        replay = self.replay_noncontent_agent_result(
+            command_id=command_id,
+            task_id=task_id,
+            request_kind=request_kind,
+            payload=raw_request_payload,
+            expected_revision=expected_revision,
+        )
+        if replay is not None:
+            return replay
+        task = self.preflight_noncontent_agent_result(
+            task_id=task_id,
+            request_kind=request_kind,
+            payload=raw_request_payload,
+            expected_revision=expected_revision,
+        )
+        prepared = self._prepare_noncontent_agent_result(
+            command_id=command_id,
+            expected_revision=expected_revision,
+            request_kind=request_kind,
+            payload=raw_request_payload,
+        )
+        task_slots = {"agent/task/active", f"agent/task/{task_id}"}
+        if task_slots.intersection(prepared.artifact_updates) or task_slots.intersection(
+            prepared.artifact_removals
+        ):
+            raise ContractValidationError(
+                "Domain result transaction cannot mutate Agent task heads"
+            )
+        candidates = [
+            (slot, kind, artifact_payload)
+            for slot, (kind, artifact_payload) in prepared.artifact_updates.items()
+            if str(
+                self.kernel.artifacts.reference_for(kind, artifact_payload)
+            ) == prepared.result_ref
+        ]
+        if len(candidates) != 1:
+            raise ContractValidationError(
+                "Prepared Agent result does not identify one formal result artifact"
+            )
+        artifact_slot, artifact_kind, _artifact_payload = candidates[0]
+        result_ref = prepared.result_ref
+        completed = {
+            **task,
+            "status": "completed",
+            "progress": {"stage": "completed", "done": 1, "total": 1},
+            "result_refs": [result_ref],
+            "error": None,
+            "completion_command_id": command_id,
+            "completion_result": {
+                "action_type": str(task.get("action_type") or ""),
+                "artifact_slot": artifact_slot,
+                "artifact_kind": artifact_kind,
+                "result_ref": result_ref,
+                "request_fingerprint": self._result_request_fingerprint(
+                    request_kind, raw_request_payload, expected_revision
+                ),
+            },
+        }
+        fingerprint = self._result_request_fingerprint(
+            request_kind, raw_request_payload, expected_revision
+        )
+        committed = self.kernel.commit(
+            command_id=command_id,
+            expected_revision=expected_revision,
+            event_type=prepared.event_type,
+            artifact_updates={
+                **prepared.artifact_updates,
+                "agent/task/active": ("agent-task", completed),
+                f"agent/task/{task_id}": ("agent-task", completed),
+            },
+            artifact_removals=prepared.artifact_removals,
+            gate_mutation=prepared.gate_mutation,
+            command_fingerprint=fingerprint,
+        )
+        return committed.artifact_heads[artifact_slot], committed
 
     def complete_agent_task(
         self,

@@ -393,6 +393,14 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
                 request_kind=kind,
                 raw_request_payload=payload,
             )
+        elif task_id:
+            artifact_ref, state = project_commands.commit_noncontent_agent_result(
+                command_id=command_id,
+                expected_revision=int(request["expected_revision"]),
+                task_id=task_id,
+                request_kind=kind,
+                raw_request_payload=payload,
+            )
         else:
             with kernel.semantic_command(result_fingerprint):
                 if kind == "mission":
@@ -420,19 +428,8 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
                         kind=kind,
                         payload=payload,
                     )
-        if content_task is None:
+        if content_task is None and not task_id:
             state = kernel.load()
-            if task_id:
-                state = project_commands.complete_agent_task(
-                    f"{command_id}:complete-agent-task:{task_id}",
-                    state.revision,
-                    task_id=task_id,
-                    result_ref=artifact_ref,
-                    completion_command_id=command_id,
-                    request_kind=kind,
-                    request_payload=payload,
-                    result_expected_revision=int(request["expected_revision"]),
-                )
         return {
             "ok": True,
             "operation": operation,
