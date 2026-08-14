@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +18,7 @@ from ai_ppt_studio.domains.content.contracts import REQUIRED_CONTENT_REVIEW_ROLE
 from ai_ppt_studio.domains.content.review_contracts import (
     validate_page_decision,
     validate_page_decision_set,
+    validate_visible_copy_snapshot,
 )
 from ai_ppt_studio.errors import (
     ContractValidationError,
@@ -149,6 +151,65 @@ def publish_revised_blueprint(
 
 
 class PageDecisionContractTests(unittest.TestCase):
+    def test_visible_copy_snapshot_has_a_closed_exact_schema(self) -> None:
+        snapshot = {
+            "project_id": "project-1",
+            "source_version": artifact_ref("content-blueprint"),
+            "slide_id": "s1",
+            "slide_order": 1,
+            "slide_title_snapshot": "完整页面标题",
+            "visible_copy": [
+                {
+                    "copy_id": "COPY-01",
+                    "role": "headline",
+                    "text": "完整可见文字",
+                }
+            ],
+        }
+        self.assertEqual(validate_visible_copy_snapshot(snapshot), snapshot)
+        invalid = (
+            {key: value for key, value in snapshot.items() if key != "visible_copy"},
+            {**snapshot, "unexpected": "must fail"},
+            {**snapshot, "project_id": ""},
+            {**snapshot, "source_version": artifact_ref("content-acceptance")},
+            {**snapshot, "slide_order": True},
+            {**snapshot, "visible_copy": "not-a-list"},
+            {**snapshot, "visible_copy": ["not-an-object"]},
+            {
+                **snapshot,
+                "visible_copy": [
+                    {"copy_id": "COPY-01", "role": "headline"}
+                ],
+            },
+            {
+                **snapshot,
+                "visible_copy": [
+                    {"copy_id": "", "role": "headline", "text": "正文"}
+                ],
+            },
+            {
+                **snapshot,
+                "visible_copy": [
+                    {"copy_id": "COPY-01", "role": 1, "text": "正文"}
+                ],
+            },
+            {
+                **snapshot,
+                "visible_copy": [
+                    {
+                        "copy_id": "COPY-01",
+                        "role": "headline",
+                        "text": "正文",
+                        "unexpected": "not-closed",
+                    }
+                ],
+            },
+        )
+        for payload in invalid:
+            with self.subTest(payload=payload):
+                with self.assertRaises(ContractValidationError):
+                    validate_visible_copy_snapshot(payload)
+
     def test_four_decisions_are_exact_and_approved_discards_comment(self) -> None:
         expected = {"approved", "modify", "evidence", "merge-or-delete"}
         observed: set[str] = set()
@@ -545,6 +606,31 @@ class ContentReviewServiceTests(unittest.TestCase):
                 self.assertEqual(object_files(self.content), objects)
                 self.assertEqual(event_files(self.content), events)
 
+    def test_kernel_commit_failure_leaves_no_detached_page_objects(self) -> None:
+        before = self.content.kernel.load()
+        before_state = self.content.kernel.state_path.read_bytes()
+        objects = object_files(self.content)
+        events = event_files(self.content)
+        with patch.object(
+            self.content.kernel,
+            "commit",
+            side_effect=RevisionConflictError(
+                before.revision, before.revision + 1
+            ),
+        ), self.assertRaises(RevisionConflictError):
+            self.save(
+                command_id="commit-race",
+                slide_id="s1",
+                decision="modify",
+                comment="在内核提交边界失败",
+            )
+        self.assertEqual(self.content.kernel.load(), before)
+        self.assertEqual(
+            self.content.kernel.state_path.read_bytes(), before_state
+        )
+        self.assertEqual(object_files(self.content), objects)
+        self.assertEqual(event_files(self.content), events)
+
     def test_same_batch_is_required_until_source_changes(self) -> None:
         self.save(
             command_id="batch-a",
@@ -563,6 +649,46 @@ class ContentReviewServiceTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
         self.assertEqual(self.content.kernel.load(), before)
         self.assertEqual(object_files(self.content), objects)
+
+    def test_unresolvable_historical_source_set_cannot_be_replaced(self) -> None:
+        fake_source = artifact_ref("content-blueprint", "f")
+        fake_set = validate_page_decision_set(
+            {
+                "decision_set_id": "fake-historical-set",
+                "review_batch_id": "fake-historical-batch",
+                "project_id": self.content.kernel.project_id,
+                "review_type": "content",
+                "source_version": fake_source,
+                "expected_slide_count": 3,
+                "status": "draft",
+                "decision_refs": [],
+                "updated_at": "2026-08-14T09:30:00+00:00",
+            }
+        )
+        self.content.kernel.commit(
+            command_id="test-install-fake-historical-set",
+            expected_revision=self.content.kernel.load().revision,
+            event_type="test.install-fake-historical-set",
+            artifact_updates={
+                "content/page-decisions": (
+                    "content-page-decision-set",
+                    fake_set,
+                )
+            },
+        )
+        before = self.content.kernel.load()
+        objects = object_files(self.content)
+        events = event_files(self.content)
+        with self.assertRaises(ContentWorkflowError) as caught:
+            self.save(
+                command_id="reject-fake-historical-set",
+                slide_id="s1",
+                decision="approved",
+            )
+        self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+        self.assertEqual(self.content.kernel.load(), before)
+        self.assertEqual(object_files(self.content), objects)
+        self.assertEqual(event_files(self.content), events)
 
     def test_frozen_decision_set_rejects_changes_without_writes(self) -> None:
         self.save(
@@ -674,6 +800,75 @@ class ContentReviewServiceTests(unittest.TestCase):
         self.assertEqual(object_files(self.content), objects)
         self.assertEqual(event_files(self.content), events)
 
+    def test_snapshot_with_unknown_field_fails_closed(self) -> None:
+        page, _progress, _state = self.save(
+            command_id="closed-snapshot",
+            slide_id="s1",
+            decision="approved",
+        )
+        authentic = resolve_payload(
+            self.content, page["page_decision_ref"]
+        )
+        tampered_snapshot = {
+            **resolve_payload(
+                self.content, authentic["visible_copy_snapshot_ref"]
+            ),
+            "tampered_extra": "must-not-be-accepted",
+        }
+        tampered_snapshot_ref = str(
+            self.content.kernel.artifacts.put(
+                "content-visible-copy-snapshot", tampered_snapshot
+            )
+        )
+        tampered_decision = validate_page_decision(
+            {
+                **authentic,
+                "page_decision_id": "tampered-extra-decision",
+                "visible_copy_snapshot_ref": tampered_snapshot_ref,
+            }
+        )
+        tampered_decision_ref = str(
+            self.content.kernel.artifacts.put(
+                "content-page-decision", tampered_decision
+            )
+        )
+        _set_ref, decision_set = self.current_set()
+        tampered_set = validate_page_decision_set(
+            {
+                **decision_set,
+                "decision_refs": [
+                    {
+                        **decision_set["decision_refs"][0],
+                        "decision_ref": tampered_decision_ref,
+                    }
+                ],
+            }
+        )
+        self.content.kernel.commit(
+            command_id="test-install-unknown-snapshot-field",
+            expected_revision=self.content.kernel.load().revision,
+            event_type="test.install-unknown-snapshot-field",
+            artifact_updates={
+                "content/page-decisions": (
+                    "content-page-decision-set",
+                    tampered_set,
+                )
+            },
+        )
+        before = self.content.kernel.load()
+        objects = object_files(self.content)
+        events = event_files(self.content)
+        with self.assertRaises(ContentWorkflowError) as caught:
+            self.save(
+                command_id="reject-unknown-snapshot-field",
+                slide_id="s2",
+                decision="approved",
+            )
+        self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
+        self.assertEqual(self.content.kernel.load(), before)
+        self.assertEqual(object_files(self.content), objects)
+        self.assertEqual(event_files(self.content), events)
+
     def test_command_replay_is_exact_and_semantic_collision_fails_closed(self) -> None:
         revision = self.content.kernel.load().revision
         first = self.save(
@@ -708,6 +903,58 @@ class ContentReviewServiceTests(unittest.TestCase):
                 expected_revision=revision,
             )
         self.assertEqual(self.content.kernel.load(), after_first)
+        self.assertEqual(object_files(self.content), objects)
+        self.assertEqual(event_files(self.content), events)
+
+    def test_historical_replay_returns_a_time_result_after_b_and_c(self) -> None:
+        revision_a = self.content.kernel.load().revision
+        a_page, a_progress, _a_state = self.save(
+            command_id="historical-a",
+            slide_id="s1",
+            decision="modify",
+            comment="A 时刻的完整意见",
+            expected_revision=revision_a,
+        )
+        self.save(
+            command_id="historical-b",
+            slide_id="s1",
+            decision="approved",
+        )
+        self.save(
+            command_id="historical-c",
+            slide_id="s2",
+            decision="evidence",
+            comment="C 时刻补充证据",
+        )
+        current = self.content.kernel.load()
+        objects = object_files(self.content)
+        events = event_files(self.content)
+
+        replay_page, replay_progress, replay_state = self.save(
+            command_id="historical-a",
+            slide_id="s1",
+            decision="modify",
+            comment="A 时刻的完整意见",
+            expected_revision=revision_a,
+        )
+        self.assertEqual(replay_page, a_page)
+        self.assertEqual(replay_progress, a_progress)
+        self.assertEqual(replay_progress["completed"], 1)
+        self.assertEqual(replay_progress["next_incomplete_slide_id"], "s2")
+        self.assertEqual(replay_state, current)
+        self.assertEqual(self.content.kernel.load(), current)
+        self.assertEqual(object_files(self.content), objects)
+        self.assertEqual(event_files(self.content), events)
+
+        with self.assertRaises(ContractValidationError):
+            self.save(
+                command_id="historical-a",
+                slide_id="s1",
+                decision="modify",
+                comment="改变 A 命令的语义",
+                expected_revision=revision_a,
+            )
+        self.assertEqual(self.content.kernel.load(), current)
         self.assertEqual(object_files(self.content), objects)
         self.assertEqual(event_files(self.content), events)
 

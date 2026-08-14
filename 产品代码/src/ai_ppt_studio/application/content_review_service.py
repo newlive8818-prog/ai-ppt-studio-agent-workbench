@@ -14,6 +14,7 @@ from ai_ppt_studio.domains.content.review_contracts import (
     normalize_page_decision_choice,
     validate_page_decision,
     validate_page_decision_set,
+    validate_visible_copy_snapshot,
 )
 from ai_ppt_studio.errors import (
     ArtifactReferenceError,
@@ -152,14 +153,14 @@ class ContentReviewService:
                 str(prior_row["decision_ref"]) if prior_row else ""
             )
             saved_at = datetime.now(timezone.utc).isoformat()
-            snapshot = {
+            snapshot = validate_visible_copy_snapshot({
                 "project_id": state.project_id,
                 "source_version": source,
                 "slide_id": target_slide_id,
                 "slide_order": slide["order"],
                 "slide_title_snapshot": slide["title"],
                 "visible_copy": copy.deepcopy(slide["visible_copy"]),
-            }
+            })
             snapshot_ref = str(
                 self.kernel.artifacts.reference_for(
                     VISIBLE_COPY_SNAPSHOT_KIND, snapshot
@@ -227,17 +228,6 @@ class ContentReviewService:
                 raise RevisionConflictError(
                     expected_revision, self.kernel.load().revision
                 )
-            persisted_snapshot = self.kernel.artifacts.put(
-                VISIBLE_COPY_SNAPSHOT_KIND, snapshot
-            )
-            if str(persisted_snapshot) != snapshot_ref:
-                raise RuntimeError("Visible-copy snapshot identity changed")
-            persisted_decision = self.kernel.artifacts.put(
-                PAGE_DECISION_KIND, page_decision
-            )
-            if str(persisted_decision) != page_decision_ref:
-                raise RuntimeError("Page-decision identity changed")
-
             before_heads = dict(state.artifact_heads)
             committed = self.kernel.commit(
                 command_id=command,
@@ -249,6 +239,10 @@ class ContentReviewService:
                         decision_set,
                     )
                 },
+                detached_artifacts=(
+                    (VISIBLE_COPY_SNAPSHOT_KIND, snapshot),
+                    (PAGE_DECISION_KIND, page_decision),
+                ),
                 command_fingerprint=fingerprint,
             )
             self._assert_only_decision_head_changed(before_heads, committed)
@@ -273,6 +267,12 @@ class ContentReviewService:
                     "actual_source_version": source_version,
                 },
             )
+        return self._resolve_blueprint(source_version)
+
+    def _resolve_blueprint(
+        self,
+        source_version: str,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         try:
             reference = ArtifactReference.parse(source_version)
             if reference.kind != BLUEPRINT_KIND:
@@ -378,6 +378,15 @@ class ContentReviewService:
                 {"decision_set_ref": decision_set_ref},
             )
         if payload["source_version"] != source_version:
+            _historical_blueprint, historical_slides = (
+                self._resolve_blueprint(payload["source_version"])
+            )
+            self._validate_decision_set_lineage(
+                decision_set_ref=decision_set_ref,
+                payload=payload,
+                slides=historical_slides,
+                project_id=state.project_id,
+            )
             return decision_set_ref, None
         if payload["review_batch_id"] != review_batch_id:
             self._conflict(
@@ -388,6 +397,22 @@ class ContentReviewService:
                     "actual_review_batch_id": review_batch_id,
                 },
             )
+        self._validate_decision_set_lineage(
+            decision_set_ref=decision_set_ref,
+            payload=payload,
+            slides=slides,
+            project_id=state.project_id,
+        )
+        return decision_set_ref, payload
+
+    def _validate_decision_set_lineage(
+        self,
+        *,
+        decision_set_ref: str,
+        payload: dict[str, Any],
+        slides: list[dict[str, Any]],
+        project_id: str,
+    ) -> None:
         if payload["expected_slide_count"] != len(slides):
             self._conflict(
                 "The page-decision set slide count differs from the blueprint",
@@ -407,9 +432,9 @@ class ContentReviewService:
                 )
             decision_payload = self._resolve_decision(row["decision_ref"])
             expected = {
-                "project_id": state.project_id,
-                "review_batch_id": review_batch_id,
-                "source_version": source_version,
+                "project_id": project_id,
+                "review_batch_id": payload["review_batch_id"],
+                "source_version": payload["source_version"],
                 "slide_id": row["slide_id"],
                 "slide_order": row["slide_order"],
             }
@@ -424,22 +449,11 @@ class ContentReviewService:
                         "decision_ref": row["decision_ref"],
                     },
                 )
-            snapshot = self._resolve_snapshot(
+            self._resolve_snapshot(
                 decision_payload["visible_copy_snapshot_ref"],
                 decision_payload,
+                slide,
             )
-            if snapshot["visible_copy"] != slide["visible_copy"]:
-                self._conflict(
-                    "A page snapshot differs from its immutable blueprint source",
-                    {
-                        "decision_set_ref": decision_set_ref,
-                        "decision_ref": row["decision_ref"],
-                        "snapshot_ref": decision_payload[
-                            "visible_copy_snapshot_ref"
-                        ],
-                    },
-                )
-        return decision_set_ref, payload
 
     def _resolve_decision(self, reference_value: str) -> dict[str, Any]:
         try:
@@ -465,6 +479,7 @@ class ContentReviewService:
         self,
         reference_value: str,
         decision: dict[str, Any],
+        source_slide: dict[str, Any],
     ) -> dict[str, Any]:
         try:
             reference = ArtifactReference.parse(reference_value)
@@ -472,32 +487,30 @@ class ContentReviewService:
                 raise ArtifactReferenceError(
                     "Visible-copy snapshot kind is invalid"
                 )
-            payload = self.kernel.artifacts.resolve(reference)["payload"]
-        except (ArtifactReferenceError, KeyError, TypeError) as error:
+            payload = validate_visible_copy_snapshot(
+                self.kernel.artifacts.resolve(reference)["payload"]
+            )
+        except (
+            ArtifactReferenceError,
+            ContractValidationError,
+            KeyError,
+            TypeError,
+        ) as error:
             self._conflict(
                 "A visible-copy snapshot cannot be resolved safely",
                 {"snapshot_ref": reference_value, "reason": str(error)},
             )
-        if not isinstance(payload, dict):
-            self._conflict(
-                "A visible-copy snapshot payload is invalid",
-                {"snapshot_ref": reference_value},
-            )
-        expected = {
+        canonical = validate_visible_copy_snapshot({
             "project_id": decision["project_id"],
             "source_version": decision["source_version"],
             "slide_id": decision["slide_id"],
             "slide_order": decision["slide_order"],
             "slide_title_snapshot": decision["slide_title_snapshot"],
-        }
-        if any(payload.get(field) != value for field, value in expected.items()):
+            "visible_copy": copy.deepcopy(source_slide["visible_copy"]),
+        })
+        if payload != canonical:
             self._conflict(
-                "A visible-copy snapshot has invalid lineage",
-                {"snapshot_ref": reference_value},
-            )
-        if not isinstance(payload.get("visible_copy"), list):
-            self._conflict(
-                "A visible-copy snapshot must preserve the full copy list",
+                "A page snapshot differs from its immutable blueprint source",
                 {"snapshot_ref": reference_value},
             )
         return payload

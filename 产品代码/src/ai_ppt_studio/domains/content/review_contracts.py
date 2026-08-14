@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from datetime import datetime
 from typing import Any
 
@@ -53,6 +54,17 @@ _PAGE_DECISION_SET_FIELDS = frozenset(
         "updated_at",
     }
 )
+_VISIBLE_COPY_SNAPSHOT_FIELDS = frozenset(
+    {
+        "project_id",
+        "source_version",
+        "slide_id",
+        "slide_order",
+        "slide_title_snapshot",
+        "visible_copy",
+    }
+)
+_VISIBLE_COPY_ITEM_FIELDS = frozenset({"copy_id", "role", "text"})
 
 
 def _nonempty_text(payload: dict[str, Any], field: str) -> str:
@@ -133,6 +145,54 @@ def normalize_page_decision_choice(
             "comment cannot exceed 1200 Unicode code points"
         )
     return decision, normalized_comment
+
+
+def validate_visible_copy_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
+    """Validate the exact immutable copy snapshot captured from one slide."""
+
+    if not isinstance(payload, dict):
+        raise ContractValidationError("VisibleCopySnapshot must be an object")
+    if set(payload) != _VISIBLE_COPY_SNAPSHOT_FIELDS:
+        raise ContractValidationError(
+            "VisibleCopySnapshot must contain exactly project_id, "
+            "source_version, slide_id, slide_order, slide_title_snapshot, "
+            "and visible_copy"
+        )
+    visible_copy = payload.get("visible_copy")
+    if not isinstance(visible_copy, list):
+        raise ContractValidationError("visible_copy must be a list")
+    normalized_visible_copy: list[dict[str, str]] = []
+    for index, item in enumerate(visible_copy):
+        if not isinstance(item, dict):
+            raise ContractValidationError(
+                f"visible_copy[{index}] must be an object"
+            )
+        if set(item) != _VISIBLE_COPY_ITEM_FIELDS:
+            raise ContractValidationError(
+                f"visible_copy[{index}] must contain exactly copy_id, role, "
+                "and text"
+            )
+        normalized_visible_copy.append(
+            {
+                "copy_id": _nonempty_text(item, "copy_id"),
+                "role": _nonempty_text(item, "role"),
+                "text": _nonempty_text(item, "text"),
+            }
+        )
+    return {
+        "project_id": _nonempty_text(payload, "project_id"),
+        "source_version": _artifact_ref(
+            _nonempty_text(payload, "source_version"),
+            field="source_version",
+            kind="content-blueprint",
+        ),
+        "slide_id": _nonempty_text(payload, "slide_id"),
+        "slide_order": _positive_int(payload, "slide_order"),
+        "slide_title_snapshot": _nonempty_text(
+            payload, "slide_title_snapshot"
+        ),
+        "visible_copy": copy.deepcopy(normalized_visible_copy),
+    }
 
 
 def validate_page_decision(payload: dict[str, Any]) -> dict[str, Any]:

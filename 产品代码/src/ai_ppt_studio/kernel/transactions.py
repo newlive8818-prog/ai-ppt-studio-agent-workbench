@@ -5,6 +5,8 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import os
+import tempfile
 import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -100,6 +102,7 @@ class ProjectKernel:
         expected_revision: int,
         event_type: str,
         artifact_updates: dict[str, tuple[str, dict[str, Any]]],
+        detached_artifacts: tuple[tuple[str, dict[str, Any]], ...] = (),
         artifact_removals: tuple[str, ...] = (),
         confirmation_consumptions: tuple[object, ...] = (),
         content_framework_reset: object | None = None,
@@ -108,6 +111,7 @@ class ProjectKernel:
     ) -> KernelState:
         command_fingerprint = command_fingerprint or _COMMAND_FINGERPRINT.get()
         with self._locked():
+            original_state_bytes = self.state_path.read_bytes()
             state = self.load()
             if command_id in state.processed_commands:
                 if confirmation_consumptions:
@@ -252,6 +256,32 @@ class ProjectKernel:
                 slot: self.artifacts.reference_for(kind, payload)
                 for slot, (kind, payload) in artifact_updates.items()
             }
+            if not isinstance(detached_artifacts, tuple):
+                raise ContractValidationError(
+                    "detached_artifacts must be an immutable tuple"
+                )
+            detached_definitions: list[
+                tuple[str, dict[str, Any], ArtifactReference]
+            ] = []
+            for index, definition in enumerate(detached_artifacts):
+                if (
+                    not isinstance(definition, tuple)
+                    or len(definition) != 2
+                    or not isinstance(definition[0], str)
+                    or not definition[0]
+                    or not isinstance(definition[1], dict)
+                ):
+                    raise ContractValidationError(
+                        "Each detached artifact must be a (kind, payload) tuple"
+                    )
+                kind, payload = definition
+                try:
+                    reference = self.artifacts.reference_for(kind, payload)
+                except (ArtifactReferenceError, TypeError, ValueError) as error:
+                    raise ContractValidationError(
+                        f"Detached artifact {index} is invalid"
+                    ) from error
+                detached_definitions.append((kind, payload, reference))
             for slot, reference in candidate_references.items():
                 heads[slot] = str(reference)
             binding_updates = self._confirmation_artifact_bindings(
@@ -318,22 +348,9 @@ class ProjectKernel:
                 state_updates["consumed_user_confirmations"] = consumed
             committed = replace(state, **state_updates)
 
-            for slot, (kind, payload) in artifact_updates.items():
-                persisted = self.artifacts.put(kind, payload)
-                if persisted != candidate_references[slot]:
-                    raise RuntimeError(
-                        "Persisted artifact reference differs from candidate"
-                    )
-            if ledger_payload is not None:
-                persisted_ledger = self.artifacts.put(
-                    CONFIRMATION_LEDGER_KIND,
-                    ledger_payload,
-                )
-                if persisted_ledger != ledger_reference:
-                    raise RuntimeError(
-                        "Persisted confirmation ledger reference differs "
-                        "from candidate"
-                    )
+            detached_reference_values = list(
+                dict.fromkeys(str(item[2]) for item in detached_definitions)
+            )
             event = {
                 "transaction_id": transaction_id,
                 "command_id": command_id,
@@ -347,17 +364,85 @@ class ProjectKernel:
                 "gate_evidence_refs": (
                     list(authorized_gate.evidence_refs) if authorized_gate else []
                 ),
+                "detached_artifact_refs": detached_reference_values,
                 **(
                     {"command_fingerprint": command_fingerprint}
                     if command_fingerprint
                     else {}
                 ),
             }
-            atomic_write_json(
-                self.events_root / f"r{next_revision:08d}.json", event
-            )
-            atomic_write_json(self.state_path, committed.as_dict())
+            event_path = self.events_root / f"r{next_revision:08d}.json"
+            if event_path.exists():
+                raise ContractValidationError(
+                    "Next revision event already exists"
+                )
+            persistence_entries: list[
+                tuple[str, dict[str, Any], ArtifactReference]
+            ] = [
+                (kind, payload, candidate_references[slot])
+                for slot, (kind, payload) in artifact_updates.items()
+            ]
+            persistence_entries.extend(detached_definitions)
+            if ledger_payload is not None:
+                if ledger_reference is None:
+                    raise RuntimeError("Confirmation ledger reference is missing")
+                persistence_entries.append(
+                    (
+                        CONFIRMATION_LEDGER_KIND,
+                        ledger_payload,
+                        ledger_reference,
+                    )
+                )
+            created_object_paths: list[Path] = []
+            try:
+                for kind, payload, candidate in persistence_entries:
+                    path = self.artifacts.path_for(candidate)
+                    existed = path.exists()
+                    if not existed and path not in created_object_paths:
+                        created_object_paths.append(path)
+                    persisted = self.artifacts.put(kind, payload)
+                    if persisted != candidate:
+                        raise RuntimeError(
+                            "Persisted artifact reference differs from candidate"
+                        )
+                atomic_write_json(event_path, event)
+                atomic_write_json(self.state_path, committed.as_dict())
+            except Exception:
+                event_path.unlink(missing_ok=True)
+                for path in reversed(created_object_paths):
+                    path.unlink(missing_ok=True)
+                    try:
+                        path.parent.rmdir()
+                    except OSError:
+                        pass
+                try:
+                    current_state_bytes = self.state_path.read_bytes()
+                except OSError:
+                    current_state_bytes = b""
+                if current_state_bytes != original_state_bytes:
+                    self._restore_bytes(
+                        self.state_path,
+                        original_state_bytes,
+                    )
+                raise
             return committed
+
+    @staticmethod
+    def _restore_bytes(path: Path, content: bytes) -> None:
+        """Atomically restore the byte-exact pre-transaction state file."""
+
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.", suffix=".rollback", dir=path.parent
+        )
+        temporary = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def _confirmation_consumptions(
         self, state: KernelState, heads: dict[str, str]
