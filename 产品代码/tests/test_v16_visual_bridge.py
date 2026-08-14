@@ -103,6 +103,32 @@ class V16VisualBridgeTests(unittest.TestCase):
                         }
                     )
                 self.assertEqual(tuple(content.kernel.events_root.iterdir()), events)
+            for wrong_visual_payload in (
+                {
+                    "artifact_type": "image-asset-pack",
+                    "asset_kind": "decorative",
+                },
+                {
+                    "artifact_type": "visual-review-record",
+                    "stage": "G1",
+                    "checks": [],
+                },
+            ):
+                with self.subTest(payload=wrong_visual_payload), self.assertRaises(
+                    ContractValidationError
+                ):
+                    dispatch_v16(
+                        {
+                            "operation": "commit-artifact",
+                            "project_root": str(project),
+                            "expected_revision": revision + 1,
+                            "command_id": "wrong-shared-visual-contract",
+                            "kind": "visual-contract",
+                            "task_id": task_id,
+                            "payload": wrong_visual_payload,
+                        }
+                    )
+                self.assertEqual(tuple(content.kernel.events_root.iterdir()), events)
             changed = valid_visual_brief(blueprint_ref)
             changed["design_proposition"] = "同一命令不得改写视觉命题"
             with self.assertRaises(ContractValidationError):

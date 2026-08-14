@@ -349,7 +349,9 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
                     },
                 )
             else:
-                project_commands.validate_noncontent_agent_result_kind(task, kind)
+                project_commands.validate_noncontent_agent_result_kind(
+                    task, kind, payload
+                )
                 replay = project_commands.replay_noncontent_agent_result(
                     command_id=command_id,
                     task_id=task_id,
