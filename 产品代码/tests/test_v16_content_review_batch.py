@@ -341,6 +341,51 @@ class ContentReviewBatchServiceTests(unittest.TestCase):
         ]
         return reference, resolve_payload(self.content, reference)
 
+    def withdraw_to_replacement(self) -> tuple[str, dict[str, str]]:
+        self.save_all()
+        self.save(
+            "s1",
+            "approved",
+            command_id="replace-s1-before-submission",
+        )
+        submitted_ref, _follow_up, _state = self.submit()
+        submitted = resolve_payload(self.content, submitted_ref)
+        current_old_decision_ref = submitted["decision_refs"][0]
+        current_old_decision = resolve_payload(
+            self.content, current_old_decision_ref
+        )
+        ancestor_old_decision_ref = current_old_decision[
+            "supersedes_decision_ref"
+        ]
+        context = self.review.withdrawal_context(
+            source_version=self.source_version,
+            review_batch_id=self.batch_id,
+        )
+        replacement_batch_id, state = self.review.withdraw_review_batch(
+            command_id="withdraw-for-lineage-validation",
+            expected_revision=int(context["challenge_revision"]),
+            source_version=self.source_version,
+            review_batch_id=self.batch_id,
+            reason="建立 replacement lineage 校验场景",
+            challenge_id=str(context["challenge_id"]),
+            challenge_revision=int(context["challenge_revision"]),
+            host_confirmation_assertion=signed_assertion(
+                context,
+                identity_ref="host-action://withdraw-for-lineage-validation",
+            ),
+        )
+        withdrawal_ref = state.artifact_heads[
+            "content/review-batch-withdrawal"
+        ]
+        withdrawal = resolve_payload(self.content, withdrawal_ref)
+        return replacement_batch_id, {
+            "old-decision": current_old_decision_ref,
+            "old-decision-ancestor": ancestor_old_decision_ref,
+            "old-submitted-batch": submitted_ref,
+            "superseded-lifecycle": withdrawal["superseded_batch_ref"],
+            "current-withdrawal-receipt": withdrawal_ref,
+        }
+
     def test_submission_context_reports_exact_incomplete_progress(self) -> None:
         self.save("s1", "approved")
         self.save("s2", "modify", comment="完整修改意见")
@@ -376,8 +421,6 @@ class ContentReviewBatchServiceTests(unittest.TestCase):
             context["scope_id"], f"{self.batch_id}:{self.source_version}"
         )
         self.assertEqual(context["source_version"], self.source_version)
-        self.assertEqual(context["decision_set_ref"], set_ref)
-        self.assertEqual(context["ordered_decision_refs"], ordered)
         self.assertEqual(
             context["evidence_refs"], [self.source_version, set_ref, *ordered]
         )
@@ -385,19 +428,25 @@ class ContentReviewBatchServiceTests(unittest.TestCase):
             context["challenge_revision"], self.content.kernel.load().revision
         )
         self.assertEqual(
-            context["counts"],
+            set(context),
             {
-                "approved": 1,
-                "modify": 1,
-                "evidence": 1,
-                "merge_or_delete": 1,
+                "project_id",
+                "project_root",
+                "scope_kind",
+                "scope_id",
+                "source_version",
+                "evidence_refs",
+                "challenge_id",
+                "challenge_revision",
             },
         )
-        self.assertNotIn("authoritative_slides", context)
-        self.assertNotIn("decisions_by_ref", context)
 
     def test_submit_freezes_exact_batch_and_has_no_downstream_side_effects(self) -> None:
         self.save_all()
+        _set_ref, decision_set = self.current_decision_set()
+        expected_decision_refs = [
+            row["decision_ref"] for row in decision_set["decision_refs"]
+        ]
         before = self.content.kernel.load()
         before_heads = dict(before.artifact_heads)
         context = self.review.submission_context(
@@ -422,8 +471,16 @@ class ContentReviewBatchServiceTests(unittest.TestCase):
         self.assertEqual(batch["status"], "submitted")
         self.assertEqual(batch["submitted_by"], "host-action://submit-exact")
         self.assertEqual(batch["submitted_at"], batch["confirmed_at"])
-        self.assertEqual(batch["counts"], context["counts"])
-        self.assertEqual(batch["decision_refs"], context["ordered_decision_refs"])
+        self.assertEqual(
+            batch["counts"],
+            {
+                "approved": 1,
+                "modify": 1,
+                "evidence": 1,
+                "merge_or_delete": 1,
+            },
+        )
+        self.assertEqual(batch["decision_refs"], expected_decision_refs)
         self.assertEqual(after.artifact_heads["content/blueprint"], self.source_version)
         self.assertEqual(after.gate_status, before.gate_status)
         for forbidden in (
@@ -680,6 +737,19 @@ class ContentReviewBatchServiceTests(unittest.TestCase):
             review_batch_id=self.batch_id,
         )
         self.assertEqual(
+            set(context),
+            {
+                "project_id",
+                "project_root",
+                "scope_kind",
+                "scope_id",
+                "source_version",
+                "evidence_refs",
+                "challenge_id",
+                "challenge_revision",
+            },
+        )
+        self.assertEqual(
             context["scope_kind"], "content-review-batch-withdrawal"
         )
         self.assertEqual(context["scope_id"], self.batch_id)
@@ -773,6 +843,77 @@ class ContentReviewBatchServiceTests(unittest.TestCase):
         )
         self.assertNotEqual(second_ref, batch_ref)
         self.assertEqual(follow_up, CONTENT_REVIEW_BATCH_FOLLOW_UP)
+
+    def test_replacement_context_fails_closed_when_inherited_lineage_is_corrupt(self) -> None:
+        replacement_batch_id, targets = self.withdraw_to_replacement()
+        for label, reference in targets.items():
+            path = self.content.kernel.artifacts.path_for(
+                ArtifactReference.parse(reference)
+            )
+            original = path.read_bytes()
+            path.write_text("{}", encoding="utf-8")
+            try:
+                before = self.content.kernel.load()
+                before_state_bytes = self.content.kernel.state_path.read_bytes()
+                before_objects = object_files(self.content)
+                before_events = event_files(self.content)
+                with self.subTest(label=label):
+                    with self.assertRaises(ContentWorkflowError):
+                        self.review.submission_context(
+                            source_version=self.source_version,
+                            review_batch_id=replacement_batch_id,
+                        )
+                    self.assertEqual(self.content.kernel.load(), before)
+                    self.assertEqual(
+                        self.content.kernel.state_path.read_bytes(),
+                        before_state_bytes,
+                    )
+                    self.assertEqual(object_files(self.content), before_objects)
+                    self.assertEqual(event_files(self.content), before_events)
+            finally:
+                path.write_bytes(original)
+
+    def test_replacement_submission_fails_closed_when_inherited_lineage_is_corrupt(self) -> None:
+        replacement_batch_id, targets = self.withdraw_to_replacement()
+        context = self.review.submission_context(
+            source_version=self.source_version,
+            review_batch_id=replacement_batch_id,
+        )
+        assertion = signed_assertion(
+            context,
+            identity_ref="host-action://replacement-lineage-submit",
+        )
+        for label, reference in targets.items():
+            path = self.content.kernel.artifacts.path_for(
+                ArtifactReference.parse(reference)
+            )
+            original = path.read_bytes()
+            path.write_text("{}", encoding="utf-8")
+            try:
+                before = self.content.kernel.load()
+                before_state_bytes = self.content.kernel.state_path.read_bytes()
+                before_objects = object_files(self.content)
+                before_events = event_files(self.content)
+                with self.subTest(label=label):
+                    with self.assertRaises(ContentWorkflowError):
+                        self.review.submit_review_batch(
+                            command_id=f"submit-corrupt-lineage-{label}",
+                            expected_revision=int(context["challenge_revision"]),
+                            source_version=self.source_version,
+                            review_batch_id=replacement_batch_id,
+                            challenge_id=str(context["challenge_id"]),
+                            challenge_revision=int(context["challenge_revision"]),
+                            host_confirmation_assertion=assertion,
+                        )
+                    self.assertEqual(self.content.kernel.load(), before)
+                    self.assertEqual(
+                        self.content.kernel.state_path.read_bytes(),
+                        before_state_bytes,
+                    )
+                    self.assertEqual(object_files(self.content), before_objects)
+                    self.assertEqual(event_files(self.content), before_events)
+            finally:
+                path.write_bytes(original)
 
     def test_withdrawal_exact_replay_is_idempotent_but_changed_assertion_conflicts(self) -> None:
         self.save_all()

@@ -65,6 +65,17 @@ REVIEW_BATCH_SUBMISSION_SCOPE = "content-review-batch-submission"
 REVIEW_BATCH_WITHDRAWAL_HEAD = "content/review-batch-withdrawal"
 REVIEW_BATCH_WITHDRAWAL_KIND = "content-review-batch-withdrawal"
 REVIEW_BATCH_WITHDRAWAL_SCOPE = "content-review-batch-withdrawal"
+PUBLIC_SCOPED_CONFIRMATION_FIELDS = (
+    "project_id",
+    "project_root",
+    "scope_kind",
+    "scope_id",
+    "source_version",
+    "evidence_refs",
+    "challenge_id",
+    "challenge_revision",
+)
+MAX_DECISION_LINEAGE_DEPTH = 1024
 CONTENT_REVIEW_BATCH_FOLLOW_UP = (
     "读取已冻结的内容审核批次，结合当前完整蓝图、目录框架、证据地图和跨页关系，"
     "先提出整套修改方案；在用户确认方案前，不生成 ContentChangeSet 或新蓝图。"
@@ -875,6 +886,15 @@ class ContentReviewService:
         )
         if decision_set is None:
             self._incomplete(slides, {})
+        if batch is not None:
+            self._validate_replacement_draft_lineage(
+                state=state,
+                batch_ref=batch_ref,
+                batch=batch,
+                decision_set_ref=decision_set_ref,
+                decision_set=decision_set,
+                slides=slides,
+            )
         decisions_by_ref = {
             row["decision_ref"]: self._resolve_decision(row["decision_ref"])
             for row in decision_set["decision_refs"]
@@ -926,45 +946,17 @@ class ContentReviewService:
 
     @staticmethod
     def _public_submission_context(internal: dict[str, Any]) -> dict[str, Any]:
-        fields = (
-            "project_id",
-            "project_root",
-            "scope_kind",
-            "scope_id",
-            "source_version",
-            "evidence_refs",
-            "challenge_id",
-            "challenge_revision",
-            "review_batch_id",
-            "decision_set_ref",
-            "ordered_decision_refs",
-            "page_snapshot_refs",
-            "expected_slide_count",
-            "counts",
-            "current_batch_ref",
-        )
-        return {field: copy.deepcopy(internal[field]) for field in fields}
+        return {
+            field: copy.deepcopy(internal[field])
+            for field in PUBLIC_SCOPED_CONFIRMATION_FIELDS
+        }
 
     @staticmethod
     def _public_withdrawal_context(internal: dict[str, Any]) -> dict[str, Any]:
-        fields = (
-            "project_id",
-            "project_root",
-            "scope_kind",
-            "scope_id",
-            "source_version",
-            "evidence_refs",
-            "challenge_id",
-            "challenge_revision",
-            "review_batch_id",
-            "submitted_batch_ref",
-            "decision_set_ref",
-            "ordered_decision_refs",
-            "page_snapshot_refs",
-            "expected_slide_count",
-            "counts",
-        )
-        return {field: copy.deepcopy(internal[field]) for field in fields}
+        return {
+            field: copy.deepcopy(internal[field])
+            for field in PUBLIC_SCOPED_CONFIRMATION_FIELDS
+        }
 
     def _incomplete(
         self,
@@ -1714,6 +1706,259 @@ class ContentReviewService:
                 },
             )
         return batch_ref, batch
+
+    def _validate_replacement_draft_lineage(
+        self,
+        *,
+        state: KernelState,
+        batch_ref: str,
+        batch: dict[str, Any],
+        decision_set_ref: str,
+        decision_set: dict[str, Any],
+        slides: list[dict[str, Any]],
+    ) -> None:
+        """Revalidate every immutable edge inherited by a withdrawn draft."""
+
+        try:
+            if batch["status"] != "draft":
+                raise ContractValidationError(
+                    "A replacement review batch must remain draft"
+                )
+            withdrawal_ref = state.artifact_heads.get(
+                REVIEW_BATCH_WITHDRAWAL_HEAD, ""
+            )
+            withdrawal_reference = ArtifactReference.parse(withdrawal_ref)
+            if withdrawal_reference.kind != REVIEW_BATCH_WITHDRAWAL_KIND:
+                raise ArtifactReferenceError(
+                    "Replacement draft lacks a current withdrawal receipt"
+                )
+            withdrawal_raw = self.kernel.artifacts.resolve(
+                withdrawal_reference
+            )["payload"]
+            withdrawal = validate_content_review_batch_withdrawal(
+                withdrawal_raw
+            )
+            if withdrawal != withdrawal_raw:
+                raise ContractValidationError(
+                    "Withdrawal receipt is not canonical"
+                )
+            self._validate_withdrawal_confirmation(
+                withdrawal_ref=withdrawal_ref,
+                withdrawal=withdrawal,
+                state=state,
+            )
+            if (
+                withdrawal["project_id"] != state.project_id
+                or withdrawal["source_version"] != batch["source_version"]
+                or withdrawal["replacement_review_batch_id"]
+                != batch["review_batch_id"]
+                or decision_set["project_id"] != state.project_id
+                or decision_set["source_version"] != batch["source_version"]
+                or decision_set["review_batch_id"]
+                != batch["review_batch_id"]
+                or decision_set["expected_slide_count"]
+                != batch["expected_slide_count"]
+            ):
+                raise ContractValidationError(
+                    "Replacement draft does not match its withdrawal receipt"
+                )
+
+            withdrawal_events: list[dict[str, Any]] = []
+            for revision in range(1, state.revision + 1):
+                event_path = self.kernel.events_root / f"r{revision:08d}.json"
+                event = json.loads(event_path.read_text(encoding="utf-8"))
+                if (
+                    isinstance(event, dict)
+                    and event.get("revision") == revision
+                    and event.get("event_type")
+                    == "content.review-batch-withdrawn"
+                    and isinstance(event.get("artifact_heads"), dict)
+                    and event["artifact_heads"].get(
+                        REVIEW_BATCH_WITHDRAWAL_HEAD
+                    )
+                    == withdrawal_ref
+                ):
+                    withdrawal_events.append(event)
+            if len(withdrawal_events) != 1:
+                raise ContractValidationError(
+                    "Withdrawal receipt lacks one unambiguous event"
+                )
+            withdrawal_heads = withdrawal_events[0]["artifact_heads"]
+            if (
+                withdrawal_heads.get(REVIEW_BATCH_HEAD) != batch_ref
+                or withdrawal_heads.get(PAGE_DECISION_HEAD)
+                != batch["decision_set_ref"]
+            ):
+                raise ContractValidationError(
+                    "Replacement draft differs from its withdrawal event"
+                )
+
+            submitted_ref = withdrawal["submitted_batch_ref"]
+            submitted = self._resolve_review_batch_ref(
+                submitted_ref,
+                state=state,
+                slides=slides,
+            )
+            superseded_ref = withdrawal["superseded_batch_ref"]
+            superseded = self._resolve_review_batch_ref(
+                superseded_ref,
+                state=state,
+                slides=slides,
+            )
+            validate_content_review_batch(
+                superseded,
+                prior_submitted=submitted,
+            )
+            if (
+                submitted["status"] != "submitted"
+                or superseded["status"] != "superseded"
+                or superseded["supersedes_ref"] != submitted_ref
+                or submitted["decision_refs"] != superseded["decision_refs"]
+                or withdrawal["evidence_refs"]
+                != [
+                    submitted["source_version"],
+                    submitted_ref,
+                    submitted["decision_set_ref"],
+                    *submitted["decision_refs"],
+                ]
+            ):
+                raise ContractValidationError(
+                    "Submitted and superseded withdrawal lineage is invalid"
+                )
+
+            original_set = self._resolve_decision_set_reference(
+                batch["decision_set_ref"]
+            )
+            if (
+                original_set["project_id"] != state.project_id
+                or original_set["source_version"] != batch["source_version"]
+                or original_set["review_batch_id"]
+                != batch["review_batch_id"]
+                or [
+                    row["decision_ref"]
+                    for row in original_set["decision_refs"]
+                ]
+                != batch["decision_refs"]
+                or len(decision_set["decision_refs"])
+                != len(batch["decision_refs"])
+            ):
+                raise ContractValidationError(
+                    "Replacement draft decision-set lineage is invalid"
+                )
+
+            for index, (
+                slide,
+                old_ref,
+                clone_ref,
+                current_row,
+            ) in enumerate(
+                zip(
+                    slides,
+                    submitted["decision_refs"],
+                    batch["decision_refs"],
+                    decision_set["decision_refs"],
+                ),
+                start=1,
+            ):
+                expected_identity = {
+                    "project_id": state.project_id,
+                    "source_version": batch["source_version"],
+                    "slide_id": slide["slide_id"],
+                    "slide_order": index,
+                }
+                old_decision = self._resolve_decision(old_ref)
+                clone = self._resolve_decision(clone_ref)
+                if (
+                    any(
+                        old_decision.get(field) != value
+                        or clone.get(field) != value
+                        for field, value in expected_identity.items()
+                    )
+                    or clone["review_batch_id"] != batch["review_batch_id"]
+                    or clone["supersedes_decision_ref"] != old_ref
+                    or current_row["slide_id"] != slide["slide_id"]
+                    or current_row["slide_order"] != index
+                    or any(
+                        clone[field] != old_decision[field]
+                        for field in (
+                            "slide_title_snapshot",
+                            "visible_copy_snapshot_ref",
+                            "decision",
+                            "comment",
+                            "completed",
+                        )
+                    )
+                ):
+                    raise ContractValidationError(
+                        "A replacement clone differs from its submitted decision"
+                    )
+                self._validate_decision_lineage(
+                    start_ref=old_ref,
+                    expected_identity=expected_identity,
+                )
+                self._validate_decision_lineage(
+                    start_ref=current_row["decision_ref"],
+                    expected_identity={
+                        **expected_identity,
+                        "review_batch_id": batch["review_batch_id"],
+                    },
+                    required_ancestor_ref=clone_ref,
+                )
+        except ContentWorkflowError:
+            raise
+        except (
+            ArtifactReferenceError,
+            ConfirmationTransactionError,
+            ContractValidationError,
+            KeyError,
+            OSError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as error:
+            self._conflict(
+                "The replacement review-batch lineage cannot be resolved safely",
+                {
+                    "batch_ref": batch_ref,
+                    "decision_set_ref": decision_set_ref,
+                    "reason": str(error),
+                },
+            )
+
+    def _validate_decision_lineage(
+        self,
+        *,
+        start_ref: str,
+        expected_identity: dict[str, Any],
+        required_ancestor_ref: str = "",
+    ) -> None:
+        reference = start_ref
+        seen: set[str] = set()
+        for _depth in range(MAX_DECISION_LINEAGE_DEPTH):
+            if not reference or reference in seen:
+                break
+            seen.add(reference)
+            decision = self._resolve_decision(reference)
+            if any(
+                decision.get(field) != value
+                for field, value in expected_identity.items()
+            ):
+                raise ContractValidationError(
+                    "A page-decision lineage identity is inconsistent"
+                )
+            if required_ancestor_ref and reference == required_ancestor_ref:
+                return
+            reference = decision["supersedes_decision_ref"]
+        if reference in seen:
+            raise ContractValidationError("Page-decision lineage is cyclic")
+        if reference:
+            raise ContractValidationError(
+                "Page-decision lineage exceeds the maximum depth"
+            )
+        if required_ancestor_ref:
+            raise ContractValidationError(
+                "Page-decision lineage lacks the required inherited clone"
+            )
 
     def _batch_source_hint(self, batch_ref: str) -> str:
         try:
