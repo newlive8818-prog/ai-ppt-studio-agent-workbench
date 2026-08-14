@@ -740,6 +740,8 @@ class ContentReviewService:
             ],
         }
         matches: list[dict[str, Any]] = []
+        transaction_ids: set[str] = set()
+        final_transaction_id = ""
         for revision in range(1, state.revision + 1):
             path = self.kernel.events_root / f"r{revision:08d}.json"
             event = json.loads(path.read_text(encoding="utf-8"))
@@ -748,23 +750,39 @@ class ContentReviewService:
                     "Project event chronology is incomplete or corrupt"
                 )
             command_id = event.get("command_id")
+            transaction_id = self._canonical_uuid(
+                event.get("transaction_id"),
+                "event transaction_id",
+            )
             if (
                 not isinstance(command_id, str)
                 or not command_id
                 or state.processed_commands.get(command_id) != revision
-                or not isinstance(event.get("transaction_id"), str)
-                or not event.get("transaction_id")
                 or not isinstance(event.get("artifact_heads"), dict)
             ):
                 raise ContractValidationError(
                     "Project event receipt is incomplete or corrupt"
                 )
+            if transaction_id in transaction_ids:
+                raise ContractValidationError(
+                    "Project event transaction identities are not unique"
+                )
+            transaction_ids.add(transaction_id)
+            final_transaction_id = transaction_id
             if (
                 event.get("event_type") == "content.accepted-internally"
                 and event["artifact_heads"].get(BLUEPRINT_HEAD)
                 == source_version
             ):
                 matches.append(event)
+        state_transaction_id = self._canonical_uuid(
+            state.last_transaction_id,
+            "state last_transaction_id",
+        )
+        if final_transaction_id != state_transaction_id:
+            raise ContractValidationError(
+                "Final event transaction does not match project state"
+            )
         if len(matches) != 1:
             raise ContractValidationError(
                 "ContentBlueprint lacks one unambiguous publication receipt"
@@ -845,6 +863,21 @@ class ContentReviewService:
         if parsed.tzinfo is None or parsed.utcoffset() is None:
             raise ContractValidationError(f"{field} must include a timezone")
         return text
+
+    @staticmethod
+    def _canonical_uuid(value: object, field: str) -> str:
+        if not isinstance(value, str) or not value:
+            raise ContractValidationError(f"{field} must be a canonical UUID")
+        try:
+            parsed = uuid.UUID(value)
+        except (AttributeError, ValueError) as error:
+            raise ContractValidationError(
+                f"{field} must be a canonical UUID"
+            ) from error
+        canonical = str(parsed)
+        if value != canonical:
+            raise ContractValidationError(f"{field} must be a canonical UUID")
+        return canonical
 
     def _authoritative_slides(
         self, blueprint: dict[str, Any]

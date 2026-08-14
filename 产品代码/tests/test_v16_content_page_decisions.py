@@ -954,6 +954,82 @@ class ContentReviewServiceTests(unittest.TestCase):
                     before_events,
                 )
 
+    def test_transaction_chronology_tampering_fails_closed(self) -> None:
+        for failure_mode in (
+            "not-a-uuid",
+            "noncanonical-uuid",
+            "duplicate-uuid",
+            "final-state-mismatch",
+        ):
+            with self.subTest(failure_mode=failure_mode), tempfile.TemporaryDirectory() as temp:
+                content = ContentService.initialize(
+                    Path(temp), project_id=f"transaction-{failure_mode}"
+                )
+                source, _blueprint = accept_blueprint(content, slide_count=1)
+                event_paths = sorted(content.kernel.events_root.glob("r*.json"))
+                publication_path = next(
+                    path
+                    for path in event_paths
+                    if json.loads(path.read_text(encoding="utf-8"))[
+                        "event_type"
+                    ]
+                    == "content.accepted-internally"
+                )
+                publication = json.loads(
+                    publication_path.read_text(encoding="utf-8")
+                )
+                if failure_mode == "not-a-uuid":
+                    publication["transaction_id"] = "not-a-uuid"
+                elif failure_mode == "noncanonical-uuid":
+                    publication["transaction_id"] = (
+                        "{11111111-1111-4111-8111-111111111111}"
+                    )
+                elif failure_mode == "duplicate-uuid":
+                    publication["transaction_id"] = json.loads(
+                        event_paths[0].read_text(encoding="utf-8")
+                    )["transaction_id"]
+                else:
+                    publication["transaction_id"] = (
+                        "11111111-1111-4111-8111-111111111111"
+                    )
+                publication_path.write_text(
+                    json.dumps(publication, ensure_ascii=False, sort_keys=True),
+                    encoding="utf-8",
+                )
+
+                before = content.kernel.load()
+                before_state = content.kernel.state_path.read_bytes()
+                before_objects = object_files(content)
+                before_events = {
+                    path.name: path.read_bytes()
+                    for path in content.kernel.events_root.glob("r*.json")
+                }
+                with self.assertRaises(ContentWorkflowError) as caught:
+                    ContentReviewService(content.kernel).save_page_decision(
+                        command_id=f"reject-transaction-{failure_mode}",
+                        expected_revision=before.revision,
+                        source_version=source,
+                        review_batch_id=f"transaction-batch-{failure_mode}",
+                        slide_id="s1",
+                        decision="approved",
+                        comment="",
+                    )
+                self.assertEqual(
+                    caught.exception.code, "CONTENT_REVIEW_CONFLICT"
+                )
+                self.assertEqual(content.kernel.load(), before)
+                self.assertEqual(
+                    content.kernel.state_path.read_bytes(), before_state
+                )
+                self.assertEqual(object_files(content), before_objects)
+                self.assertEqual(
+                    {
+                        path.name: path.read_bytes()
+                        for path in content.kernel.events_root.glob("r*.json")
+                    },
+                    before_events,
+                )
+
     def test_current_blueprint_chain_mismatches_are_zero_write(self) -> None:
         def bad_acceptance(blueprint: dict) -> dict:
             return {
