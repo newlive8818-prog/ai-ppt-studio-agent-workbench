@@ -1,5 +1,7 @@
 # 《当 AI 开始负责交付》PPTX Implementation Plan
 
+> **Status: superseded on 2026-08-17.** 本计划的内容 ID、19+8 物理顺序、事实边界、Codex Presentations 路线、artifact marker 和 QA 约束继续有效；“两张氛围图”和逐页弱视觉构图已经被用户批准的方案 A 取代。后续只执行 [增强视觉实施计划](./2026-08-17-ai-native-product-friends-sharing-deck-visual-upgrade.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 按用户已经确认的 `19 页主分享 + 8 页附录`，制作一份互联网化、轻科技、简单、轻松、适合朋友分享且原生可编辑的 27 页 PowerPoint；主分享在物理第 19 页完成收尾，附录 A1–A8 只用于讨论深挖。
