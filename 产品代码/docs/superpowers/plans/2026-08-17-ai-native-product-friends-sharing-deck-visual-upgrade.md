@@ -142,20 +142,20 @@ This is a source ledger, not acceptance evidence.
 - Read: `/Users/defei/Library/Application Support/Codex API Client/codex-home/skills/.system/imagegen/scripts/image_gen.py`
 - Create: `/private/tmp/codex-ai-native-friends-deck-20260817-v4/cover-prompt.txt`
 
-- [ ] **Step 1: 只检查环境变量存在性**
+- [ ] **Step 1: 解析并验证桌面 CRS 认证助手，不读取凭据**
 
 Run:
 
 ```bash
-if [ -n "${CRS_KEY:-}" ]; then
-  echo 'CRS_KEY=set'
-else
-  echo 'BLOCKED: CRS_KEY is not set'
+CRS_AUTH_HELPER="$($RUNTIME_PYTHON -c 'import tomllib; p="/Users/defei/Library/Application Support/Codex API Client/codex-home/config.toml"; d=tomllib.load(open(p,"rb")); print(d["model_providers"]["crs"]["auth"]["command"])')"
+if [ ! -x "$CRS_AUTH_HELPER" ]; then
+  echo 'BLOCKED: configured CRS auth helper is not executable'
   exit 12
 fi
+echo 'CRS auth helper=available'
 ```
 
-Expected: 只输出 `CRS_KEY=set`；不得执行 `env`、`set`、`printenv CRS_KEY` 或任何会打印值的命令。
+Expected: 只输出 `CRS auth helper=available`；不得直接执行助手以检查返回值，不得执行 `env`、`set`、`printenv` 或任何会打印凭据的命令。现有 `CRS_KEY` 在本次真实请求中返回过 `401 INVALID_API_KEY`，只作为失败证据记录，不再作为执行路线或重试。
 
 - [ ] **Step 2: 从当前桌面任务配置解析非秘密 Base URL**
 
@@ -171,16 +171,28 @@ esac
 
 Expected: 只确认格式，不修改普通终端或桌面配置。若当前桌面配置不含 `model_providers.crs.base_url`，停止并报告，不硬编码历史 endpoint。普通终端配置继续保持独立，不因本任务改写 provider。
 
-- [ ] **Step 3: 验证 Imagegen CLI 依赖**
+- [ ] **Step 3: 在 v4 临时目录验证或隔离补齐 Imagegen CLI 依赖**
 
 Run:
 
 ```bash
-$RUNTIME_PYTHON -c 'import openai; print("openai-package=ok")'
-$RUNTIME_PYTHON '/Users/defei/Library/Application Support/Codex API Client/codex-home/skills/.system/imagegen/scripts/image_gen.py' --help >/dev/null
+IMAGEGEN_PYTHON="$RUNTIME_PYTHON"
+if ! "$IMAGEGEN_PYTHON" -c 'import openai' 2>/dev/null; then
+  UV_CACHE_DIR='/private/tmp/codex-ai-native-friends-deck-20260817-v4/.uv-cache' \
+    /Users/defei/.local/bin/uv venv \
+    --python "$RUNTIME_PYTHON" \
+    '/private/tmp/codex-ai-native-friends-deck-20260817-v4/.imagegen-venv'
+  UV_CACHE_DIR='/private/tmp/codex-ai-native-friends-deck-20260817-v4/.uv-cache' \
+    /Users/defei/.local/bin/uv pip install \
+    --python '/private/tmp/codex-ai-native-friends-deck-20260817-v4/.imagegen-venv/bin/python' \
+    openai
+  IMAGEGEN_PYTHON='/private/tmp/codex-ai-native-friends-deck-20260817-v4/.imagegen-venv/bin/python'
+fi
+"$IMAGEGEN_PYTHON" -c 'import openai; print("openai-package=ok")'
+"$IMAGEGEN_PYTHON" '/Users/defei/Library/Application Support/Codex API Client/codex-home/skills/.system/imagegen/scripts/image_gen.py' --help >/dev/null
 ```
 
-Expected: 两条命令 exit 0。不安装新包；缺失即报告能力阻断。
+Expected: 两条验证命令 exit 0。缺失依赖只安装到 v4 临时 venv；不得修改 bundled runtime、系统 Python、项目依赖或 Imagegen 脚本。包安装需要单独的网络批准。
 
 - [ ] **Step 4: 用 `apply_patch` 写封面最终提示词**
 
@@ -206,10 +218,14 @@ Run as a networked command using the explicitly approved CRS route:
 
 ```bash
 CRS_IMAGE_BASE_URL="$($RUNTIME_PYTHON -c 'import tomllib; p="/Users/defei/Library/Application Support/Codex API Client/codex-home/config.toml"; d=tomllib.load(open(p,"rb")); print(d["model_providers"]["crs"]["base_url"])')"
+CRS_AUTH_HELPER="$($RUNTIME_PYTHON -c 'import tomllib; p="/Users/defei/Library/Application Support/Codex API Client/codex-home/config.toml"; d=tomllib.load(open(p,"rb")); print(d["model_providers"]["crs"]["auth"]["command"])')"
+IMAGEGEN_PYTHON='/private/tmp/codex-ai-native-friends-deck-20260817-v4/.imagegen-venv/bin/python'
+if [ ! -x "$IMAGEGEN_PYTHON" ]; then IMAGEGEN_PYTHON="$RUNTIME_PYTHON"; fi
+CRS_IMAGE_TOKEN="$("$CRS_AUTH_HELPER")"
 env \
-  OPENAI_API_KEY="$CRS_KEY" \
+  OPENAI_API_KEY="$CRS_IMAGE_TOKEN" \
   OPENAI_BASE_URL="$CRS_IMAGE_BASE_URL" \
-  "$RUNTIME_PYTHON" \
+  "$IMAGEGEN_PYTHON" \
   '/Users/defei/Library/Application Support/Codex API Client/codex-home/skills/.system/imagegen/scripts/image_gen.py' \
   generate \
   --model gpt-image-2 \
@@ -219,7 +235,7 @@ env \
   --out '/private/tmp/codex-ai-native-friends-deck-20260817-v4/assets/candidates/cover-ai-collaboration-v1.png'
 ```
 
-Expected: 只向当前 CRS Base URL 发送请求，生成非空 PNG。若返回 401、403、404、模型不存在或 endpoint 不支持，立即停止；不得切到官方通道、`gpt-image-1.5` 或其他供应商。
+Expected: 只向当前 CRS Base URL 发送请求，生成非空 PNG。认证助手的短期 token 只通过同一条命令的环境变量注入，不打印、不持久化、不写入账本。若返回 401、403、404、模型不存在或 endpoint 不支持，立即停止；不得切到官方通道、`gpt-image-1.5`、`CRS_KEY` 或其他供应商。
 
 - [ ] **Step 6: 全尺寸检查封面候选**
 
@@ -262,10 +278,14 @@ Run:
 
 ```bash
 CRS_IMAGE_BASE_URL="$($RUNTIME_PYTHON -c 'import tomllib; p="/Users/defei/Library/Application Support/Codex API Client/codex-home/config.toml"; d=tomllib.load(open(p,"rb")); print(d["model_providers"]["crs"]["base_url"])')"
+CRS_AUTH_HELPER="$($RUNTIME_PYTHON -c 'import tomllib; p="/Users/defei/Library/Application Support/Codex API Client/codex-home/config.toml"; d=tomllib.load(open(p,"rb")); print(d["model_providers"]["crs"]["auth"]["command"])')"
+IMAGEGEN_PYTHON='/private/tmp/codex-ai-native-friends-deck-20260817-v4/.imagegen-venv/bin/python'
+if [ ! -x "$IMAGEGEN_PYTHON" ]; then IMAGEGEN_PYTHON="$RUNTIME_PYTHON"; fi
+CRS_IMAGE_TOKEN="$("$CRS_AUTH_HELPER")"
 env \
-  OPENAI_API_KEY="$CRS_KEY" \
+  OPENAI_API_KEY="$CRS_IMAGE_TOKEN" \
   OPENAI_BASE_URL="$CRS_IMAGE_BASE_URL" \
-  "$RUNTIME_PYTHON" \
+  "$IMAGEGEN_PYTHON" \
   '/Users/defei/Library/Application Support/Codex API Client/codex-home/skills/.system/imagegen/scripts/image_gen.py' \
   generate-batch \
   --input '/private/tmp/codex-ai-native-friends-deck-20260817-v4/image2-prompts.jsonl' \
@@ -273,7 +293,7 @@ env \
   --concurrency 3
 ```
 
-Expected: 六个语义文件全部非空；不使用 `n` 生成不同任务；网络仅发往当前 CRS Base URL。
+Expected: 六个语义文件全部非空；不使用 `n` 生成不同任务；网络仅发往当前 CRS Base URL；认证助手 token 不打印、不持久化。失败不回退 `CRS_KEY` 或官方通道。
 
 - [ ] **Step 3: 创建七图素材 montage**
 
@@ -1056,7 +1076,7 @@ Expected: 两个 SHA-256 完全相同。除用户另行要求，不把二进制 
 ## Plan self-review
 
 - **Spec coverage:** 方案 A、七张 Image 2、CRS 路由、页面家族、19+8 顺序、事实边界和原生可编辑要求均有对应任务。
-- **CRS boundary:** Base URL 从当前桌面任务的 CRS provider 配置读取；普通终端配置保持独立；只检查 `CRS_KEY` 是否存在；命令不打印、持久化或记录密钥；失败不回退官方通道。
+- **CRS boundary:** Base URL 与认证助手路径均从当前桌面任务的 CRS provider 配置读取；普通终端配置保持独立；真实请求使用认证助手生成的短期 token 并仅在单条命令中注入；已失败的 `CRS_KEY` 不再重试；命令不打印、持久化或记录凭据；失败不回退官方通道。
 - **Image 2 boundary:** 七个不同任务使用七个独立 job；生成图不包含文字或语义流程；每张只使用一次并全尺寸检查。
 - **Visual upgrade:** v4 不复用 v3 builder；禁止 `addAmbient`、`addFlowNode` 和默认卡片 helper；主要页面轮廓逐页明确。
 - **Native editability:** 责任、流程、Gate、架构、表格和文字由 Artifact Tool 原生对象表达；08 原型与七张生成图是可替换位图。
