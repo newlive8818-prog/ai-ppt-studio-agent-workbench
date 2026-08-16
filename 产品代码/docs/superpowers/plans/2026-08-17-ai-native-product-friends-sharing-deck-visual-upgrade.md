@@ -138,7 +138,7 @@ This is a source ledger, not acceptance evidence.
 
 **Files:**
 
-- Read: `/Users/defei/.codex/config.toml`
+- Read: `/Users/defei/Library/Application Support/Codex API Client/codex-home/config.toml`
 - Read: `/Users/defei/Library/Application Support/Codex API Client/codex-home/skills/.system/imagegen/scripts/image_gen.py`
 - Create: `/private/tmp/codex-ai-native-friends-deck-20260817-v4/cover-prompt.txt`
 
@@ -157,19 +157,19 @@ fi
 
 Expected: 只输出 `CRS_KEY=set`；不得执行 `env`、`set`、`printenv CRS_KEY` 或任何会打印值的命令。
 
-- [ ] **Step 2: 从普通终端配置解析非秘密 Base URL**
+- [ ] **Step 2: 从当前桌面任务配置解析非秘密 Base URL**
 
 Run with the current bundled Python:
 
 ```bash
-CRS_IMAGE_BASE_URL="$($RUNTIME_PYTHON -c 'import tomllib; p="/Users/defei/.codex/config.toml"; d=tomllib.load(open(p,"rb")); print(d["model_providers"]["crs"]["base_url"])')"
+CRS_IMAGE_BASE_URL="$($RUNTIME_PYTHON -c 'import tomllib; p="/Users/defei/Library/Application Support/Codex API Client/codex-home/config.toml"; d=tomllib.load(open(p,"rb")); print(d["model_providers"]["crs"]["base_url"])')"
 case "$CRS_IMAGE_BASE_URL" in
   https://*) echo 'CRS base URL format=ok' ;;
   *) echo 'BLOCKED: invalid CRS base URL'; exit 13 ;;
 esac
 ```
 
-Expected: 只确认格式，不修改终端或桌面配置。若当前配置不含 `model_providers.crs.base_url`，停止并报告，不硬编码历史 endpoint。
+Expected: 只确认格式，不修改普通终端或桌面配置。若当前桌面配置不含 `model_providers.crs.base_url`，停止并报告，不硬编码历史 endpoint。普通终端配置继续保持独立，不因本任务改写 provider。
 
 - [ ] **Step 3: 验证 Imagegen CLI 依赖**
 
@@ -205,7 +205,7 @@ Avoid: robot, humanoid face, hands, handshake, brain, circuit board, binary digi
 Run as a networked command using the explicitly approved CRS route:
 
 ```bash
-CRS_IMAGE_BASE_URL="$($RUNTIME_PYTHON -c 'import tomllib; p="/Users/defei/.codex/config.toml"; d=tomllib.load(open(p,"rb")); print(d["model_providers"]["crs"]["base_url"])')"
+CRS_IMAGE_BASE_URL="$($RUNTIME_PYTHON -c 'import tomllib; p="/Users/defei/Library/Application Support/Codex API Client/codex-home/config.toml"; d=tomllib.load(open(p,"rb")); print(d["model_providers"]["crs"]["base_url"])')"
 env \
   OPENAI_API_KEY="$CRS_KEY" \
   OPENAI_BASE_URL="$CRS_IMAGE_BASE_URL" \
@@ -261,7 +261,7 @@ Create one JSON object per line with these exact jobs:
 Run:
 
 ```bash
-CRS_IMAGE_BASE_URL="$($RUNTIME_PYTHON -c 'import tomllib; p="/Users/defei/.codex/config.toml"; d=tomllib.load(open(p,"rb")); print(d["model_providers"]["crs"]["base_url"])')"
+CRS_IMAGE_BASE_URL="$($RUNTIME_PYTHON -c 'import tomllib; p="/Users/defei/Library/Application Support/Codex API Client/codex-home/config.toml"; d=tomllib.load(open(p,"rb")); print(d["model_providers"]["crs"]["base_url"])')"
 env \
   OPENAI_API_KEY="$CRS_KEY" \
   OPENAI_BASE_URL="$CRS_IMAGE_BASE_URL" \
@@ -1056,7 +1056,7 @@ Expected: 两个 SHA-256 完全相同。除用户另行要求，不把二进制 
 ## Plan self-review
 
 - **Spec coverage:** 方案 A、七张 Image 2、CRS 路由、页面家族、19+8 顺序、事实边界和原生可编辑要求均有对应任务。
-- **CRS boundary:** Base URL 从当前终端配置读取；只检查 `CRS_KEY` 是否存在；命令不打印、持久化或记录密钥；失败不回退官方通道。
+- **CRS boundary:** Base URL 从当前桌面任务的 CRS provider 配置读取；普通终端配置保持独立；只检查 `CRS_KEY` 是否存在；命令不打印、持久化或记录密钥；失败不回退官方通道。
 - **Image 2 boundary:** 七个不同任务使用七个独立 job；生成图不包含文字或语义流程；每张只使用一次并全尺寸检查。
 - **Visual upgrade:** v4 不复用 v3 builder；禁止 `addAmbient`、`addFlowNode` 和默认卡片 helper；主要页面轮廓逐页明确。
 - **Native editability:** 责任、流程、Gate、架构、表格和文字由 Artifact Tool 原生对象表达；08 原型与七张生成图是可替换位图。
