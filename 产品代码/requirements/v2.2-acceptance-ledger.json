@@ -1312,11 +1312,65 @@
         "runtime-evidence",
         "viewport-evidence"
       ],
+      "requirement_id": "UI-ACC-CONTENT-011",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "四个判断无需 hover 即可识别为按钮，默认态边界清楚；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-012",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "选中态同时使用边框、背景、字重和图形指示，不只依赖颜色；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-013",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "判断按钮最小高度 42 CSS px，窄于 380 CSS px 时使用 2×2 且标签不换行；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
       "requirement_id": "UI-ACC-CONTENT-005",
       "source_file": "03-UI设计与交互规范-v1.0.md",
       "source_section": "内容审核",
       "status": "unproven",
-      "text": "非 approved 意见必填；"
+      "text": "非 approved 意见必填并在当前页就地输入；"
     },
     {
       "missing_evidence": [

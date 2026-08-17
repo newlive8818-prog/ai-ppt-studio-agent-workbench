@@ -65,7 +65,8 @@ class V16SupportScriptContractTests(unittest.TestCase):
             "content-review",
             "visual-review",
             "read-only-evidence-layer",
-            "realHostEvidence: false",
+            "LOCAL_PREVIEW_EVIDENCE",
+            "previewEvidence: { ...LOCAL_PREVIEW_EVIDENCE }",
             "rawScreenshot",
             "expandedEvidenceScreenshot",
             "disclaimer: LOCAL_PREVIEW_DISCLAIMER",
@@ -77,6 +78,12 @@ class V16SupportScriptContractTests(unittest.TestCase):
         evidence = (ROOT / "scripts" / "v22-ui-acceptance-evidence.mjs").read_text(
             encoding="utf-8"
         )
+        for value in (
+            'evidenceScope: "local-development-preview"',
+            "proofEligible: false",
+            "realHostEvidence: false",
+        ):
+            self.assertIn(value, evidence)
         self.assertIn("Not G3 or user acceptance proof", evidence)
         self.assertNotIn("Not G3 or user acceptance proof", body)
         for obsolete in (
