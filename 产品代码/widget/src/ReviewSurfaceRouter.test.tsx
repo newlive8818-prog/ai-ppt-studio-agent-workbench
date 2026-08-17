@@ -59,7 +59,12 @@ function visualSlideContract(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function visualReviewSurface(): VisualReviewSurfaceData {
+function visualReviewSurface(anchorCount = 3): VisualReviewSurfaceData {
+  const anchors = Array.from({ length: anchorCount }, (_, index) => ({
+    slide_id: `S${String(index + 1).padStart(2, "0")}`,
+    current_asset_ref: `review-assets/anchors/S${String(index + 1).padStart(2, "0")}-current.png`,
+    previous_asset_ref: "",
+  }));
   return {
     surface: "review",
     selectedProjectRoot: "/managed/project",
@@ -93,17 +98,17 @@ function visualReviewSurface(): VisualReviewSurfaceData {
       deck_design_system_ref: "artifact://deck-design-system/" + "b".repeat(64),
       deck_design_system: {},
       anchor_slide_set_ref: "artifact://anchor-slide-set/" + "c".repeat(64),
-      anchors: [],
+      anchors,
       anchor_identity: {
         visual_contract_set_ref: "artifact://visual-contract-set/" + "9".repeat(64),
-        slide_ids: [],
+        slide_ids: anchors.map((anchor) => anchor.slide_id),
         selection_reason: "覆盖章节、证据和方案页面家族",
         native_first_frozen: true,
         native_first_pptx_ref: "artifact://native-pptx/" + "d".repeat(64),
         pptx_sha256: "e".repeat(64),
         editability_evidence_refs: ["artifact://editability-evidence/" + "f".repeat(64)],
         preflight_render_refs: ["artifact://preflight-render/" + "1".repeat(64)],
-        render_assets: [],
+        render_assets: anchors.map((anchor) => ({ ...anchor })),
       },
       slide_visual_contracts: [visualSlideContract()],
       anchor_feedback_batch_ref: null,
@@ -117,7 +122,36 @@ function visualReviewSurface(): VisualReviewSurfaceData {
   };
 }
 
-function contentReviewSurface(): ContentReviewSurfaceData {
+function contentSlide(slideId: string, order: number, sectionId: string) {
+  return {
+    slide_id: slideId,
+    order,
+    section_id: sectionId,
+    page_task: `页面任务 ${order}`,
+    reading_question: `阅读问题 ${order}`,
+    neutral_title: `中立标题 ${order}`,
+    visible_copy_blocks: [],
+    identity_labels: ["方案建议"],
+    evidence_bindings: [],
+    material_views: [],
+    analysis_or_proposal_blocks: [],
+    solution_mapping_refs: [],
+    previous_relation: "",
+    next_relation: "",
+    speaker_notes: "",
+    reading_quality: {
+      independently_readable: true,
+      information_density: "medium",
+      review_note: "",
+    },
+    material_mode: "proposal-led" as const,
+  };
+}
+
+function contentReviewSurface(
+  slides: ReturnType<typeof contentSlide>[] = [],
+): ContentReviewSurfaceData {
+  const sectionFlow = [...new Set(slides.map((slide) => slide.section_id))];
   return {
     surface: "review",
     selectedProjectRoot: "/managed/project",
@@ -149,13 +183,13 @@ function contentReviewSurface(): ContentReviewSurfaceData {
       reading_blueprint_ref:
         "artifact://reading-deck-blueprint/" + "a".repeat(64),
       material_mode: "proposal-led",
-      section_flow: ["开篇"],
-      slides: [],
+      section_flow: sectionFlow.length ? sectionFlow : ["开篇"],
+      slides,
       decisions: [],
       progress: {
         completed: 0,
-        total: 0,
-        remaining: 0,
+        total: slides.length,
+        remaining: slides.length,
         unsaved: 0,
       },
       batch: null,
@@ -240,6 +274,43 @@ describe("on-demand professional-review routing", () => {
 
     expect(screen.getByRole("tab", { name: "3 页锚点成果" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it.each([2, 4])("rejects a visual projection with %i anchors", (anchorCount) => {
+    const visual = visualReviewSurface(anchorCount);
+
+    render(<ReviewSurfaceRouter data={visual} bridge={bridge} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/审核数据无效.*重新打开/);
+    expect(screen.queryByRole("tab", { name: "3 页锚点成果" })).not.toBeInTheDocument();
+  });
+
+  it("rejects duplicate content slide IDs", () => {
+    const content = contentReviewSurface([
+      contentSlide("S01", 1, "开篇"),
+      contentSlide("S01", 2, "开篇"),
+    ]);
+
+    render(<ReviewSurfaceRouter data={content} bridge={bridge} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/审核数据无效.*重新打开/);
+  });
+
+  it.each([
+    ["non-consecutive slide order", [contentSlide("S01", 2, "开篇")], ["开篇"]],
+    ["unknown slide section", [contentSlide("S01", 1, "未登记章节")], ["开篇"]],
+    ["section order regression", [
+      contentSlide("S01", 1, "第二章"),
+      contentSlide("S02", 2, "第一章"),
+    ], ["第一章", "第二章"]],
+    ["duplicate section flow", [contentSlide("S01", 1, "开篇")], ["开篇", "开篇"]],
+  ])("rejects content projection with %s", (_label, slides, sectionFlow) => {
+    const content = contentReviewSurface(slides);
+    content.review.section_flow = sectionFlow;
+
+    render(<ReviewSurfaceRouter data={content} bridge={bridge} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/审核数据无效.*重新打开/);
   });
 
   it.each([

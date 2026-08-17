@@ -292,6 +292,26 @@ function validateProgress(value: unknown): boolean {
     && completed + remaining === total;
 }
 
+function validateContentDeckStructure(sectionFlow: unknown, slides: unknown): boolean {
+  if (!isStringArray(sectionFlow) || !Array.isArray(slides)) return false;
+  const sectionOrder = new Map<string, number>();
+  for (const [index, sectionId] of sectionFlow.entries()) {
+    if (sectionOrder.has(sectionId)) return false;
+    sectionOrder.set(sectionId, index);
+  }
+  const slideIds = new Set<string>();
+  let previousSectionIndex = -1;
+  for (const [index, slide] of slides.entries()) {
+    if (!isPlainRecord(slide) || !isText(slide.slide_id) || slideIds.has(slide.slide_id)) return false;
+    if (slide.order !== index + 1 || !isText(slide.section_id)) return false;
+    const sectionIndex = sectionOrder.get(slide.section_id);
+    if (sectionIndex === undefined || sectionIndex < previousSectionIndex) return false;
+    slideIds.add(slide.slide_id);
+    previousSectionIndex = sectionIndex;
+  }
+  return true;
+}
+
 function validateContentProjection(value: unknown, expectedRevision?: number): ContentReviewProjection | null {
   if (!hasExactDataFields(value, contentFields)) return null;
   if (
@@ -302,8 +322,9 @@ function validateContentProjection(value: unknown, expectedRevision?: number): C
     || (expectedRevision !== undefined && value.authoritative_revision !== expectedRevision)
     || !isArtifactReference(value.reading_blueprint_ref, "reading-deck-blueprint")
     || !["material-backed", "mixed-evidence", "proposal-led"].includes(String(value.material_mode))
-    || !isStringArray(value.section_flow, false)
-    || !Array.isArray(value.slides) || !value.slides.every(validateContentSlide)
+    || !Array.isArray(value.slides)
+    || !validateContentDeckStructure(value.section_flow, value.slides)
+    || !value.slides.every(validateContentSlide)
     || !Array.isArray(value.decisions) || !value.decisions.every((item) => validateContentDecision(item, value))
     || !validateProgress(value.progress)
     || (value.batch !== null && !isPlainRecord(value.batch))
@@ -324,7 +345,7 @@ function validateContentProjection(value: unknown, expectedRevision?: number): C
 }
 
 function validateAnchors(value: unknown): value is Array<{ slide_id: string; current_asset_ref: string; previous_asset_ref: string }> {
-  if (!Array.isArray(value)) return false;
+  if (!Array.isArray(value) || value.length !== 3) return false;
   const ids = new Set<string>();
   return value.every((anchor) => {
     if (!hasExactDataFields(anchor, anchorFields)

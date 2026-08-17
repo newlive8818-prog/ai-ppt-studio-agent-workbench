@@ -51,7 +51,7 @@ function contentReviewProjection(materialAssetRef = "") {
     authoritative_revision: 7,
     reading_blueprint_ref: readingBlueprintRef,
     material_mode: "proposal-led",
-    section_flow: [],
+    section_flow: materialAssetRef ? ["section-1"] : [],
     slides: materialAssetRef ? [{
       slide_id: "S01",
       order: 1,
@@ -144,6 +144,11 @@ function visualReviewProjection(
 ) {
   const sourceVersion = "visual-v1";
   const visualContractRef = VISUAL_CONTRACT_REF;
+  const anchors = ["S01", "S02", "S03"].map((slideId) => ({
+    slide_id: slideId,
+    current_asset_ref: `review-assets/anchors/${slideId}-current.png`,
+    previous_asset_ref: "",
+  }));
   return {
     review_type: "visual-professional",
     review_session_id: "visual-session-1",
@@ -159,25 +164,17 @@ function visualReviewProjection(
       typography_tokens: { title_scale: "32pt" },
     },
     anchor_slide_set_ref: ANCHOR_SLIDE_SET_REF,
-    anchors: [{
-      slide_id: "S01",
-      current_asset_ref: "review-assets/anchors/S01-current.png",
-      previous_asset_ref: "",
-    }],
+    anchors,
     anchor_identity: {
       visual_contract_set_ref: "artifact://visual-contract-set/" + "b".repeat(64),
-      slide_ids: ["S01"],
-      selection_reason: "覆盖问题诊断页",
+      slide_ids: anchors.map((anchor) => anchor.slide_id),
+      selection_reason: "覆盖问题诊断、证据和方案页面家族",
       native_first_frozen: true,
       native_first_pptx_ref: NATIVE_PPTX_REF,
       pptx_sha256: "a".repeat(64),
       editability_evidence_refs: [EDITABILITY_EVIDENCE_REF],
       preflight_render_refs: [PREFLIGHT_RENDER_REF],
-      render_assets: [{
-        slide_id: "S01",
-        current_asset_ref: "review-assets/anchors/S01-current.png",
-        previous_asset_ref: "",
-      }],
+      render_assets: anchors.map((anchor) => ({ ...anchor })),
     },
     slide_visual_contracts: [visualSlideContract()],
     anchor_feedback_batch_ref: anchorFeedbackBatch ? VISUAL_ANCHOR_BATCH_REF : null,
