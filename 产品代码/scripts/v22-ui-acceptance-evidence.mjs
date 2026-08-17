@@ -3,6 +3,104 @@ import { rename as renameFile, writeFile as writeReportFile } from "node:fs/prom
 
 export const LOCAL_PREVIEW_DISCLAIMER = "Raw screenshots preserve production CSS; expanded evidence screenshots use acceptance-only CSS. Not Codex Browser, host notification, AI receipt, Codex Presentations, or Microsoft PowerPoint proof. Not G3 or user acceptance proof.";
 
+export const LOCAL_PREVIEW_EVIDENCE = Object.freeze({
+  evidenceScope: "local-development-preview",
+  proofEligible: false,
+  realHostEvidence: false,
+});
+
+function freezeRequirements(requirements) {
+  return Object.freeze(requirements.map((requirement) => Object.freeze(requirement)));
+}
+
+export const PROTOTYPE_FIDELITY_REQUIREMENTS = Object.freeze({
+  "content-review": freezeRequirements([
+    { key: "head", selector: ".content-review-head", exact: 1, min: 1 },
+    { key: "progress", selector: ".content-review-progress", exact: 1, min: 1 },
+    { key: "chapterNav", selector: ".content-review-chapter-nav", exact: 1, min: 1 },
+    { key: "deckIntro", selector: ".content-review-deck-intro", exact: 1, min: 1 },
+    { key: "chapters", selector: "[data-content-chapter]", min: 1 },
+    { key: "slides", selector: "[data-content-slide]", min: 1 },
+    { key: "reviewSummary", selector: ".content-review-summary", exact: 1, min: 1 },
+  ]),
+  "visual-anchor": freezeRequirements([
+    { key: "topbar", selector: ".visual-review-topbar", exact: 1, min: 1 },
+    { key: "projectIdentity", selector: ".visual-professional-project-identity", exact: 1, min: 1 },
+    { key: "aiMark", selector: ".visual-professional-ai-mark", exact: 1, min: 1 },
+    { key: "viewSwitch", selector: ".visual-professional-review-view-switch", exact: 1, min: 1 },
+    { key: "compactStatus", selector: ".visual-professional-compact-status", exact: 1, min: 1 },
+    { key: "workbench", selector: ".anchor-review-layout", exact: 1, min: 1 },
+    { key: "main", selector: ".anchor-review-main", exact: 1, min: 1 },
+    { key: "assistant", selector: ".anchor-review-assistant", exact: 1, min: 1 },
+    { key: "feedbackComposer", selector: ".anchor-feedback-composer", exact: 1, min: 1 },
+    { key: "statusRecord", selector: ".anchor-review-assistant .anchor-batch-panel", exact: 1, min: 1 },
+  ]),
+  "visual-contract": freezeRequirements([
+    { key: "titlePage", selector: ".visual-contract-title-page", exact: 1, min: 1 },
+    { key: "deckDesignSystem", selector: '[data-contract-logical-object="deck-design-system"]', exact: 1, min: 1 },
+    { key: "anchorEvidence", selector: '[data-contract-logical-object="anchor-slide-evidence"]', exact: 1, min: 1 },
+    { key: "slideContracts", selector: ".visual-slide-contract", min: 1 },
+    { key: "outline", selector: ".visual-contract-outline", exact: 1, min: 1 },
+    { key: "overlayDrawer", selector: ".visual-overlay-drawer", exact: 1, min: 1 },
+  ]),
+});
+
+export const REQUIRED_INTERACTION_STATES = Object.freeze([
+  "content-before-feedback",
+  "content-after-non-approved-feedback",
+  "anchor-before-rectangle-feedback",
+  "anchor-after-rectangle-feedback",
+  "contract-with-anchor-slide-evidence",
+  "contract-directory-drawer",
+  "contract-mark-drawer",
+  "saved-unverified-receipt",
+]);
+
+export function assertPrototypeFidelityCounts(surface, counts) {
+  const requirements = PROTOTYPE_FIDELITY_REQUIREMENTS[surface];
+  if (!requirements) throw new Error(`Unknown prototype fidelity surface: ${surface}`);
+  if (!counts || typeof counts !== "object" || Array.isArray(counts)) {
+    throw new Error(`${surface} prototype fidelity counts must be an object.`);
+  }
+  for (const requirement of requirements) {
+    const count = counts[requirement.key];
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw new Error(`${surface} ${requirement.key} selector count must be a non-negative integer.`);
+    }
+    if (requirement.exact !== undefined && count !== requirement.exact) {
+      throw new Error(`${surface} ${requirement.key} expected exactly ${requirement.exact}, received ${count}.`);
+    }
+    if (count < requirement.min) {
+      throw new Error(`${surface} ${requirement.key} expected at least ${requirement.min}, received ${count}.`);
+    }
+  }
+  return counts;
+}
+
+export function assertInteractionEvidenceCoverage(entries) {
+  if (!Array.isArray(entries)) throw new Error("Interaction evidence must be an array.");
+  const seen = new Map();
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object" || typeof entry.state !== "string") {
+      throw new Error("Interaction evidence entries require a state.");
+    }
+    if (!REQUIRED_INTERACTION_STATES.includes(entry.state)) {
+      throw new Error(`Unknown interaction evidence state: ${entry.state}`);
+    }
+    if (typeof entry.screenshot !== "string" || !entry.screenshot.trim()) {
+      throw new Error(`${entry.state} interaction evidence requires a screenshot path.`);
+    }
+    seen.set(entry.state, (seen.get(entry.state) || 0) + 1);
+  }
+  for (const state of REQUIRED_INTERACTION_STATES) {
+    const count = seen.get(state) || 0;
+    if (count !== 1) {
+      throw new Error(`${state} interaction evidence must appear exactly once; received ${count}.`);
+    }
+  }
+  return entries;
+}
+
 function finiteRect(value, label) {
   const fields = ["x", "y", "width", "height"];
   if (fields.some((field) => typeof value?.[field] !== "number" || !Number.isFinite(value[field]))) {

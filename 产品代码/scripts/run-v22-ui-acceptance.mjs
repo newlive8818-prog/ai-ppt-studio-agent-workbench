@@ -6,6 +6,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   LOCAL_PREVIEW_DISCLAIMER,
+  LOCAL_PREVIEW_EVIDENCE,
+  PROTOTYPE_FIDELITY_REQUIREMENTS,
+  assertInteractionEvidenceCoverage,
+  assertPrototypeFidelityCounts,
   atomicPublishAcceptanceReport,
   captureEvidencePair,
   completeAcceptanceRun,
@@ -56,36 +60,81 @@ async function loadPlaywright() {
 
 const previewPath = (file) => path.join(runDirectory, file);
 
-function longProjectionHtml(sourceHtml, reviewType, count) {
+function transformPreviewPayload(sourceHtml, label, transform) {
   const marker = "window.__AI_PPT_PREVIEW__=";
   const start = sourceHtml.indexOf(marker);
   const end = sourceHtml.indexOf(";window.__AI_PPT_PREVIEW_ASSETS__=", start);
-  assert(start >= 0 && end > start, `Unable to locate ${reviewType} preview payload`);
+  assert(start >= 0 && end > start, `Unable to locate ${label} preview payload`);
   const payloadStart = start + marker.length;
   const data = JSON.parse(sourceHtml.slice(payloadStart, end));
-  if (reviewType === "content") {
-    const template = data.review.slides[0];
-    data.review.slides = Array.from({ length: count }, (_, index) => ({
-      ...structuredClone(template),
-      slide_id: `S${String(index + 1).padStart(3, "0")}`,
-      order: index + 1,
-      neutral_title: `第 ${index + 1} 页完整内容验收`,
-      visible_copy_blocks: [{ block_id: `copy-${index + 1}`, identity: "方案建议", text: `第 ${index + 1} 页完整正文` }],
-      speaker_notes: `第 ${index + 1} 页完整演讲备注`,
-    }));
-    data.review.decisions = [];
-    data.review.progress = { completed: 0, total: count, remaining: count, unsaved: 0 };
-  } else {
-    const template = data.review.slide_visual_contracts[0];
-    data.review.slide_visual_contracts = Array.from({ length: count }, (_, index) => ({
-      ...structuredClone(template),
-      slide_id: `S${String(index + 1).padStart(3, "0")}`,
-      order: index + 1,
-      neutral_title: `第 ${index + 1} 页视觉合同完整性验收`,
-      page_task: `完整保留第 ${index + 1} 页视觉需求`,
-    }));
-  }
+  transform(data);
   return `${sourceHtml.slice(0, payloadStart)}${JSON.stringify(data).replaceAll("<", "\\u003c")}${sourceHtml.slice(end)}`;
+}
+
+function longProjectionHtml(sourceHtml, reviewType, count) {
+  return transformPreviewPayload(sourceHtml, reviewType, (data) => {
+    if (reviewType === "content") {
+      const template = data.review.slides[0];
+      data.review.slides = Array.from({ length: count }, (_, index) => ({
+        ...structuredClone(template),
+        slide_id: `S${String(index + 1).padStart(3, "0")}`,
+        order: index + 1,
+        neutral_title: `第 ${index + 1} 页完整内容验收`,
+        visible_copy_blocks: [{ block_id: `copy-${index + 1}`, identity: "方案建议", text: `第 ${index + 1} 页完整正文` }],
+        speaker_notes: `第 ${index + 1} 页完整演讲备注`,
+      }));
+      data.review.decisions = [];
+      data.review.progress = { completed: 0, total: count, remaining: count, unsaved: 0 };
+    } else {
+      const template = data.review.slide_visual_contracts[0];
+      data.review.slide_visual_contracts = Array.from({ length: count }, (_, index) => ({
+        ...structuredClone(template),
+        slide_id: `S${String(index + 1).padStart(3, "0")}`,
+        order: index + 1,
+        neutral_title: `第 ${index + 1} 页视觉合同完整性验收`,
+        page_task: `完整保留第 ${index + 1} 页视觉需求`,
+      }));
+    }
+  });
+}
+
+function savedUnverifiedProjectionHtml(sourceHtml) {
+  return transformPreviewPayload(sourceHtml, "saved/unverified visual", (data) => {
+    const review = data.review;
+    const slide = review.slide_visual_contracts[0];
+    const revision = review.revision;
+    const savedAt = "2026-08-17T12:01:00Z";
+    const createdAt = "2026-08-17T12:00:00Z";
+    review.contract_review_marks_ref = `artifact://visual-contract-review-mark-set/${"f".repeat(64)}`;
+    review.contract_review_marks = {
+      mark_set_id: "local-preview-saved-unverified",
+      project_id: review.project_id,
+      review_session_id: review.review_session_id,
+      visual_contract_ref: review.visual_contract_ref,
+      source_version: review.source_version,
+      revision,
+      marks: [{
+        mark_id: "local-preview-mark-1",
+        target_type: "contract-field",
+        slide_id: slide.slide_id,
+        deck_section_id: "",
+        target_key: "page_task",
+        selected_text: "",
+        context_before: "",
+        context_after: "",
+        comment: "本地验收已保存标记",
+        visual_contract_ref: review.visual_contract_ref,
+        source_version: review.source_version,
+        revision,
+        created_at: createdAt,
+        created_by: "user",
+      }],
+      persistence_status: "saved",
+      host_notification_status: "unavailable",
+      ai_receipt_status: "unverified",
+      saved_at: savedAt,
+    };
+  });
 }
 
 const seed = JSON.parse(run(
@@ -114,10 +163,17 @@ for (const [reviewType, count] of [["content", 60], ["visual", 120]]) {
     "utf8",
   );
 }
+const visualPreviewHtml = await readFile(previewPath("ai-ppt-visual-review-preview.html"), "utf8");
+await writeFile(
+  previewPath("ai-ppt-visual-review-saved-unverified.html"),
+  savedUnverifiedProjectionHtml(visualPreviewHtml),
+  "utf8",
+);
 
 const { chromium } = await loadPlaywright();
 const browser = await chromium.launch({ headless: true });
 const results = [];
+const interactionEvidence = [];
 
 async function openPage(file, width) {
   const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
@@ -169,20 +225,48 @@ function assertNoOverflow(value, identity) {
   assert(value.documentScrollWidth <= value.innerWidth + 1, `${identity}: document overflow`);
 }
 
+async function assertPrototypeFidelity(page, surface) {
+  const counts = {};
+  for (const requirement of PROTOTYPE_FIDELITY_REQUIREMENTS[surface]) {
+    counts[requirement.key] = await page.locator(requirement.selector).count();
+  }
+  assertPrototypeFidelityCounts(surface, counts);
+  return counts;
+}
+
+async function captureInteractionEvidence(target, state, mode) {
+  const screenshotPath = previewPath(`${state}.png`);
+  await target.screenshot({ path: screenshotPath });
+  interactionEvidence.push({ state, screenshot: screenshotPath, mode });
+  return screenshotPath;
+}
+
 async function assertVisualContractTextReadable(page, identity) {
-  const selector = [
-    ".visual-contract-title-page code",
+  const slideReadableSelector = [
     ".visual-contract-field p",
     ".visual-contract-field li",
     ".contract-object-value dd",
-    ".anchor-identity-chapter code",
-    ".anchor-identity-chapter li",
-    ".anchor-identity-chapter dd",
+  ].join(", ");
+  const documentReadableSelector = [
+    ".visual-contract-title-page h1",
+    ".visual-contract-title-page p",
+    '[data-contract-logical-object="anchor-slide-evidence"] li',
+    '[data-contract-logical-object="anchor-slide-evidence"] dd',
   ].join(", ");
   const clipped = new Map();
+  for (const item of await page.locator(documentReadableSelector).evaluateAll((elements) => elements.flatMap((element) => {
+    const text = element.textContent?.trim();
+    if (!text || element.scrollWidth <= element.clientWidth + 1) return [];
+    return [{
+      element: `${element.tagName.toLowerCase()}.${element.className}`,
+      text: text.slice(0, 100),
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }];
+  }))) clipped.set(`${item.element}:${item.text}`, item);
   for (const contract of await page.locator(".visual-slide-contract").all()) {
     await contract.scrollIntoViewIfNeeded();
-    for (const item of await page.locator(selector).evaluateAll((elements) => elements.flatMap((element) => {
+    for (const item of await contract.locator(slideReadableSelector).evaluateAll((elements) => elements.flatMap((element) => {
       const text = element.textContent?.trim();
       if (!text || element.scrollWidth <= element.clientWidth + 1) return [];
       return [{
@@ -215,7 +299,9 @@ async function checkReview(reviewType, width) {
     let evidenceLayer = false;
     let materialSourceCount = 0;
     let stickyProof = null;
+    const prototypeFidelity = {};
     if (reviewType === "content") {
+      prototypeFidelity["content-review"] = await assertPrototypeFidelity(page, "content-review");
       objectCount = await page.locator("[data-content-slide]").count();
       assert(objectCount === 3, `${identity}: expected 3 content pages, received ${objectCount}`);
       const materialCards = page.locator(".content-material-card");
@@ -260,6 +346,13 @@ async function checkReview(reviewType, width) {
 
       assert(/^S\d+$/.test(seed.content_review_draft.slide_id), `${identity}: unsafe draft slide identity`);
       const draftPage = page.locator(`#content-${seed.content_review_draft.slide_id}`);
+      if (width === 1000) {
+        await captureInteractionEvidence(
+          draftPage,
+          "content-before-feedback",
+          "current-content-page-before-non-approved-feedback",
+        );
+      }
       const modify = draftPage.getByRole("radio", { name: "需要修改" });
       const editSaved = draftPage.getByRole("button", { name: "编辑意见" });
       if (await editSaved.count()) await editSaved.click();
@@ -268,6 +361,13 @@ async function checkReview(reviewType, width) {
       await comment.fill(seed.content_review_draft.comment);
       assert(await modify.isChecked(), `${identity}: modify draft was not selected`);
       assert(await comment.inputValue() === seed.content_review_draft.comment, `${identity}: modify draft comment was not retained`);
+      if (width === 1000) {
+        await captureInteractionEvidence(
+          draftPage,
+          "content-after-non-approved-feedback",
+          "current-content-page-after-non-approved-feedback",
+        );
+      }
 
       const evidenceButton = page.getByRole("button", { name: /来源证据$/ }).first();
       assert(await evidenceButton.count(), `${identity}: read-only evidence entry missing`);
@@ -317,7 +417,15 @@ async function checkReview(reviewType, width) {
       assert(await comparison.locator(".asset-placeholder").count() === 0, `${identity}: comparison placeholder remained`);
       await comparison.getByRole("button", { name: "关闭对比" }).click();
 
-      if (width === 760) {
+      if (width === 1000) {
+        await captureInteractionEvidence(
+          page.locator(".region-feedback-editor"),
+          "anchor-before-rectangle-feedback",
+          "anchor-editor-before-rectangle-feedback",
+        );
+      }
+
+      if (width === 760 || width === 1000) {
         await page.getByRole("button", { name: "开始标注" }).click();
         const canvas = page.locator(".anchor-canvas");
         const canvasBox = await canvas.boundingBox();
@@ -340,51 +448,63 @@ async function checkReview(reviewType, width) {
           canvasRect: currentCanvasBox,
           viewport: page.viewportSize(),
         });
+        const composer = page.getByRole("textbox", { name: "当前框选区域反馈" });
+        await composer.fill("调整该区域层级，保持原生可编辑并减少视觉噪声。");
+        prototypeFidelity["visual-anchor"] = await assertPrototypeFidelity(page, "visual-anchor");
+        if (width === 1000) {
+          await captureInteractionEvidence(
+            page.locator(".region-feedback-editor"),
+            "anchor-after-rectangle-feedback",
+            "anchor-editor-after-rectangle-feedback",
+          );
+        }
         await settleLayout(page);
-        const stickyContract = await page.evaluate(() => {
-          const header = document.querySelector(".visual-professional-header");
-          const assistant = document.querySelector(".anchor-review-assistant");
-          const headerRect = header.getBoundingClientRect();
-          const assistantRect = assistant.getBoundingClientRect();
-          const computed = getComputedStyle(assistant);
-          return {
-            position: computed.position,
-            topInset: Number.parseFloat(computed.top),
-            headerHeight: headerRect.height,
-            assistantDocumentTop: assistantRect.top + window.scrollY,
-            maxScrollY: document.documentElement.scrollHeight - window.innerHeight,
-          };
-        });
-        assert(stickyContract.position === "sticky", `${identity}: assistant is not sticky ${JSON.stringify(stickyContract)}`);
-        assert(
-          stickyContract.topInset >= stickyContract.headerHeight,
-          `${identity}: sticky inset is smaller than the responsive header ${JSON.stringify(stickyContract)}`,
-        );
-        const targetScrollY = stickyContract.assistantDocumentTop - stickyContract.topInset + 32;
-        assert(
-          targetScrollY <= stickyContract.maxScrollY,
-          `${identity}: page cannot reach the assistant sticky state ${JSON.stringify({ ...stickyContract, targetScrollY })}`,
-        );
-        await page.evaluate((scrollY) => window.scrollTo(0, scrollY), targetScrollY);
-        await settleLayout(page);
-        const sticky = await page.evaluate(() => {
-          const header = document.querySelector(".visual-professional-header").getBoundingClientRect();
-          const assistantElement = document.querySelector(".anchor-review-assistant");
-          const assistant = assistantElement.getBoundingClientRect();
-          return {
-            scrollY: window.scrollY,
-            headerBottom: header.bottom,
-            assistantTop: assistant.top,
-            topInset: Number.parseFloat(getComputedStyle(assistantElement).top),
-          };
-        });
-        assert(
-          sticky.scrollY >= targetScrollY - 1
-          && Math.abs(sticky.assistantTop - sticky.topInset) <= 1
-          && sticky.assistantTop >= sticky.headerBottom - 1,
-          `${identity}: assistant did not reach an uncovered sticky state ${JSON.stringify({ ...sticky, targetScrollY })}`,
-        );
-        stickyProof = { ...sticky, targetScrollY, annotationComposer: true, candidateRegion };
+        if (width === 760) {
+          const stickyContract = await page.evaluate(() => {
+            const header = document.querySelector(".visual-professional-header");
+            const assistant = document.querySelector(".anchor-review-assistant");
+            const headerRect = header.getBoundingClientRect();
+            const assistantRect = assistant.getBoundingClientRect();
+            const computed = getComputedStyle(assistant);
+            return {
+              position: computed.position,
+              topInset: Number.parseFloat(computed.top),
+              headerHeight: headerRect.height,
+              assistantDocumentTop: assistantRect.top + window.scrollY,
+              maxScrollY: document.documentElement.scrollHeight - window.innerHeight,
+            };
+          });
+          assert(stickyContract.position === "sticky", `${identity}: assistant is not sticky ${JSON.stringify(stickyContract)}`);
+          assert(
+            stickyContract.topInset >= stickyContract.headerHeight,
+            `${identity}: sticky inset is smaller than the responsive header ${JSON.stringify(stickyContract)}`,
+          );
+          const targetScrollY = stickyContract.assistantDocumentTop - stickyContract.topInset + 32;
+          assert(
+            targetScrollY <= stickyContract.maxScrollY,
+            `${identity}: page cannot reach the assistant sticky state ${JSON.stringify({ ...stickyContract, targetScrollY })}`,
+          );
+          await page.evaluate((scrollY) => window.scrollTo(0, scrollY), targetScrollY);
+          await settleLayout(page);
+          const sticky = await page.evaluate(() => {
+            const header = document.querySelector(".visual-professional-header").getBoundingClientRect();
+            const assistantElement = document.querySelector(".anchor-review-assistant");
+            const assistant = assistantElement.getBoundingClientRect();
+            return {
+              scrollY: window.scrollY,
+              headerBottom: header.bottom,
+              assistantTop: assistant.top,
+              topInset: Number.parseFloat(getComputedStyle(assistantElement).top),
+            };
+          });
+          assert(
+            sticky.scrollY >= targetScrollY - 1
+            && Math.abs(sticky.assistantTop - sticky.topInset) <= 1
+            && sticky.assistantTop >= sticky.headerBottom - 1,
+            `${identity}: assistant did not reach an uncovered sticky state ${JSON.stringify({ ...sticky, targetScrollY })}`,
+          );
+          stickyProof = { ...sticky, targetScrollY, annotationComposer: true, candidateRegion };
+        }
         await page.evaluate(() => window.scrollTo(0, 0));
         await settleLayout(page);
       }
@@ -393,8 +513,25 @@ async function checkReview(reviewType, width) {
       await page.waitForSelector(".visual-contract-document");
       objectCount = await page.locator(".visual-slide-contract").count();
       assert(objectCount === 3, `${identity}: full visual contract is incomplete (${objectCount}/3)`);
+      if (width === 1000) {
+        const anchorEvidence = page.locator('[data-contract-logical-object="anchor-slide-evidence"]');
+        await anchorEvidence.scrollIntoViewIfNeeded();
+        await captureInteractionEvidence(
+          anchorEvidence,
+          "contract-with-anchor-slide-evidence",
+          "anchor-slide-evidence-current-visual-version",
+        );
+      }
       await page.getByRole("button", { name: "打开合同目录" }).click();
       const outline = page.getByRole("navigation", { name: "视觉合同章节定位" });
+      prototypeFidelity["visual-contract"] = await assertPrototypeFidelity(page, "visual-contract");
+      if (width === 1000) {
+        await captureInteractionEvidence(
+          page.locator(".visual-overlay-drawer"),
+          "contract-directory-drawer",
+          "overlay-contract-directory",
+        );
+      }
       const outlineButtons = outline.getByRole("button");
       await outlineButtons.last().click();
       await settleLayout(page);
@@ -407,6 +544,22 @@ async function checkReview(reviewType, width) {
         directoryJump.targetTop >= directoryJump.headerBottom - 1,
         `${identity}: directory target is covered by the header ${JSON.stringify(directoryJump)}`,
       );
+      if (width === 1000) {
+        await page.getByRole("button", { name: "打开标记记录" }).click();
+        await captureInteractionEvidence(
+          page.locator(".visual-overlay-drawer"),
+          "contract-mark-drawer",
+          "overlay-contract-mark-record",
+        );
+        await page.getByRole("dialog", { name: "合同标记记录" }).getByRole("button", { name: "关闭" }).click();
+        await page.getByRole("tab", { name: "3 页锚点成果" }).click();
+        const restoredComposer = page.getByRole("textbox", { name: "当前框选区域反馈" });
+        assert(
+          await restoredComposer.inputValue() === "调整该区域层级，保持原生可编辑并减少视觉噪声。",
+          `${identity}: anchor feedback composer was not preserved across contract review`,
+        );
+        await page.getByRole("tab", { name: "完整视觉合同" }).click();
+      }
       await assertVisualContractTextReadable(page, identity);
     }
     const deferredSelector = reviewType === "content" ? ".content-review-slide" : ".visual-slide-contract";
@@ -436,10 +589,34 @@ async function checkReview(reviewType, width) {
       evidenceLayer,
       ...(materialSourceCount ? { materialSourceCount } : {}),
       ...(stickyProof ? { stickyProof } : {}),
+      prototypeFidelity,
       ...layout,
       consoleErrors,
       ...evidence,
     });
+  } finally {
+    await context.close();
+  }
+}
+
+async function checkSavedUnverifiedReceipt() {
+  const identity = "visual-saved-unverified@1000";
+  const { context, page, consoleErrors } = await openPage("ai-ppt-visual-review-saved-unverified.html", 1000);
+  try {
+    await page.getByRole("tab", { name: "完整视觉合同" }).click();
+    await page.waitForSelector(".visual-contract-view");
+    const receipt = page.locator('.visual-receipt-row[aria-label="合同标记保存事实"]');
+    const receiptText = await receipt.textContent();
+    assert(receiptText?.includes("持久化：已保存"), `${identity}: persistence fact missing`);
+    assert(receiptText?.includes("宿主通知：不可用"), `${identity}: host unavailable fact missing`);
+    assert(receiptText?.includes("AI 接收：未验证"), `${identity}: AI unverified fact missing`);
+    assertNoOverflow(await metrics(page), identity);
+    assert(consoleErrors.length === 0, `${identity}: ${consoleErrors.join(" | ")}`);
+    await captureInteractionEvidence(
+      receipt,
+      "saved-unverified-receipt",
+      "local-fixture-saved-host-unavailable-ai-unverified",
+    );
   } finally {
     await context.close();
   }
@@ -470,23 +647,22 @@ await completeAcceptanceRun({
       }
       await checkLongReview("content", 60);
       await checkLongReview("visual", 120);
+      await checkSavedUnverifiedReceipt();
     } finally {
       await browser.close();
     }
     assert(results.length === 8, `Expected 8 screenshots, received ${results.length}`);
+    assertInteractionEvidenceCoverage(interactionEvidence);
     return {
       ok: true,
       checkedAt: new Date().toISOString(),
       runDirectory,
       surfaces: ["content-review", "visual-review", "read-only-evidence-layer"],
-      previewEvidence: {
-        evidenceScope: "local-development-preview",
-        proofEligible: false,
-        realHostEvidence: false,
-      },
+      previewEvidence: { ...LOCAL_PREVIEW_EVIDENCE },
       disclaimer: LOCAL_PREVIEW_DISCLAIMER,
       seed,
       results,
+      interactionEvidence,
     };
   },
   publishReport: (report) => atomicPublishAcceptanceReport({
