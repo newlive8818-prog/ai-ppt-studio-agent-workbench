@@ -294,22 +294,25 @@ function validateProgress(value: unknown): boolean {
 
 function validateContentDeckStructure(sectionFlow: unknown, slides: unknown): boolean {
   if (!isStringArray(sectionFlow) || !Array.isArray(slides)) return false;
-  const sectionOrder = new Map<string, number>();
-  for (const [index, sectionId] of sectionFlow.entries()) {
-    if (sectionOrder.has(sectionId)) return false;
-    sectionOrder.set(sectionId, index);
+  const sectionTitles = new Set<string>();
+  for (const sectionTitle of sectionFlow) {
+    if (sectionTitles.has(sectionTitle)) return false;
+    sectionTitles.add(sectionTitle);
   }
   const slideIds = new Set<string>();
-  let previousSectionIndex = -1;
+  const seenSectionIds = new Set<string>();
+  let currentSectionId = "";
   for (const [index, slide] of slides.entries()) {
     if (!isPlainRecord(slide) || !isText(slide.slide_id) || slideIds.has(slide.slide_id)) return false;
     if (slide.order !== index + 1 || !isText(slide.section_id)) return false;
-    const sectionIndex = sectionOrder.get(slide.section_id);
-    if (sectionIndex === undefined || sectionIndex < previousSectionIndex) return false;
+    if (slide.section_id !== currentSectionId) {
+      if (seenSectionIds.has(slide.section_id)) return false;
+      seenSectionIds.add(slide.section_id);
+      currentSectionId = slide.section_id;
+    }
     slideIds.add(slide.slide_id);
-    previousSectionIndex = sectionIndex;
   }
-  return true;
+  return seenSectionIds.size <= sectionFlow.length;
 }
 
 function validateContentProjection(value: unknown, expectedRevision?: number): ContentReviewProjection | null {

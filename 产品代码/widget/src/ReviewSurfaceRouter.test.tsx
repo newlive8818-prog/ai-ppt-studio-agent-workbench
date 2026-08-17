@@ -296,14 +296,31 @@ describe("on-demand professional-review routing", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/审核数据无效.*重新打开/);
   });
 
+  it("accepts stable section IDs paired positionally with human-readable section flow", () => {
+    const content = contentReviewSurface([
+      contentSlide("S01", 1, "problem"),
+      contentSlide("S02", 2, "solution"),
+    ]);
+    content.review.section_flow = ["客户业务事项", "问题与验证方案"];
+
+    render(<ReviewSurfaceRouter data={content} bridge={bridge} />);
+
+    expect(screen.getByRole("heading", { name: "完整售前阅读稿" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it.each([
-    ["non-consecutive slide order", [contentSlide("S01", 2, "开篇")], ["开篇"]],
-    ["unknown slide section", [contentSlide("S01", 1, "未登记章节")], ["开篇"]],
-    ["section order regression", [
-      contentSlide("S01", 1, "第二章"),
-      contentSlide("S02", 2, "第一章"),
-    ], ["第一章", "第二章"]],
-    ["duplicate section flow", [contentSlide("S01", 1, "开篇")], ["开篇", "开篇"]],
+    ["non-consecutive slide order", [contentSlide("S01", 2, "opening")], ["开篇"]],
+    ["non-contiguous section reentry", [
+      contentSlide("S01", 1, "problem"),
+      contentSlide("S02", 2, "solution"),
+      contentSlide("S03", 3, "problem"),
+    ], ["客户业务事项", "问题与验证方案"]],
+    ["more section groups than section flow", [
+      contentSlide("S01", 1, "problem"),
+      contentSlide("S02", 2, "solution"),
+    ], ["客户业务事项"]],
+    ["duplicate section flow", [contentSlide("S01", 1, "opening")], ["开篇", "开篇"]],
   ])("rejects content projection with %s", (_label, slides, sectionFlow) => {
     const content = contentReviewSurface(slides);
     content.review.section_flow = sectionFlow;
