@@ -36,6 +36,13 @@ interface Draft {
   message: string;
 }
 
+interface ContentReviewChapter {
+  sectionId: string;
+  title: string;
+  task: string;
+  slides: ContentReviewSlide[];
+}
+
 interface ValidatedContentReviewBatch {
   batch_id: string;
   project_id: string;
@@ -235,6 +242,27 @@ function validatedInitialDecisions(
   return decisions;
 }
 
+function contentReviewChapters(
+  sectionFlow: string[],
+  slides: ContentReviewSlide[],
+): ContentReviewChapter[] {
+  const chapters: ContentReviewChapter[] = [];
+  for (const slide of slides) {
+    const current = chapters.at(-1);
+    if (current?.sectionId === slide.section_id) {
+      current.slides.push(slide);
+      continue;
+    }
+    chapters.push({
+      sectionId: slide.section_id,
+      title: sectionFlow[chapters.length] ?? slide.section_id,
+      task: slide.page_task,
+      slides: [slide],
+    });
+  }
+  return chapters;
+}
+
 function initialDrafts(
   data: ContentReviewSurfaceData,
   validatedDecisions: ContentPageDecision[],
@@ -324,6 +352,10 @@ export function ContentFullDeckReviewPage({ initialData, bridge }: Props) {
   const evidenceDialogRef = useRef<HTMLElement | null>(null);
   const evidenceWasOpenRef = useRef(false);
   const slides = initialData.review.slides;
+  const chapters = useMemo(
+    () => contentReviewChapters(initialData.review.section_flow, slides),
+    [initialData.review.section_flow, slides],
+  );
   const completed = slides.filter((slide) => drafts[slide.slide_id]?.saved && !drafts[slide.slide_id]?.dirty).length;
   const unsaved = slides.filter((slide) => drafts[slide.slide_id]?.dirty).length;
   const submittedBatch = batch?.status === "submitted";
@@ -636,7 +668,7 @@ export function ContentFullDeckReviewPage({ initialData, bridge }: Props) {
   return (
     <>
     <main className="content-review-page" inert={evidenceSlide ? true : undefined}>
-      <header className="content-review-header">
+      <header className="content-review-head content-review-header">
         <div>
           <p className="content-review-kicker">内容全稿审核</p>
           <h1>完整售前阅读稿</h1>
@@ -672,24 +704,63 @@ export function ContentFullDeckReviewPage({ initialData, bridge }: Props) {
       ) : null}
       {withdrawnBatch ? <p className="content-review-page-message">上一批次已撤回</p> : null}
       {pageMessage ? <p className="content-review-page-message" role="status">{pageMessage}</p> : null}
-      <nav className="content-review-outline" aria-label="页面定位">
-        {slides.map((slide) => (
-          <a
-            key={slide.slide_id}
-            href={`#content-${slide.slide_id}`}
-            onClick={(event) => {
-              event.preventDefault();
-              recordLogicalPosition(slide.slide_id, 0);
-              scrollToContentLogicalPosition(slide.slide_id, 0, "smooth");
-            }}
-          >{slide.order}</a>
+      <nav className="content-review-chapter-nav content-review-outline" aria-label="章节导航">
+        {chapters.map((chapter, chapterIndex) => (
+          <div className="content-review-chapter-nav-item" key={chapter.sectionId}>
+            <a
+              className="content-review-chapter-link"
+              href={`#content-chapter-${chapterIndex + 1}`}
+              onClick={(event) => {
+                event.preventDefault();
+                const firstSlide = chapter.slides[0];
+                recordLogicalPosition(firstSlide.slide_id, 0);
+                scrollToContentLogicalPosition(firstSlide.slide_id, 0, "smooth");
+              }}
+            >第 {chapterIndex + 1} 章 · {chapter.title}</a>
+            <span className="content-review-chapter-pages" aria-label={`${chapter.title} 页面定位`}>
+              {chapter.slides.map((slide) => (
+                <a
+                  key={slide.slide_id}
+                  href={`#content-${slide.slide_id}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    recordLogicalPosition(slide.slide_id, 0);
+                    scrollToContentLogicalPosition(slide.slide_id, 0, "smooth");
+                  }}
+                >{slide.order}</a>
+              ))}
+            </span>
+          </div>
         ))}
       </nav>
 
+      <section className="content-review-deck-intro" aria-labelledby="content-review-deck-intro-title">
+        <p className="content-review-kicker">本轮审核说明</p>
+        <h2 id="content-review-deck-intro-title">按最终页序连续审核完整阅读稿</h2>
+        <p><strong>{initialData.review.material_mode}</strong> · {chapters.length} 个章节 · {slides.length} 页 · {initialData.review.source_version}</p>
+        <p>从第一章连续读到最后一页；正文、材料、证据身份、演讲备注和跨页关系保持在当前审核上下文中。</p>
+      </section>
+
       <section className="content-review-document" aria-label="完整内容全稿">
-        {slides.map((slide) => {
-          const draft = drafts[slide.slide_id];
-          return (
+        {chapters.map((chapter, chapterIndex) => (
+          <section
+            className="content-review-chapter"
+            id={`content-chapter-${chapterIndex + 1}`}
+            key={chapter.sectionId}
+            data-content-chapter
+            data-section-id={chapter.sectionId}
+            aria-labelledby={`content-chapter-${chapterIndex + 1}-title`}
+          >
+            <header className="content-review-chapter-heading">
+              <p>第 {chapterIndex + 1} 章</p>
+              <h2 id={`content-chapter-${chapterIndex + 1}-title`}>{chapter.title}</h2>
+              <p><strong>本章阅读任务：</strong>{chapter.task}</p>
+              <p>第 {chapter.slides[0].order}–{chapter.slides.at(-1)?.order} 页 · {chapter.slides.length} 页</p>
+            </header>
+            <div className="content-review-chapter-slides">
+              {chapter.slides.map((slide) => {
+                const draft = drafts[slide.slide_id];
+                return (
             <article className="content-review-slide" id={`content-${slide.slide_id}`} key={slide.slide_id} data-content-slide>
               <header className="content-slide-heading">
                 <div><span>第 {slide.order} 页 · {slide.slide_id}</span><span>{slide.section_id}</span></div>
@@ -778,8 +849,22 @@ export function ContentFullDeckReviewPage({ initialData, bridge }: Props) {
                 onSave={() => saveDecision(slide)}
               />
             </article>
-          );
-        })}
+                );
+              })}
+            </div>
+          </section>
+        ))}
+      </section>
+
+      <section className="content-review-summary" aria-labelledby="content-review-summary-title">
+        <p className="content-review-kicker">本轮审核汇总</p>
+        <h2 id="content-review-summary-title">{completed}/{slides.length} 页已完成</h2>
+        <p>仍有 {slides.length - completed} 页未完成，{unsaved} 项本地输入尚未保存。</p>
+        <p>{submittedBatch
+          ? "本轮审核已冻结并提交，等待 Codex 形成整套修改方案。"
+          : allCompleted
+            ? "全部页面已完成，可使用页头主操作提交本轮审核。"
+            : "继续完成逐页判断；系统会保留已保存判断和当前本地草稿。"}</p>
       </section>
 
     </main>

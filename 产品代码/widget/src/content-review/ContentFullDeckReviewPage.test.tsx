@@ -770,6 +770,57 @@ describe("ContentFullDeckReviewPage", () => {
     expect(screen.queryByText(/desired customer judgment/i)).not.toBeInTheDocument();
   });
 
+  it("renders the approved 08 deck rhythm from positional chapter projection", () => {
+    const host = bridge(3);
+    const data = surface(3);
+    data.review.section_flow = ["客户业务事项", "问题与验证方案"];
+
+    const { container } = render(
+      <ContentFullDeckReviewPage initialData={data} bridge={host.value} />,
+    );
+
+    const head = container.querySelector<HTMLElement>(".content-review-head");
+    const progress = container.querySelector<HTMLElement>(".content-review-progress");
+    const chapterNav = container.querySelector<HTMLElement>(".content-review-chapter-nav");
+    const deckIntro = container.querySelector<HTMLElement>(".content-review-deck-intro");
+    const chapters = container.querySelectorAll<HTMLElement>("[data-content-chapter]");
+    const summary = container.querySelector<HTMLElement>(".content-review-summary");
+
+    expect(head).not.toBeNull();
+    expect(progress).not.toBeNull();
+    expect(chapterNav).not.toBeNull();
+    expect(deckIntro).not.toBeNull();
+    expect(chapters).toHaveLength(2);
+    expect(summary).not.toBeNull();
+
+    expect(within(chapterNav!).getByRole("link", { name: "第 1 章 · 客户业务事项" })).toBeInTheDocument();
+    expect(within(chapterNav!).getByRole("link", { name: "第 2 章 · 问题与验证方案" })).toBeInTheDocument();
+    expect(deckIntro).toHaveTextContent("mixed-evidence");
+    expect(deckIntro).toHaveTextContent("2 个章节 · 3 页");
+    expect(deckIntro).toHaveTextContent("content-v1");
+
+    expect(chapters[0]).toHaveAttribute("data-section-id", "problem");
+    expect(chapters[0]).toHaveTextContent("客户业务事项");
+    expect(chapters[0]).toHaveTextContent("完整页面任务 1");
+    expect(chapters[0].querySelectorAll("[data-content-slide]")).toHaveLength(1);
+    expect(chapters[1]).toHaveAttribute("data-section-id", "solution");
+    expect(chapters[1]).toHaveTextContent("问题与验证方案");
+    expect(chapters[1]).toHaveTextContent("完整页面任务 2");
+    expect(chapters[1].querySelectorAll("[data-content-slide]")).toHaveLength(2);
+
+    expect(chapters[1]).toHaveTextContent("完整可见正文 3，不使用摘要或省略号。");
+    expect(chapters[1]).toHaveTextContent("完整演讲备注 3");
+    expect(chapters[1]).toHaveTextContent("客户材料-3.pdf");
+    expect(chapters[1]).toHaveTextContent("进入下一步");
+    expect(summary).toHaveTextContent("0/3 页已完成");
+
+    const rhythm = [head!, progress!, chapterNav!, deckIntro!, chapters[0], chapters[1], summary!];
+    rhythm.slice(0, -1).forEach((node, index) => {
+      expect(node.compareDocumentPosition(rhythm[index + 1]) & Node.DOCUMENT_POSITION_FOLLOWING)
+        .toBeTruthy();
+    });
+  });
+
   it("renders complete copy and the controlled project material image in the same reading grid", async () => {
     const intersections = installIntersectionObserver();
     const host = bridge();
