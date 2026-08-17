@@ -528,11 +528,11 @@ export function VisualContractView({
 
   return (
     <section ref={rootRef} className="visual-contract-view" aria-label="完整视觉合同正文">
-      <header className="visual-contract-toolbar">
+      <header className="visual-contract-toolbar visual-contract-title-page">
         <div className="visual-contract-heading">
-          <span>视觉合同审核</span>
-          <h1>{data.review.project_name}</h1>
-          <p>Deck Design System、3 页锚点身份和 {slides.length} 页逐页视觉需求来自同一视觉版本。</p>
+          <span>Visual Contract · User Review</span>
+          <h1>完整视觉合同</h1>
+          <p>{data.review.project_name} · Deck Design System、3 页锚点身份和 {slides.length} 页逐页视觉需求来自同一视觉版本。</p>
         </div>
         <div className="visual-contract-actions">
           <button type="button" aria-label="打开合同目录" onClick={() => setDrawer("outline")}>目录</button>
@@ -614,8 +614,14 @@ export function VisualContractView({
             ))}
           </div>
         </section>
-        <section ref={anchorIdentityRef} id={anchorIdentityId} className="visual-contract-chapter anchor-identity-chapter">
-          <h2>锚点身份</h2>
+        <section
+          ref={anchorIdentityRef}
+          id={anchorIdentityId}
+          className="visual-contract-chapter anchor-identity-chapter"
+          data-contract-logical-object="anchor-slide-evidence"
+        >
+          <h2>Anchor Slide Evidence</h2>
+          <p>锚点身份、选择理由和实现证据。</p>
           <ContractValue value={data.review.anchor_identity} />
         </section>
         <section className="visual-slide-contracts" aria-label="全部逐页视觉合同">
@@ -651,7 +657,7 @@ export function VisualContractView({
       <ReviewOverlayDrawer open={drawer === "outline"} title="视觉合同目录" onClose={() => setDrawer(null)}>
         <nav className="visual-contract-outline" aria-label="视觉合同章节定位">
           <button type="button" onClick={() => { designSystemRef.current?.scrollIntoView(); setDrawer(null); }}>Deck Design System</button>
-          <button type="button" onClick={() => { anchorIdentityRef.current?.scrollIntoView(); setDrawer(null); }}>锚点身份</button>
+          <button type="button" onClick={() => { anchorIdentityRef.current?.scrollIntoView(); setDrawer(null); }}>Anchor Slide Evidence</button>
           {slides.map((slide) => <button type="button" key={String(slide.slide_id)} onClick={() => { slideRefs.current.get(String(slide.slide_id))?.scrollIntoView(); setDrawer(null); }}>{String(slide.slide_id)} · {String(slide.neutral_title || slide.title || slide.page_task || "视觉合同")}</button>)}
         </nav>
       </ReviewOverlayDrawer>

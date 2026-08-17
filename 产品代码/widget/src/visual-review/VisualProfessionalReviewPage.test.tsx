@@ -3559,10 +3559,14 @@ describe("visual professional review surface", () => {
     render(<VisualProfessionalReviewPage initialData={visualData()} bridge={bridge} />);
     fireEvent.click(screen.getByRole("tab", { name: "完整视觉合同" }));
 
-    expect(screen.getAllByText("完整视觉合同", { exact: true })).toHaveLength(1);
+    expect(screen.getAllByText("完整视觉合同", { exact: true })).toHaveLength(2);
     const document = screen.getByRole("region", { name: "完整视觉合同正文" });
+    const titlePage = document.querySelector<HTMLElement>(".visual-contract-title-page");
+    expect(titlePage).not.toBeNull();
+    expect(within(titlePage as HTMLElement).getByText("Visual Contract · User Review")).toBeInTheDocument();
     expect(within(document).getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(within(document).getByRole("heading", { level: 1, name: "测试项目" })).toBeInTheDocument();
+    expect(within(document).getByRole("heading", { level: 1, name: "完整视觉合同" })).toBeInTheDocument();
+    expect(titlePage).toHaveTextContent("测试项目");
     const summary = screen.getByRole("region", { name: "视觉合同摘要" });
     for (const [label, value] of [
       ["项目", "测试项目"],
@@ -3597,6 +3601,9 @@ describe("visual professional review surface", () => {
 
     expect(screen.getByText("覆盖问题、方案和证据三类页面")).toBeInTheDocument();
     expect(screen.getByText("artifact://editability-evidence/" + "c".repeat(64))).toBeInTheDocument();
+    const anchorEvidence = document.querySelector<HTMLElement>('[data-contract-logical-object="anchor-slide-evidence"]');
+    expect(anchorEvidence).not.toBeNull();
+    expect(within(anchorEvidence as HTMLElement).getByRole("heading", { name: "Anchor Slide Evidence" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "全部逐页视觉合同" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "标记 Deck Design System 设计命题" }));
@@ -4269,10 +4276,15 @@ describe("visual professional review surface", () => {
 
     const document = screen.getByRole("region", { name: "完整视觉合同正文" });
     const headings = within(document).getAllByRole("heading").map((node) => node.textContent);
+    expect(headings).toContain("完整视觉合同");
     expect(headings).toContain("Deck Design System");
-    expect(headings).toContain("锚点身份");
-    expect(headings.indexOf("Deck Design System")).toBeLessThan(headings.indexOf("锚点身份"));
+    expect(headings).toContain("Anchor Slide Evidence");
+    expect(headings.indexOf("完整视觉合同")).toBeLessThan(headings.indexOf("Deck Design System"));
+    expect(headings.indexOf("Deck Design System")).toBeLessThan(headings.indexOf("Anchor Slide Evidence"));
     expect(headings.some((text) => text?.includes("系统在线，经营仍然断裂"))).toBe(true);
+    expect(headings.indexOf("Anchor Slide Evidence")).toBeLessThan(
+      headings.findIndex((text) => text?.includes("系统在线，经营仍然断裂")),
+    );
     const slideOne = within(document).getByRole("article", { name: "系统在线，经营仍然断裂" });
     expect(within(slideOne).getByText("S01 · 第 1 页")).toBeInTheDocument();
     const pageFamilyField = within(slideOne).getByTestId("contract-field-S01-page_family");
@@ -4420,7 +4432,9 @@ describe("visual professional review surface", () => {
     render(<VisualProfessionalReviewPage initialData={visualData()} bridge={bridge} />);
     fireEvent.click(screen.getByRole("tab", { name: "完整视觉合同" }));
     fireEvent.click(screen.getByRole("button", { name: "打开合同目录" }));
-    expect(screen.getByRole("dialog", { name: "视觉合同目录" })).toHaveAttribute("data-overlay", "true");
+    const outline = screen.getByRole("dialog", { name: "视觉合同目录" });
+    expect(outline).toHaveAttribute("data-overlay", "true");
+    expect(within(outline).getByRole("button", { name: "Anchor Slide Evidence" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "完整视觉合同正文" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "打开标记记录" }));
     expect(screen.queryByRole("dialog", { name: "视觉合同目录" })).not.toBeInTheDocument();
