@@ -284,6 +284,38 @@ _APPROVED_ROLES: list[RoleContract] = [
     ),
 ]
 
+_V22_CONTENT_ROLES = (
+    RoleContract(
+        role_id="presales-solution-chief",
+        display_name="售前方案总师",
+        description="对证据重建、客户决策语境、问题方案映射和完整阅读稿负责。",
+        role_group="content",
+        authority="producer",
+        isolation_group="presales-chief",
+        tags=frozenset({"presales", "evidence-first", "reading-first"}),
+    ),
+    RoleContract(
+        role_id="content-evidence-gate-reviewer",
+        display_name="事实与证据硬门审查",
+        description="独立检查来源、身份、追溯、因果跳跃、能力和承诺。",
+        role_group="content",
+        authority="reviewer",
+        isolation_group="content-evidence-gate",
+        tags=frozenset({"presales", "evidence", "independent"}),
+        experience_access=frozenset({"anti-patterns", "mechanisms"}),
+    ),
+    RoleContract(
+        role_id="content-presales-reading-gate-reviewer",
+        display_name="售前阅读与客户立场硬门审查",
+        description="独立检查客户立场、问题完整性、中立标题、阅读性和方案边界。",
+        role_group="content",
+        authority="reviewer",
+        isolation_group="content-presales-reading-gate",
+        tags=frozenset({"presales", "reading-first", "independent"}),
+        experience_access=frozenset({"anti-patterns", "mechanisms", "preferences"}),
+    ),
+)
+
 
 class RoleRegistry:
     """已批准角色的注册表。"""
@@ -293,6 +325,13 @@ class RoleRegistry:
 
     @classmethod
     def default(cls) -> "RoleRegistry":
+        non_content = [role for role in _APPROVED_ROLES if role.role_group != "content"]
+        return cls([*_V22_CONTENT_ROLES, *non_content])
+
+    @classmethod
+    def legacy_v16(cls) -> "RoleRegistry":
+        """Read old role identities only while the v1.6 importer still exists."""
+
         return cls(list(_APPROVED_ROLES))
 
     def get(self, role_id: str) -> RoleContract:

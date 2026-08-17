@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ai_ppt_studio.application.delivery_service import DeliveryService
-from ai_ppt_studio.domains.presentation.targets import REQUIRED_TARGET_IDS
+from ai_ppt_studio.application.release_policy_service import ReleaseTargetPolicyService
 from tests.v16_visual_fixtures import prepared_g2
 
 
@@ -304,7 +304,8 @@ def prepared_delivery_ready(
 ) -> tuple[DeliveryService, int, dict[str, object]]:
     delivery, revision, refs = prepared_qa(project, slide_count=slide_count)
     target_refs: list[str] = []
-    for target_id in REQUIRED_TARGET_IDS:
+    policy_ref, policy = ReleaseTargetPolicyService(delivery.kernel).current()
+    for target_id in policy.required_target_ids:
         target_refs.append(
             delivery.register_target_render_evidence(
                 f"prepared-g4-target-{target_id}",
@@ -314,10 +315,15 @@ def prepared_delivery_ready(
         )
         revision += 1
     ready = delivery.finalize_delivery("prepared-delivery-ready", revision)
-    return delivery, ready.revision, {**refs, "g4_target_evidence": target_refs}
+    return delivery, ready.revision, {
+        **refs,
+        "g4_target_evidence": target_refs,
+        "release_target_policy_ref": policy_ref,
+    }
 
 
 def package_artifacts(delivery: DeliveryService, refs: dict[str, object]) -> dict[str, str]:
+    policy_ref, policy = ReleaseTargetPolicyService(delivery.kernel).current()
     return {
         "preview": str(
             delivery.kernel.artifacts.put(
@@ -331,8 +337,13 @@ def package_artifacts(delivery: DeliveryService, refs: dict[str, object]) -> dic
         ),
         "font_platform_report": str(
             delivery.kernel.artifacts.put(
-                "font-platform-report",
-                {"build_ref": refs["build"], "targets": list(REQUIRED_TARGET_IDS)},
+            "font-platform-report",
+                {
+                    "build_ref": refs["build"],
+                    "release_target_policy_ref": policy_ref,
+                    "targets": list(policy.required_target_ids),
+                    "deferred_targets": list(policy.deferred_target_ids),
+                },
             )
         ),
         "qa_report": str(
@@ -356,5 +367,6 @@ def valid_package_payload(
         "font_platform_report_ref": artifacts["font_platform_report"],
         "qa_report_ref": artifacts["qa_report"],
         "target_evidence_refs": refs["g4_target_evidence"],
+        "release_target_policy_ref": refs["release_target_policy_ref"],
         "status": "delivery-ready",
     }

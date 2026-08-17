@@ -8,10 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.domains.presentation.targets import (
-    REQUIRED_TARGET_IDS,
     TargetRenderEvidence,
     validate_required_targets,
 )
+from ai_ppt_studio.domains.presentation.release_policy import SUPPORTED_TARGET_IDS
 from ai_ppt_studio.errors import GateBlockedError
 
 
@@ -94,34 +94,40 @@ class TargetEvidenceMatrixTests(unittest.TestCase):
 
     def test_accepts_all_four_targets_for_same_hash(self) -> None:
         result = validate_required_targets(
-            [evidence(target) for target in REQUIRED_TARGET_IDS]
+            [evidence(target) for target in SUPPORTED_TARGET_IDS],
+            SUPPORTED_TARGET_IDS,
         )
         self.assertEqual(result.pptx_sha256, "a" * 64)
-        self.assertEqual(result.target_ids, REQUIRED_TARGET_IDS)
+        self.assertEqual(result.target_ids, SUPPORTED_TARGET_IDS)
+
+    def test_accepts_current_single_required_target(self) -> None:
+        required = ("macos-powerpoint",)
+        result = validate_required_targets([evidence(required[0])], required)
+        self.assertEqual(result.target_ids, required)
 
     def test_rejects_missing_failed_duplicate_or_mismatched_hash(self) -> None:
         cases = (
-            [evidence(target) for target in REQUIRED_TARGET_IDS[:-1]],
+            [evidence(target) for target in SUPPORTED_TARGET_IDS[:-1]],
             [
                 evidence(
                     target,
                     result="failed" if target == "macos-wps" else "passed",
                 )
-                for target in REQUIRED_TARGET_IDS
+                for target in SUPPORTED_TARGET_IDS
             ],
             [
                 evidence(
                     target,
                     sha="b" * 64 if target == "windows-wps" else "a" * 64,
                 )
-                for target in REQUIRED_TARGET_IDS
+                for target in SUPPORTED_TARGET_IDS
             ],
-            [evidence(target) for target in REQUIRED_TARGET_IDS]
+            [evidence(target) for target in SUPPORTED_TARGET_IDS]
             + [evidence("macos-wps")],
         )
         for values in cases:
             with self.subTest(values=values), self.assertRaises(GateBlockedError):
-                validate_required_targets(values)
+                validate_required_targets(values, SUPPORTED_TARGET_IDS)
 
     def test_rejects_incomplete_preflight_or_wrong_target_identity(self) -> None:
         invalid_payloads = []

@@ -22,7 +22,7 @@ from tests.v16_visual_fixtures import prepared_g2
 
 def projections() -> tuple[dict, dict]:
     with tempfile.TemporaryDirectory(prefix="ai-ppt-v16-review-fixture-") as temp:
-        visual, revision, _refs = prepared_g2(Path(temp), slide_count=2)
+        visual, revision, _refs = prepared_g2(Path(temp), slide_count=3)
         visual.publish_visual_review("publish-review-fixture", revision)
         reviewer = ReviewService(visual.kernel)
         return reviewer.content_projection(), reviewer.visual_projection()

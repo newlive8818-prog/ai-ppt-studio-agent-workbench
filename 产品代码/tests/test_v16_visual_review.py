@@ -18,9 +18,9 @@ def visual_marks() -> list[dict[str, str]]:
     return [
         {
             "mark_id": "visual-m1",
-            "field_anchor": "visual-slide-s1-visible-copy",
-            "exact_text": "三条断点",
-            "prefix": "五套系统",
+            "field_anchor": "visual-slide-s01-visible-copy-blocks",
+            "exact_text": "材料记录了流程断点",
+            "prefix": "",
             "suffix": "",
             "comment": "这里需要强化证据层级",
         }
@@ -30,7 +30,7 @@ def visual_marks() -> list[dict[str, str]]:
 class V16VisualReviewTests(unittest.TestCase):
     def test_complete_projection_marks_and_chat_only_g3(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            visual, revision, refs = prepared_g2(Path(temp), slide_count=2)
+            visual, revision, refs = prepared_g2(Path(temp), slide_count=3)
             published = visual.publish_visual_review("publish-visual-review", revision)
             self.assertEqual(published.gate_status["G3"], "user-reviewable")
             visual_contract_ref = published.artifact_heads["visual/contract"]
@@ -43,8 +43,9 @@ class V16VisualReviewTests(unittest.TestCase):
                 [
                     "visual-framework",
                     "deck-design-system",
-                    "visual-slide-s1",
-                    "visual-slide-s2",
+                    "visual-slide-s01",
+                    "visual-slide-s02",
+                    "visual-slide-s03",
                 ],
             )
             self.assertNotIn("visual-overview", anchors)
@@ -62,7 +63,7 @@ class V16VisualReviewTests(unittest.TestCase):
                 for field in projection["sections"][0]["fields"]
                 if field["label"] == "target_evidence_identities"
             )
-            self.assertEqual(len(evidence_field["value"]), 4)
+            self.assertEqual(len(evidence_field["value"]), 1)
             self.assertEqual(
                 set(evidence_field["value"][0]),
                 {
@@ -86,16 +87,13 @@ class V16VisualReviewTests(unittest.TestCase):
             )
             for literal in (
                 "可信的经营证据链",
-                "为什么现在必须改变",
-                "五套系统",
-                "三条断点",
-                "解释来源",
+                "当前流程断点与证据边界",
+                "材料记录了流程断点",
+                "建议联合核实影响范围",
+                "完整讲解当前事实、未知和验证动作",
                 "information_hierarchy",
                 "native_first_pptx_ref",
                 "macos-powerpoint",
-                "macos-wps",
-                "windows-powerpoint",
-                "windows-wps",
             ):
                 self.assertIn(literal, text)
             self.assertNotIn("…", text)
@@ -130,7 +128,7 @@ class V16VisualReviewTests(unittest.TestCase):
 
     def test_visual_marks_reject_a_stale_source_without_overwriting_head(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            visual, revision, refs = prepared_g2(Path(temp), slide_count=2)
+            visual, revision, refs = prepared_g2(Path(temp), slide_count=3)
             published = visual.publish_visual_review("publish-visual-review", revision)
             reviewer = ReviewService(visual.kernel)
             with self.assertRaises(ReviewSourceStaleError):

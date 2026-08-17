@@ -1,30 +1,35 @@
-# Native workbench protocol
+# Codex-native conversation and review protocol
 
-AI PPT Studio has exactly two UI surfaces: the lightweight workbench in the real Codex sidebar and professional review in the Codex built-in Browser. Chat is a text collaboration, confirmation, sample, and delivery channel; it never renders a Widget in chat. Both UI surfaces consume the schema 3 project truth and never derive a Gate.
+AI PPT Studio has one entry: the Codex current project conversation. Use it for discussion, status, Mission confirmation, Gate judgments, and delivery. Open structured pages only when concentrated reading or feedback is needed:
+
+- `content-full-deck`: the complete content review;
+- `visual-professional`: anchor results plus the complete visual contract;
+- read-only evidence layer: a child of the current content review.
+
+All surfaces consume schema 3 authority and never derive a Gate.
 
 ## Operating loop
 
 1. Use `create_ai_ppt_project` or `get_ai_ppt_project_snapshot`; retain `revision`.
-2. Read the five spaces: 项目总览、材料工作台、内容蓝图、视觉设计、制作与交付.
-3. Call `get_ai_ppt_sidebar_projection` only for a verified sidebar host. If it returns `HOST_SIDEBAR_UNAVAILABLE`, keep the acceptance item blocked and report the capability gap; do not attach a chat UI template.
-4. Before formal content work, save `MissionDraft` and show the complete current task/materials/unknowns. When confirmation is the only pending high-impact action, `OK / 确认 / 采纳 / 继续` and clear equivalents are confirmation intent; ordinary conversation is not. Call `confirm_ai_ppt_mission` with the current card summary. Use a verified sidebar/message reference when available, otherwise require host-native confirmation. Intent words are never persisted as evidence; only host acceptance lets the Python content precondition gate establish `material-backed` or `proposal-only`.
-5. Submit user input through the matching write with `expectedRevision`, then refresh.
-6. Before AI work, use `request_ai_ppt_agent_action` with one formal role action and exact artifact inputs. Execute only that bounded task; return it with `commit_ai_ppt_artifact` and the task identity.
-7. When content or visual review is formally available, call `open_ai_ppt_browser_review` and open the returned scoped URL only in the Codex built-in Browser.
-8. Keep both review types in the 64px Header. Save or finish the current mark first; switching asks the authenticated Bridge for a new single-reviewType session whose target sourceVersion/revision comes from Python authority. Never reuse the current token across review types.
-9. Save exact marks separately. Use `confirm_ai_ppt_gate` only for an explicit G0/G3/G4 user message with a real host-verified reference; use `record_internal_gate` only for authorized G1/G2 evidence.
+2. Report only `AI 正在处理`, `需要你处理`, `成果已可查看`, or `任务受阻`, based on `get_ai_ppt_project_status`.
+3. Before content work, save `MissionDraft`, show the current complete card, and call `confirm_ai_ppt_mission` only when confirmation is the sole pending high-impact action. `OK / 确认 / 采纳 / 继续` can be confirmation intent only in that context; the words are never evidence.
+4. Send every write with `expectedRevision`, then refresh the snapshot.
+5. Use `request_ai_ppt_agent_action` only for a bounded current role task and return its result with `commit_ai_ppt_artifact` plus the exact task identity.
+6. Open or resume the exact `content-full-deck` or `visual-professional` ReviewSession. Let the host create its authenticated, source-bound Review Bridge resource and open only that resource in the Codex built-in Browser.
+7. Keep content and visual ReviewSessions independent. Do not reuse a token, source version, revision, draft, or receipt across review types.
+8. Use `confirm_ai_ppt_gate` only for explicit G0/G3/G4 judgments with real host-verified references. Use `record_internal_gate` only for authorized G1/G2 evidence.
 
-## UI contract
+Use Codex Presentations for PPTX production and inspection. Use Image 2 only for approved post-native, non-semantic, replaceable layers.
 
-- Real sidebar workbench: 360–480px, five-space navigation, conclusion, highest focus/risk, affected artifacts, formal counts/state, and at most one strongest action.
-- Codex built-in Browser review: the same `ProfessionalReviewApp`, `ReviewProjection`, and save interface at 760/1000/1440px. Responsive width changes never create a third surface.
-- Review header is one 64px line. Outline and marks drawers overlay the document and are mutually exclusive. Content remains continuous and complete.
-- No review Gate button, PPTX download, return-chat button, contact sheet, or business state in local storage. Chat UI display modes cannot substitute for the real sidebar or Browser.
+## Review contract
 
-## Formal Agent actions
-
-Content actions require a current `MissionConfirmation` and Python-approved identity first, then build strategy, claim evidence, argument map, slide draft, repair, five independent specialist reviews, and aggregate review. `proposal-only` actions must carry 诊断假设, 方案建议, and 待联合验证 through every formal content artifact and review. Visual actions design the Deck system and slide contracts, use Codex Presentations for native-first anchors/PPTX, optionally use Image 2 for post-native non-semantic assets, run aesthetic/engineering/target reviews, and coordinate delivery. Feedback/experience actions remain isolated from producer self-approval.
+- Render review pages at 760/1000/1440px without a product navigation shell.
+- Keep the full review readable in source order. Overlay drawers must not change document geometry or discard scroll position.
+- Content review owns `PageDecision`, Batch submission, revision plan, and read-only evidence opening.
+- Visual review owns rectangle-region `AnchorFeedbackBatch` and field/text `VisualContractReviewMarkSet` as separate writes.
+- Keep persistence, host open, host notification, and AI receipt independently visible. A saved state cannot imply notification or AI receipt.
+- Do not add Gate buttons, PPTX download, duplicate chat, or business state in local storage.
 
 ## Failure behavior
 
-On `REVISION_CONFLICT` or `REVIEW_SOURCE_STALE`, refresh and preserve drafts. Failed tasks keep the last valid artifacts. `HOST_CONFIRMATION_DECLINED` or `HOST_CONFIRMATION_UNAVAILABLE` leaves the task and revision unchanged; retry without demanding additional material or suggesting a workflow bypass. Return `BROWSER_REVIEW_UNAVAILABLE` when Browser open is unavailable and `BROWSER_REVIEW_SAVE_UNAVAILABLE` when reliable save is unavailable; preserve sourceVersion and mark drafts. Host capability failure leaves project state unchanged. A changed PPTX hash invalidates all four desktop rows.
+On `REVISION_CONFLICT` or `REVIEW_SOURCE_STALE`, refresh and preserve drafts. `HOST_CONFIRMATION_DECLINED` or `HOST_CONFIRMATION_UNAVAILABLE` makes no business write. Return `BROWSER_REVIEW_UNAVAILABLE` when Browser open is unavailable and `BROWSER_REVIEW_SAVE_UNAVAILABLE` when reliable save is unavailable. A local preview, loopback request, generated URL, or simulated receipt is not real host evidence.

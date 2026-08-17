@@ -4,16 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "typecheck": "tsc -p widget/tsconfig.json --noEmit",
     "test:node": "node --test tests/*.test.mjs",
+    "test:python": "PYTHONDONTWRITEBYTECODE=1 TMPDIR=/private/tmp python3 -m unittest discover -s tests",
     "test:widget": "vitest run",
     "test": "npm run build && npm run test:node && npm run test:widget",
     "build": "node scripts/build-widget.mjs",
-    "accept:v16-ui": "npm run build --silent && node scripts/run-v16-ui-acceptance.mjs",
+    "accept:v22-ui": "npm run build --silent && node scripts/run-v22-ui-acceptance.mjs",
     "probe:mcp": "node scripts/probe-mcp.mjs",
     "release": "node scripts/build-plugin-release.mjs",
     "verify:release": "node scripts/verify-plugin-release.mjs",
     "install:plugin": "node scripts/install-plugin.mjs",
-    "quality": "npm test && npm run probe:mcp"
+    "quality": "npm run typecheck && npm run build && npm run test:node && npm run test:widget"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.7.4",

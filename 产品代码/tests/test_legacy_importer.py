@@ -10,10 +10,55 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.adapters.legacy.importer import LegacyProjectImporter
+from ai_ppt_studio.adapters.legacy.content_v16 import read_legacy_content
+from ai_ppt_studio.adapters.legacy.framework_v16 import (
+    validate_legacy_framework_draft,
+)
+from ai_ppt_studio.errors import ContractValidationError
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 
 
 class LegacyImporterTests(unittest.TestCase):
+    def test_legacy_framework_validator_is_read_only_and_rejects_page_content(self) -> None:
+        payload = {
+            "framework_id": "legacy-framework-1",
+            "mission_confirmation_ref": "artifact://mission-confirmation/" + "a" * 64,
+            "core_proposition": "旧项目结构命题",
+            "persuasion_path": ["先说明问题", "再说明路径"],
+            "chapters": [{
+                "chapter_id": "c1",
+                "title": "现状",
+                "task": "说明边界",
+                "expected_judgment": "理解边界",
+                "transition": "进入方案",
+            }],
+            "structural_risks": ["材料不足"],
+            "highest_impact_question": "是否需要补充材料？",
+            "status": "discussion",
+        }
+        self.assertEqual(validate_legacy_framework_draft(payload), payload)
+        with self.assertRaises(ContractValidationError):
+            validate_legacy_framework_draft({**payload, "slides": []})
+
+    def test_legacy_content_reader_never_changes_heads_gates_or_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            kernel = ProjectKernel.initialize(Path(temp), project_id="legacy-read")
+            payload = {"source_version": "legacy-v1"}
+            reference = kernel.artifacts.reference_for("content-blueprint", payload)
+            kernel.commit(
+                command_id="seed-detached-legacy",
+                expected_revision=0,
+                event_type="test.legacy-seeded",
+                artifact_updates={},
+                detached_artifacts=(("content-blueprint", payload),),
+            )
+            before = kernel.load()
+            projection = read_legacy_content(kernel, str(reference))
+            after = kernel.load()
+            self.assertEqual(projection["identity"], "legacy-read-only")
+            self.assertTrue(projection["requires_v22_migration_and_hard_gates"])
+            self.assertEqual(after, before)
+
     def test_imports_verifiable_payloads_without_copying_pass_states(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)

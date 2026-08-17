@@ -261,6 +261,7 @@ def validate_delivery_package(
     payload: dict[str, Any],
     build: dict[str, Any],
     target_refs: list[str],
+    release_target_policy_ref: str,
 ) -> dict[str, Any]:
     """Bind the user-facing package to one complete delivery-ready build."""
 
@@ -286,9 +287,14 @@ def validate_delivery_package(
         normalized[field] = _text(payload, field)
     if payload.get("target_evidence_refs") != target_refs:
         raise ContractValidationError(
-            "DeliveryPackage must contain all four current G4 target evidence references in canonical order"
+            "DeliveryPackage must contain all current required G4 target evidence references in canonical order"
         )
     normalized["target_evidence_refs"] = list(target_refs)
+    if payload.get("release_target_policy_ref") != release_target_policy_ref:
+        raise ContractValidationError(
+            "DeliveryPackage must bind the current release target policy"
+        )
+    normalized["release_target_policy_ref"] = release_target_policy_ref
     if payload.get("status") != "delivery-ready":
         raise ContractValidationError(
             "DeliveryPackage status must be delivery-ready"

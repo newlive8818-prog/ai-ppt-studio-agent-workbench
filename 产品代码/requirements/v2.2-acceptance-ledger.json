@@ -1,0 +1,1683 @@
+{
+  "requirements": [
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-PRODUCT-001",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "产品闭环",
+      "status": "unproven",
+      "text": "Mission 确认后自动走到完整内容，不出现旧双授权；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-PRODUCT-002",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "产品闭环",
+      "status": "unproven",
+      "text": "三种材料模式都能完成内容审核；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-PRODUCT-003",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "产品闭环",
+      "status": "unproven",
+      "text": "内容全稿审核页、视觉专业审核页和 Codex 对话共享同一权威项目状态；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-PRODUCT-004",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "产品闭环",
+      "status": "unproven",
+      "text": "G0 前无正式视觉生产；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-PRODUCT-005",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "产品闭环",
+      "status": "unproven",
+      "text": "G4 后自动生成项目复盘。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-001",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "用户首见版本通过两个硬门；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-002",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "事实、推断、假设、建议和验证身份可检查；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-003",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "现状、问题、影响、约束、要求和方案映射完整；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-004",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "页面不依赖备注才能理解；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-005",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "标题中立；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-006",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "无证结论被删除、降级或改写；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-007",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "无材料方案没有虚构事实、数字、案例或承诺；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-008",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "全文无摘要、截断和省略号替代；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-009",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "全页完成后才提交审核批次；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-010",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "新版全篇复审，G0 是当前版本的可信独立确认。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "requirement_id": "PRD-ACC-VISUAL-001",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "视觉、交付与经验",
+      "status": "unproven",
+      "text": "视觉审核页可直接切换 3 页锚点成果与完整视觉合同，且不显示常驻五空间图标导航；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "requirement_id": "PRD-ACC-VISUAL-002",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "视觉、交付与经验",
+      "status": "unproven",
+      "text": "锚点页支持矩形框选、多条反馈和批次提交；完整合同包含设计系统、锚点身份和全部逐页合同；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "requirement_id": "PRD-ACC-VISUAL-003",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "视觉、交付与经验",
+      "status": "unproven",
+      "text": "合同正文连续可读，目录和标记抽屉覆盖打开，字段或选中文字可标记并统一保存；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "requirement_id": "PRD-ACC-VISUAL-004",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "视觉、交付与经验",
+      "status": "unproven",
+      "text": "锚点反馈批次与合同 ReviewMark 状态隔离；保存不等于 G3；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "requirement_id": "PRD-ACC-VISUAL-005",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "视觉、交付与经验",
+      "status": "unproven",
+      "text": "没有真实宿主通知或 AI 接收回执时，界面不会显示已送达或已接收；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "requirement_id": "PRD-ACC-VISUAL-006",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "视觉、交付与经验",
+      "status": "unproven",
+      "text": "正式 PPTX 原生可编辑；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "requirement_id": "PRD-ACC-VISUAL-007",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "视觉、交付与经验",
+      "status": "unproven",
+      "text": "当前必需发布目标真实通过，deferred 不被误报兼容；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "target-evidence",
+        "real-project"
+      ],
+      "requirement_id": "PRD-ACC-VISUAL-008",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "视觉、交付与经验",
+      "status": "unproven",
+      "text": "当前 PPTX 通过聊天实际发送，G4 绑定当前证据；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-EXPERIENCE-001",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "视觉、交付与经验",
+      "status": "unproven",
+      "text": "内容和视觉都能实时学习，单次有效反馈影响当前后续页面；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-EXPERIENCE-002",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "视觉、交付与经验",
+      "status": "unproven",
+      "text": "同类型经验、全局经验、反例降级和项目复盘均可追溯，客户专属事实和素材不进入可复用经验。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-UNIT-001",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "单元测试",
+      "status": "unproven",
+      "text": "四个内容对象验证；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-UNIT-002",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "单元测试",
+      "status": "unproven",
+      "text": "三种材料模式；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-UNIT-003",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "单元测试",
+      "status": "unproven",
+      "text": "内容身份和禁止外推；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-UNIT-004",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "单元测试",
+      "status": "unproven",
+      "text": "中立标题确定性检查；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-UNIT-005",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "单元测试",
+      "status": "unproven",
+      "text": "两个硬门；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-UNIT-006",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "单元测试",
+      "status": "unproven",
+      "text": "reviewer 不可编辑；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-UNIT-007",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "单元测试",
+      "status": "unproven",
+      "text": "independent-agent 证据必填；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-UNIT-008",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "单元测试",
+      "status": "unproven",
+      "text": "same-type/global 经验；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-UNIT-009",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "单元测试",
+      "status": "unproven",
+      "text": "项目复盘触发、失败和重试。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-001",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "Mission 确认后无双授权直接生成完整内容；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-002",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "三种材料模式全链；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-003",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "硬门失败—总师修复—复验；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-004",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "passed 内容进入按需内容全稿审核页；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-005",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "PageDecision/Batch/Plan/新版/G0；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-006",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "G0 重开清理视觉和交付；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-007",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "G4 触发复盘；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-008",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "单次反馈影响当前后续页面；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-009",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "两个不同类型成功后全局化；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-010",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "反例降级和回退；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-011",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "G3 视觉专业审核页在锚点成果/完整视觉合同间切换且两类草稿互不污染；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-012",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "锚点矩形区域、多条意见、不可变批次和 revision 冲突；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-013",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "合同字段/文字标记、顶部统一保存和 sourceVersion 冲突；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-014",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "批次保存成功但宿主通知不可用时，界面不显示 AI 已接收；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-015",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "获得真实 AI 接收回执后，才允许 ai_receipt_status 进入 received。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-REGRESSION-001",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "回归测试",
+      "status": "unproven",
+      "text": "Mission trusted confirmation；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-REGRESSION-002",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "回归测试",
+      "status": "unproven",
+      "text": "ReleaseTargetPolicy；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-REGRESSION-003",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "回归测试",
+      "status": "unproven",
+      "text": "G2/G4 current required targets；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-REGRESSION-004",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "回归测试",
+      "status": "unproven",
+      "text": "专业审核页 Review Bridge；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-REGRESSION-005",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "回归测试",
+      "status": "unproven",
+      "text": "3 页锚点成果与完整视觉合同共享同一权威视觉版本；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-REGRESSION-006",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "回归测试",
+      "status": "unproven",
+      "text": "视觉专业审核页无常驻五空间图标导航；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-REGRESSION-007",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "回归测试",
+      "status": "unproven",
+      "text": "内容审核原子保存和冻结批次；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-REGRESSION-008",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "回归测试",
+      "status": "unproven",
+      "text": "视觉合同与 Presentations；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-REGRESSION-009",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "回归测试",
+      "status": "unproven",
+      "text": "历史项目只读解析；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-REGRESSION-010",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "回归测试",
+      "status": "unproven",
+      "text": "不把旧 framework/expansion 恢复为新前置门。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "requirement_id": "SDD-ACC-REAL-001",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "真实验收",
+      "status": "unproven",
+      "text": "一个 material-backed 项目；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "requirement_id": "SDD-ACC-REAL-002",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "真实验收",
+      "status": "unproven",
+      "text": "一个 mixed-evidence 项目；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "requirement_id": "SDD-ACC-REAL-003",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "真实验收",
+      "status": "unproven",
+      "text": "一个 proposal-led 项目；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "requirement_id": "SDD-ACC-REAL-004",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "真实验收",
+      "status": "unproven",
+      "text": "一次明显内容反馈实时吸收；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "requirement_id": "SDD-ACC-REAL-005",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "真实验收",
+      "status": "unproven",
+      "text": "一次明显视觉反馈实时吸收；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "requirement_id": "SDD-ACC-REAL-006",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "真实验收",
+      "status": "unproven",
+      "text": "两个不同类型项目验证同一机制；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "requirement_id": "SDD-ACC-REAL-007",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "真实验收",
+      "status": "unproven",
+      "text": "一个项目完结复盘；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "requirement_id": "SDD-ACC-REAL-008",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "真实验收",
+      "status": "unproven",
+      "text": "一个中止复盘；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "real-project"
+      ],
+      "requirement_id": "SDD-ACC-REAL-009",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "真实验收",
+      "status": "unproven",
+      "text": "macOS PowerPoint 当前发布目标证据。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-SCAN-001",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "五秒扫描",
+      "status": "unproven",
+      "text": "当前项目和阶段；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-SCAN-002",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "五秒扫描",
+      "status": "unproven",
+      "text": "当前材料模式；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-SCAN-003",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "五秒扫描",
+      "status": "unproven",
+      "text": "最大风险或缺口；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-SCAN-004",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "五秒扫描",
+      "status": "unproven",
+      "text": "唯一主操作；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-SCAN-005",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "五秒扫描",
+      "status": "unproven",
+      "text": "当前 Gate。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-001",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "用户可以连续读完整全稿；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-002",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "所有正文、证据、身份、备注和跨页关系存在；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-003",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "标题中立，不显示 desired judgment；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-004",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "四选一互斥；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-005",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "非 approved 意见必填；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-006",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "保存失败不丢草稿；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-007",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "全页完成前不能提交；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-008",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "提交不直接改稿或 G0；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-009",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "新版全篇复审；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-010",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "60 页无横向溢出和不可用卡顿。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-001",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "Codex 对话是唯一主入口，不存在项目轻量工作台、一级导航、项目仪表盘或常驻产品侧边栏；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-002",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "视觉专业审核页可按当前任务状态正确打开、通知、重新打开和恢复；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-003",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "专业审核页顶部可直接切换“3 页锚点成果 / 完整视觉合同”；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-004",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "锚点页支持矩形框选、紧邻幻灯片输入、多条记录和批次提交；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-005",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "完整合同包含 Deck Design System、锚点身份和全部逐页合同，连续可读；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-006",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "目录与标记抽屉覆盖打开，字段或选中文字可标记并从顶部统一保存；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-007",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "两类反馈状态隔离，保存不等于 G3；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-008",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "没有真实凭据时不显示页面已打开、宿主已通知或 AI 已接收；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-009",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "制作、目标验证和最终 PPTX 在原 Codex 对话中完成，不建设制作与交付页；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-010",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "对话准确说明当前必需目标、deferred 边界、ChatDeliveryReceipt、G4 和项目经验复盘状态。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-TRUTH-001",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "能力真实性",
+      "status": "unproven",
+      "text": "内容或视觉专业审核能力缺失时显示对应 CapabilityGap，不回退成常驻侧边栏或截图审核并宣称通过；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-TRUTH-002",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "能力真实性",
+      "status": "unproven",
+      "text": "审核页未被宿主实际打开时不声称已打开；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-TRUTH-003",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "能力真实性",
+      "status": "unproven",
+      "text": "session 创建、页面打开、保存、宿主通知和 AI 接收分别显示，任一步失败都不声称后续成功；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-TRUTH-004",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "能力真实性",
+      "status": "unproven",
+      "text": "无独立实例证据不显示多 Agent；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-TRUTH-005",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "能力真实性",
+      "status": "unproven",
+      "text": "自动化、原型、本地测试和历史 proof 不显示为当前真实验收。"
+    }
+  ],
+  "version": "2.2"
+}

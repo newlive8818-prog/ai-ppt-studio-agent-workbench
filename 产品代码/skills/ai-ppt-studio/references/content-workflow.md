@@ -1,37 +1,39 @@
-# Content-first presales workflow
+# Evidence-first presales content workflow
 
-## Mission, material identity, and sources
+## Mission and material mode
 
-Finish what the presentation says before deciding how it looks. Follow this mandatory order:
+Finish what the presentation says before deciding how it looks.
 
-1. Save `MissionDraft` with `save_ai_ppt_mission_draft`.
-2. Show the audience, topic, desired judgment/action, current material inventory or explicit no-material choice, background, constraints, red lines, and unknowns. Complete required fields mean only `confirmable`.
-3. After displaying the complete current card, recognize `OK / 确认 / 采纳 / 继续` only as confirmation intent when mission confirmation is the sole pending high-impact action. Ordinary conversation and unrelated adoption do not qualify.
-4. Call `confirm_ai_ppt_mission` with the current card summary. A verified sidebar/message reference or accepted host-native confirmation creates `MissionConfirmation` bound to the current draft, revision, and material identity; intent text is never evidence.
-5. Pass the Python content precondition gate before creating a formal content task or committing formal content.
-6. Continue as `material-backed` from `materials-provided`, or as `proposal-only` from `no-materials-confirmed`.
+1. Save `MissionDraft` with `save_ai_ppt_mission_draft` and show the complete current task card.
+2. Obtain `MissionConfirmation` through a verified user action or host-native confirmation. A complete draft is only `confirmable`; confirmation intent is not evidence.
+3. Register only user-provided sources and preserve their identities, hashes, exclusions, conflicts, unknowns, and prohibited extrapolations.
+4. Derive one current mode: `material-backed` when critical claims are sufficiently grounded, `mixed-evidence` when facts and explicit gaps coexist, or `proposal-led` when the user has confirmed no current customer material.
 
-In `material-backed`, preserve source fact, source-derived inference, AI-authored connective content, and unsupported gap. Critical unsupported facts cannot pass content acceptance or G0.
+Across all modes, keep source fact, source-derived inference, `诊断假设`, `方案建议`, `待联合验证`, conflict, unknown, and gap distinguishable. Never invent customer facts, numbers, cases, capabilities, results, or commitments.
 
-In `proposal-only`, preserve the user-facing identities 诊断假设 for customer situation and pain, 方案建议 for architecture/scope/path, and 待联合验证 for capabilities/results. Carry them through strategy, every claim, chapter task, slide title/copy, speaker notes, review, repair, acceptance, and Browser projection. Never invent customer facts, numbers, cases, product capabilities, results, or commitments.
+## Presales chief and four current objects
 
-## Formal production chain
+Let the presales chief own the complete reasoning chain and write one current authority per object:
 
-Produce one role-bound artifact at a time:
+1. `PresalesEvidenceBook`: sources, supported facts, inferences, conflicts, unknowns, evidence gaps, exclusions, and mode.
+2. `CustomerDecisionContext`: audience, decision stage, business issue, questions, constraints, desired action, and evidence-book reference.
+3. `ProblemSolutionFitMap`: traceable current-state, problem, requirement, proposal, value hypothesis, and validation path.
+4. `ReadingDeckBlueprint`: final page order, neutral title, page task, visible copy, speaker notes, evidence bindings, cross-page relations, identity labels, and media intent.
 
-1. `PresalesContentStrategy`: decision stage, core tension, persuasion proposition, boundaries, current mission confirmation/material identity refs, and content identity mode.
-2. `ClaimEvidenceMap`: each claim classified and bound to resolvable evidence, or explicitly governed under one of the three `proposal-only` identities.
-3. `DeckArgumentMap`: chapters, narrative tasks, transitions, evidence progression, and identity-visible chapter tasks.
-4. `SlideDraftSet`: final page order; title, communication goal, one core claim, all visible copy, complete speaker notes, source/material refs, identity status, gaps, and media intent for every page.
+Write in that order and bind every object to exact current `artifact://<kind>/<sha256>` upstream heads. Use specialists only for a concrete uncertainty or a high-impact `RevisionProposal`; a specialist recommendation cannot write the blueprint or approve its own work.
 
-References use `artifact://<kind>/<sha256>` and must point to current verified upstream heads.
+## Two hard gates and repair
 
-## Isolated review and repair
+Run `run_content_evidence_gate` and `run_content_presales_reading_gate` on the current `ReadingDeckBlueprint`. Both are binary and source-version-bound. A failure produces actionable requirements; use `repair_reading_deck_blueprint`, preserve repair history, publish a new source version, and rerun every invalidated gate. A score, fixture, or reviewer count cannot compensate for a failed check.
 
-Run exactly the required five independent roles—presales, decision-maker, evidence, narrative, and editorial review—against the same current draft. Applicable hard checks are binary. One missing, stale, duplicated, or failed role blocks acceptance; there is no score compensation. In `proposal-only`, each reviewer must reject any missing identity, false supported-fact status, material citation that does not exist, invented fact/number/case, or capability/result commitment.
+## Full-deck review and G0
 
-When checks fail, create a repair plan and revise only the affected content. Re-run every invalidated reviewer. Only the aggregated passing acceptance record may publish the content blueprint to professional review.
+After both hard gates pass:
 
-## G0
+1. Open or resume one current `content-full-deck` ReviewSession.
+2. Project every page without summarizing away visible copy, notes, evidence bindings, identities, or cross-page relations.
+3. Let users open each source through the read-only evidence layer. It belongs to the parent review, writes no `PageDecision`, and creates no second evidence judgment.
+4. Save one current `PageDecision` per slide, then submit one immutable `ContentReviewBatch`.
+5. If all decisions are approved, open G0 review. If any request change, save and explicitly confirm one `ContentBatchRevisionPlan`, create one change set, publish the new blueprint source version, and reopen review.
 
-The shared professional review document opens only in the Codex built-in Browser and continuously displays structure, every page's complete visible copy, speaker notes, source/material refs, fact or proposal identity, state, and mark targets. Saving marks does not pass G0. G0 requires the current internally accepted blueprint and explicit user confirmation with a real host-verified message reference. Visual discussion begins only after G0 passes.
+Saving decisions, submitting a Batch, opening evidence, or notifying the host never passes G0. Confirm G0 only for the current all-approved Batch through an explicit user judgment with a real host-verified reference. Begin visual work only after G0 passes.

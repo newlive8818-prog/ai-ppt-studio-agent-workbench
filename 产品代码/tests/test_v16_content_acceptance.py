@@ -1,528 +1,341 @@
+"""Substantive v2.2 migration of the historical content-acceptance regressions."""
+
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
-import json
-import os
-import sys
 import tempfile
-import time
 import unittest
-import uuid
+import sys
 from pathlib import Path
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ai_ppt_studio.application.content_service import ContentService
-from ai_ppt_studio.application.framework_discussion_service import FrameworkDiscussionService
-from ai_ppt_studio.application.scoped_confirmation import HOST_CONFIRMATION_SECRET_ENV
-from ai_ppt_studio.domains.content.contracts import REQUIRED_CONTENT_REVIEW_ROLES
+from ai_ppt_studio.application.content_hard_gate_service import ContentHardGateService
+from ai_ppt_studio.application.content_review.batch_service import (
+    ContentReviewBatchService,
+)
+from ai_ppt_studio.application.content_review.decision_service import (
+    ContentDecisionService,
+)
+from ai_ppt_studio.application.mission_material_service import MissionMaterialService
+from ai_ppt_studio.application.presales_content_service import PresalesContentService
 from ai_ppt_studio.errors import (
     ArtifactReferenceError,
-    ContentWorkflowError,
     GateBlockedError,
+    WorkbenchValidationError,
 )
 from ai_ppt_studio.kernel.references import ArtifactReference
-from tests.v16_content_fixtures import (
-    complete_slide_draft_payload,
-    publish_content_review,
-    publish_content_stage,
-)
+from ai_ppt_studio.kernel.transactions import ProjectKernel
+from tests.test_v22_content_contracts import blueprint, decision_context, evidence_book
+from tests.test_v22_content_repair_loop import build_content
+from tests.test_v22_content_review_projection import accepted_review
 
 
-TEST_SECRET = "test-only-content-acceptance-secret-32-bytes-long"
-
-
-def signed_assertion(context: dict[str, object]) -> str:
-    now = int(time.time())
-    body = {key: context[key] for key in (
-        "project_id", "project_root", "scope_kind", "scope_id",
-        "source_version", "evidence_refs", "challenge_id", "challenge_revision",
-    )}
-    body.update({
-        "identity_type": "host-action",
-        "identity_ref": f"test-host-action://{uuid.uuid4()}",
-        "nonce": str(uuid.uuid4()), "issued_at": now, "expires_at": now + 120,
-    })
-    segment = base64.urlsafe_b64encode(json.dumps(
-        body, ensure_ascii=False, separators=(",", ":")
-    ).encode()).decode().rstrip("=")
-    signature = base64.urlsafe_b64encode(hmac.new(
-        TEST_SECRET.encode(), segment.encode("ascii"), hashlib.sha256
-    ).digest()).decode().rstrip("=")
-    return f"v1.{segment}.{signature}"
-
-
-def framework_payload(mission_confirmation_ref: str, version: int = 1) -> dict:
-    return {
-        "framework_id": f"framework-{version}",
-        "mission_confirmation_ref": mission_confirmation_ref,
-        "core_proposition": "先证明经营断点，再确认一期路径。",
-        "persuasion_path": ["问题共识", "方案可信", "一期行动"],
-        "chapters": [{
-            "chapter_id": "C01", "title": "为何改变", "task": "建立问题共识",
-            "expected_judgment": "需要跨系统治理", "transition": "进入建设原则",
-        }],
-        "structural_risks": ["定量收益证据不足"],
-        "highest_impact_question": "是否以一期行动收束？", "status": "discussion",
-    }
-
-
-def authorize_current_framework(service: ContentService, mission_confirmation_ref: str, version: int = 1):
-    workflow = FrameworkDiscussionService(service.kernel)
-    framework_ref, _ = workflow.save_draft(
-        f"framework-{version}", service.kernel.load().revision,
-        framework_payload(mission_confirmation_ref, version),
-    )
-    context = workflow.confirmation_context()
-    confirmation_ref, _ = workflow.confirm_framework(
-        f"confirm-framework-{version}", service.kernel.load().revision,
-        framework_ref, str(context["challenge_id"]), int(context["challenge_revision"]),
-        signed_assertion(context),
-    )
-    context = workflow.expansion_authorization_context()
-    authorization_ref, _ = workflow.authorize_full_deck_expansion(
-        f"authorize-framework-{version}", service.kernel.load().revision,
-        framework_ref, str(context["challenge_id"]), int(context["challenge_revision"]),
-        signed_assertion(context),
-    )
-    return framework_ref, confirmation_ref, authorization_ref
-
-
-def build_authorized_draft(service: ContentService):
-    mission = service.save_mission_draft("c1", 0, {
-        "topic": "经营一体化方案", "primary_audience": "客户决策者",
-        "desired_judgment_or_action": "批准一期立项",
-    })
-    materials = service.register_materials("c2", 1, {"sources": [{
-        "source_id": "s1", "origin": "user-provided", "kind": "text",
-        "locator": "chat://message/material-1", "sha256": "a" * 64,
-    }]})
-    mission_confirmation = service.confirm_mission(
-        "c3", 2, mission_draft_ref=mission, material_mode="materials-provided",
-        material_inventory_ref=materials,
-        user_action_ref="test-user-action://mission", user_message_ref="",
-    )
-    lineage = authorize_current_framework(service, mission_confirmation)
-    revision = service.kernel.load().revision
-    strategy = publish_content_stage(service, "c4", "strategy", {
-        "mission_ref": mission, "material_inventory_ref": materials,
-        "content_identity_mode": "material-backed", "decision_stage": "立项",
-        "core_tension": "系统割裂",
-    })
-    claim_map = publish_content_stage(service, "c5", "claim-map", {
-        "strategy_ref": strategy,
-        "claims": [{"claim_id": "c1", "status": "supported", "evidence_refs": [materials]}],
-    })
-    argument = publish_content_stage(service, "c6", "argument-map", {
-        "strategy_ref": strategy, "claim_evidence_map_ref": claim_map,
-        "chapters": [{"chapter_id": "ch1", "task": "建立问题共识"}],
-    })
-    draft = publish_content_stage(
-        service, "c7", "slide-draft-set",
-        complete_slide_draft_payload(argument_map_ref=argument, material_ref=materials),
-    )
-    return service.kernel.load().revision, draft, lineage
-
-
-def review_payload(draft_ref: str, role: str, *, passed: bool = True) -> dict:
-    result = "passed" if passed else "failed"
-    return {
-        "target_ref": draft_ref,
-        "reviewer_role": role,
-        "input_version": draft_ref,
-        "checks": [
-            {
-                "criterion_id": f"{role}-hard",
-                "level": "must-follow",
-                "applicability": "applicable",
-                "result": result,
-                "evidence_refs": [draft_ref],
-                "failure_reason": "" if passed else "关键条件未满足",
-                "repair_instruction": "" if passed else "定向修复",
-            }
-        ],
-        "overall_result": result,
-    }
-
-
-def register_reviews(
-    service: ContentService,
-    start_revision: int,
-    draft_ref: str,
-    roles: tuple[str, ...] = REQUIRED_CONTENT_REVIEW_ROLES,
-    *,
-    failed_role: str = "",
-) -> int:
-    revision = start_revision
-    for index, role in enumerate(roles):
-        publish_content_review(
-            service,
-            f"review-{index}",
-            review_payload(draft_ref, role, passed=role != failed_role),
+def authority_snapshot(kernel: ProjectKernel):
+    events = tuple(sorted(path.name for path in kernel.events_root.glob("*.json")))
+    objects = tuple(
+        sorted(
+            str(path.relative_to(kernel.artifacts.objects_root))
+            for path in kernel.artifacts.objects_root.rglob("*.json")
         )
-        revision = service.kernel.load().revision
-    return revision
+    )
+    return kernel.load(), events, objects
+
+
+def pass_content_gates(kernel: ProjectKernel) -> None:
+    gates = ContentHardGateService(kernel)
+    gates.run_evidence_gate(
+        command_id="evidence-pass",
+        expected_revision=kernel.load().revision,
+        semantic_check_results=[],
+        reviewer_mode="isolated-review-task",
+    )
+    gates.run_presales_reading_gate(
+        command_id="reading-pass",
+        expected_revision=kernel.load().revision,
+        semantic_check_results=[],
+        reviewer_mode="isolated-review-task",
+    )
 
 
 class V16ContentAcceptanceTests(unittest.TestCase):
     def test_direct_formal_stage_and_review_publication_fail_closed_zero_write(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            service = ContentService.initialize(Path(temp), project_id="direct-blocked")
-            for operation in (
-                lambda: service.register_content_stage(
-                    "direct-stage", service.kernel.load().revision, "strategy", {}
-                ),
-                lambda: service.register_review(
-                    "direct-review", service.kernel.load().revision, {}
-                ),
-            ):
-                before = service.kernel.load()
-                events = (
-                    tuple(service.kernel.events_root.iterdir())
-                    if service.kernel.events_root.exists()
-                    else ()
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = ProjectKernel.initialize(Path(folder), project_id="direct-blocked")
+            before = authority_snapshot(kernel)
+            with self.assertRaises(WorkbenchValidationError):
+                ContentHardGateService(kernel).commit_reviewer_output(
+                    command_id="reviewer-cannot-edit",
+                    expected_revision=0,
+                    reviewer_role_id="content-evidence-gate-reviewer",
+                    artifact_kind="reading-deck-blueprint",
+                    payload={},
                 )
-                objects = tuple(service.kernel.artifacts.objects_root.rglob("*"))
-                with self.assertRaises(ContentWorkflowError) as caught:
-                    operation()
-                self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
-                self.assertEqual(service.kernel.load(), before)
-                events_after = (
-                    tuple(service.kernel.events_root.iterdir())
-                    if service.kernel.events_root.exists()
-                    else ()
-                )
-                self.assertEqual(events_after, events)
-                self.assertEqual(
-                    tuple(service.kernel.artifacts.objects_root.rglob("*")), objects
-                )
+            self.assertEqual(authority_snapshot(kernel), before)
 
     def test_stage_and_review_reject_supplied_stale_framework_lineage_zero_write(self) -> None:
-        with tempfile.TemporaryDirectory() as temp, patch.dict(
-            os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
-        ):
-            service = ContentService.initialize(Path(temp), project_id="stale-lineage")
-            revision, draft_ref, old_lineage_tuple = build_authorized_draft(service)
-            old_lineage = dict(zip(
-                (
-                    "framework_ref",
-                    "framework_confirmation_ref",
-                    "full_deck_expansion_authorization_ref",
-                ),
-                old_lineage_tuple,
-            ))
-            mission_confirmation = service.kernel.load().artifact_heads[
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = ProjectKernel.initialize(Path(folder), project_id="stale-lineage")
+            first_blueprint_ref = build_content(kernel, "content-v1")
+            first_blueprint = kernel.artifacts.resolve(
+                ArtifactReference.parse(first_blueprint_ref)
+            )["payload"]
+            old_evidence_ref = first_blueprint["evidence_book_ref"]
+            service = PresalesContentService(kernel)
+            current = kernel.load()
+            replacement = evidence_book()
+            replacement["source_version"] = "content-v2"
+            replacement["mission_confirmation_ref"] = current.artifact_heads[
                 "mission/confirmation"
             ]
-            authorize_current_framework(service, mission_confirmation, version=2)
-            current = service.kernel.load()
-            strategy_ref = publish_content_stage(
-                service, "v2-strategy", "strategy", {
-                    "mission_ref": current.artifact_heads["mission/draft"],
-                    "material_inventory_ref": current.artifact_heads["materials"],
-                    "content_identity_mode": "material-backed",
-                    "decision_stage": "立项", "core_tension": "系统割裂",
-                }
+            replacement["material_inventory_ref"] = current.artifact_heads["materials"]
+            service.build_evidence_book(
+                "replace-evidence",
+                current.revision,
+                replacement,
             )
-            claim_ref = publish_content_stage(
-                service, "v2-claim", "claim-map", {
-                    "strategy_ref": strategy_ref,
-                    "claims": [{
-                        "claim_id": "v2-c1", "status": "supported",
-                        "evidence_refs": [current.artifact_heads["materials"]],
-                    }],
-                }
-            )
-            argument_ref = publish_content_stage(
-                service, "v2-argument", "argument-map", {
-                    "strategy_ref": strategy_ref,
-                    "claim_evidence_map_ref": claim_ref,
-                    "chapters": [{"chapter_id": "ch1", "task": "建立问题共识"}],
-                }
-            )
-            current_draft_ref = publish_content_stage(
-                service, "v2-draft", "slide-draft-set",
-                complete_slide_draft_payload(
-                    argument_map_ref=argument_ref,
-                    material_ref=current.artifact_heads["materials"],
-                ),
-            )
-            current = service.kernel.load()
-
-            stale_strategy = {
-                "mission_ref": current.artifact_heads["mission/draft"],
-                "material_inventory_ref": current.artifact_heads["materials"],
-                "content_identity_mode": "material-backed",
-                "decision_stage": "立项",
-                "core_tension": "系统割裂",
-                **old_lineage,
-            }
-            stale_review = {
-                **review_payload(
-                    current_draft_ref, REQUIRED_CONTENT_REVIEW_ROLES[0]
-                ),
-                **old_lineage,
-            }
-            for command_id, operation in (
-                (
-                    "reject-stale-stage-lineage",
-                    lambda: service.register_content_stage(
-                        "reject-stale-stage-lineage",
-                        service.kernel.load().revision,
-                        "strategy",
-                        stale_strategy,
-                    ),
-                ),
-                (
-                    "reject-stale-review-lineage",
-                    lambda: service.register_review(
-                        "reject-stale-review-lineage",
-                        service.kernel.load().revision,
-                        stale_review,
-                    ),
-                ),
-            ):
-                with self.subTest(command_id=command_id):
-                    before = service.kernel.load()
-                    events = tuple(service.kernel.events_root.iterdir())
-                    objects = tuple(service.kernel.artifacts.objects_root.rglob("*"))
-                    with self.assertRaises(ContentWorkflowError) as caught:
-                        operation()
-                    self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
-                    self.assertEqual(service.kernel.load(), before)
-                    self.assertEqual(tuple(service.kernel.events_root.iterdir()), events)
-                    self.assertEqual(
-                        tuple(service.kernel.artifacts.objects_root.rglob("*")),
-                        objects,
-                    )
+            stale_context = decision_context()
+            stale_context["evidence_book_ref"] = old_evidence_ref
+            before = authority_snapshot(kernel)
+            with self.assertRaises(ArtifactReferenceError):
+                service.build_decision_context(
+                    "reject-stale-evidence",
+                    kernel.load().revision,
+                    stale_context,
+                )
+            self.assertEqual(authority_snapshot(kernel), before)
 
     def test_acceptance_revalidates_every_current_content_chain_head_zero_write(self) -> None:
-        stages = {
-            "content/strategy": "presales-content-strategy",
-            "content/claim-map": "claim-evidence-map",
-            "content/argument-map": "deck-argument-map",
-            "content/draft": "slide-draft-set",
+        slots = {
+            "content/evidence-book": "presales-evidence-book",
+            "content/decision-context": "customer-decision-context",
+            "content/problem-solution-fit": "problem-solution-fit-map",
         }
-        for slot, kind in stages.items():
-            with self.subTest(slot=slot), tempfile.TemporaryDirectory() as temp, patch.dict(
-                os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
-            ):
-                service = ContentService.initialize(Path(temp), project_id="adversarial")
-                revision, draft_ref, _lineage = build_authorized_draft(service)
-                revision = register_reviews(service, revision, draft_ref)
-                current_ref = service.kernel.load().artifact_heads[slot]
-                forged = dict(service.kernel.artifacts.resolve(
+        for slot, kind in slots.items():
+            with self.subTest(slot=slot), tempfile.TemporaryDirectory() as folder:
+                kernel = ProjectKernel.initialize(Path(folder), project_id="adversarial")
+                build_content(kernel)
+                current_ref = kernel.load().artifact_heads[slot]
+                payload = kernel.artifacts.resolve(
                     ArtifactReference.parse(current_ref)
-                )["payload"])
-                forged["framework_ref"] = (
-                    "artifact://content-framework-draft/" + "f" * 64
+                )["payload"]
+                state = kernel.commit(
+                    command_id=f"tamper-{slot}",
+                    expected_revision=kernel.load().revision,
+                    event_type="test.current-content-lineage-tampered",
+                    artifact_updates={slot: (f"not-{kind}", payload)},
                 )
-                service.kernel.commit(
-                    command_id=f"forge:{slot}", expected_revision=revision,
-                    event_type="test.forge-content-chain-head",
-                    artifact_updates={slot: (kind, forged)},
-                )
-                before = service.kernel.load()
-                objects_before = tuple(
-                    path.relative_to(service.kernel.artifacts.objects_root)
-                    for path in service.kernel.artifacts.objects_root.rglob("*")
-                    if path.is_file()
-                )
-                with self.assertRaises(ContentWorkflowError):
-                    service.accept_content("reject-forged-chain", before.revision)
-                self.assertEqual(service.kernel.load(), before)
-                objects_after = tuple(
-                    path.relative_to(service.kernel.artifacts.objects_root)
-                    for path in service.kernel.artifacts.objects_root.rglob("*")
-                    if path.is_file()
-                )
-                self.assertEqual(objects_after, objects_before)
-                self.assertNotIn("content/acceptance", before.artifact_heads)
-                self.assertNotIn("content/blueprint", before.artifact_heads)
+                before = authority_snapshot(kernel)
+                with self.assertRaises(ArtifactReferenceError):
+                    ContentHardGateService(kernel).run_evidence_gate(
+                        command_id=f"reject-tampered-{slot}",
+                        expected_revision=state.revision,
+                        semantic_check_results=[],
+                        reviewer_mode="isolated-review-task",
+                    )
+                self.assertEqual(authority_snapshot(kernel), before)
+                self.assertNotIn("content/acceptance", kernel.load().artifact_heads)
 
     def test_acceptance_rejects_wrong_kind_review_heads_zero_write(self) -> None:
-        for role in REQUIRED_CONTENT_REVIEW_ROLES:
-            with self.subTest(role=role), tempfile.TemporaryDirectory() as temp, patch.dict(
-                os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
-            ):
-                service = ContentService.initialize(Path(temp), project_id="review-kind")
-                revision, draft_ref, _lineage = build_authorized_draft(service)
-                revision = register_reviews(service, revision, draft_ref)
-                slot = f"content/review/{role}"
-                current = service.kernel.load().artifact_heads[slot]
-                payload = service.kernel.artifacts.resolve(
-                    ArtifactReference.parse(current)
-                )["payload"]
-                service.kernel.commit(
-                    command_id=f"wrong-review-kind:{role}",
-                    expected_revision=revision,
-                    event_type="test.wrong-review-kind",
-                    artifact_updates={slot: ("not-a-content-review-record", payload)},
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = ProjectKernel.initialize(Path(folder), project_id="review-kind")
+            build_content(kernel)
+            gates = ContentHardGateService(kernel)
+            evidence_ref, _record, state = gates.run_evidence_gate(
+                command_id="evidence-pass",
+                expected_revision=kernel.load().revision,
+                semantic_check_results=[],
+                reviewer_mode="isolated-review-task",
+            )
+            payload = kernel.artifacts.resolve(
+                ArtifactReference.parse(evidence_ref)
+            )["payload"]
+            state = kernel.commit(
+                command_id="wrong-evidence-kind",
+                expected_revision=state.revision,
+                event_type="test.wrong-gate-kind",
+                artifact_updates={
+                    "content/gate/evidence": ("not-a-content-hard-gate-record", payload)
+                },
+            )
+            before = authority_snapshot(kernel)
+            with self.assertRaises(GateBlockedError):
+                gates.run_presales_reading_gate(
+                    command_id="reject-wrong-kind",
+                    expected_revision=state.revision,
+                    semantic_check_results=[],
+                    reviewer_mode="isolated-review-task",
                 )
-                before = service.kernel.load()
-                objects_before = tuple(
-                    path.relative_to(service.kernel.artifacts.objects_root)
-                    for path in service.kernel.artifacts.objects_root.rglob("*")
-                    if path.is_file()
-                )
-                with self.assertRaises(ArtifactReferenceError):
-                    service.accept_content("reject-wrong-review-kind", before.revision)
-                self.assertEqual(service.kernel.load(), before)
-                objects_after = tuple(
-                    path.relative_to(service.kernel.artifacts.objects_root)
-                    for path in service.kernel.artifacts.objects_root.rglob("*")
-                    if path.is_file()
-                )
-                self.assertEqual(objects_after, objects_before)
-                self.assertNotIn("content/acceptance", before.artifact_heads)
-                self.assertNotIn("content/blueprint", before.artifact_heads)
+            self.assertEqual(authority_snapshot(kernel), before)
+            self.assertNotIn("content/acceptance", kernel.load().artifact_heads)
 
     def test_formal_content_cannot_start_from_mission_readiness_alone(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            service = ContentService.initialize(Path(temp), project_id="mission-only")
-            mission = service.save_mission_draft("mission", 0, {
-                "topic": "经营一体化", "primary_audience": "决策者",
-                "desired_judgment_or_action": "批准一期",
-            })
-            service.confirm_mission(
-                "confirm", 1, mission_draft_ref=mission,
-                material_mode="no-materials-confirmed", material_inventory_ref="",
-                user_action_ref="test-user-action://mission-only", user_message_ref="",
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = ProjectKernel.initialize(Path(folder), project_id="mission-only")
+            mission = MissionMaterialService(kernel)
+            draft_ref = mission.save_mission_draft(
+                "mission",
+                0,
+                {
+                    "topic": "经营一体化",
+                    "primary_audience": "客户决策者",
+                    "desired_judgment_or_action": "确认一期范围",
+                },
             )
-            before = service.kernel.load()
-            with self.assertRaises(ContentWorkflowError) as caught:
-                service.register_content_stage("too-early", before.revision, "strategy", {
-                    "mission_ref": mission, "content_identity_mode": "proposal-only",
-                    "decision_stage": "立项", "core_tension": "诊断假设",
-                    "identity_labels": ["diagnostic-hypothesis", "solution-recommendation", "joint-validation-required"],
-                })
-            self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
-            self.assertEqual(service.kernel.load(), before)
-            self.assertNotIn("content/blueprint", before.artifact_heads)
+            mission.confirm_mission(
+                "confirm",
+                1,
+                mission_draft_ref=draft_ref,
+                material_mode="no-materials-confirmed",
+                material_inventory_ref="",
+                user_action_ref="test-user-action://mission-only",
+                user_message_ref="",
+            )
+            premature = blueprint("proposal-led")
+            premature["project_id"] = kernel.project_id
+            before = authority_snapshot(kernel)
+            with self.assertRaises(ArtifactReferenceError):
+                PresalesContentService(kernel).build_reading_deck_blueprint(
+                    "skip-four-content-objects",
+                    kernel.load().revision,
+                    premature,
+                )
+            self.assertEqual(authority_snapshot(kernel), before)
+            self.assertNotIn("content/reading-blueprint", kernel.load().artifact_heads)
 
     def test_acceptance_requires_five_roles_and_chat_only_g0(self) -> None:
-        with tempfile.TemporaryDirectory() as temp, patch.dict(
-            os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
-        ):
-            service = ContentService.initialize(Path(temp), project_id="p1")
-            revision, draft_ref, lineage = build_authorized_draft(service)
-            revision = register_reviews(service, revision, draft_ref)
-            accepted = service.accept_content("accept", revision)
-            self.assertTrue(
-                accepted.acceptance_ref.startswith(
-                    "artifact://content-acceptance/"
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = ProjectKernel.initialize(Path(folder), project_id="p1")
+            blueprint_ref, _session_ref, session, state = accepted_review(kernel)
+            acceptance = kernel.artifacts.resolve(
+                ArtifactReference.parse(state.artifact_heads["content/acceptance"])
+            )["payload"]
+            self.assertEqual(
+                set(acceptance),
+                {
+                    "source_version",
+                    "reading_blueprint_ref",
+                    "evidence_gate_ref",
+                    "presales_reading_gate_ref",
+                    "overall_result",
+                    "accepted_at",
+                },
+            )
+            self.assertNotIn("content/framework-confirmation", state.artifact_heads)
+            self.assertNotIn(
+                "content/full-deck-expansion-authorization",
+                state.artifact_heads,
+            )
+            _decision_ref, _decision, state = ContentDecisionService(kernel).save(
+                command_id="approve",
+                expected_revision=state.revision,
+                review_session_id=session["review_session_id"],
+                source_version="content-v1",
+                slide_id="S01",
+                decision="approved",
+                comment="",
+            )
+            _batch_ref, _batch, state = ContentReviewBatchService(kernel).submit(
+                command_id="submit",
+                expected_revision=state.revision,
+                review_session_id=session["review_session_id"],
+                source_version="content-v1",
+            )
+            service = PresalesContentService(kernel)
+            state = service.open_g0_review(
+                command_id="open-g0",
+                expected_revision=state.revision,
+            )
+            before = authority_snapshot(kernel)
+            with self.assertRaises(GateBlockedError):
+                service.confirm_g0(
+                    command_id="reject-non-chat-confirmation",
+                    expected_revision=state.revision,
+                    user_message_ref="review://approved",
                 )
-            )
-            self.assertTrue(
-                accepted.blueprint_ref.startswith("artifact://content-blueprint/")
-            )
-            acceptance = service.kernel.artifacts.resolve(
-                ArtifactReference.parse(accepted.acceptance_ref)
-            )["payload"]
-            self.assertIn("passed_at", acceptance)
-            self.assertEqual(
-                [acceptance[key] for key in (
-                    "framework_ref", "framework_confirmation_ref",
-                    "full_deck_expansion_authorization_ref",
-                )], list(lineage)
-            )
-            draft = service.kernel.artifacts.resolve(
-                ArtifactReference.parse(draft_ref)
-            )["payload"]
-            self.assertEqual(
-                [draft[key] for key in (
-                    "framework_ref", "framework_confirmation_ref",
-                    "full_deck_expansion_authorization_ref",
-                )], list(lineage)
-            )
-            blueprint = service.kernel.artifacts.resolve(
-                ArtifactReference.parse(accepted.blueprint_ref)
-            )["payload"]
-            self.assertEqual(
-                [blueprint[key] for key in (
-                    "framework_ref", "framework_confirmation_ref",
-                    "full_deck_expansion_authorization_ref",
-                )], list(lineage)
-            )
-            self.assertTrue(acceptance["passed_at"].endswith("+00:00"))
-            self.assertEqual(
-                accepted.state.gate_status["G0"], "user-reviewable"
-            )
-            self.assertEqual(accepted.state.gate_status["G1"], "locked")
-
+            self.assertEqual(authority_snapshot(kernel), before)
             confirmed = service.confirm_g0(
-                "confirm-g0",
-                accepted.state.revision,
-                user_message_ref="chat://message/g0-accepted",
+                command_id="confirm-g0",
+                expected_revision=state.revision,
+                user_message_ref="chat://message/g0-confirmed",
             )
             self.assertEqual(confirmed.gate_status["G0"], "passed")
             self.assertEqual(confirmed.gate_status["G1"], "open")
+            self.assertEqual(
+                kernel.artifacts.resolve(
+                    ArtifactReference.parse(
+                        confirmed.artifact_heads["gate/G0/confirmation"]
+                    )
+                )["payload"]["reading_blueprint_ref"],
+                blueprint_ref,
+            )
 
     def test_new_framework_invalidates_acceptance_without_additional_writes(self) -> None:
-        with tempfile.TemporaryDirectory() as temp, patch.dict(
-            os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
-        ):
-            service = ContentService.initialize(Path(temp), project_id="stale")
-            revision, draft_ref, lineage = build_authorized_draft(service)
-            revision = register_reviews(service, revision, draft_ref)
-            mission_confirmation_ref = service.kernel.load().artifact_heads[
-                "mission/confirmation"
-            ]
-            FrameworkDiscussionService(service.kernel).save_draft(
-                "replacement", revision,
-                framework_payload(mission_confirmation_ref, 2),
-            )
-            before = service.kernel.load()
-            self.assertNotIn("content/draft", before.artifact_heads)
-            self.assertNotIn(
-                "content/full-deck-expansion-authorization", before.artifact_heads
-            )
-            with self.assertRaises(ContentWorkflowError) as caught:
-                service.accept_content("stale-acceptance", before.revision)
-            self.assertEqual(
-                caught.exception.code, "FULL_DECK_EXPANSION_NOT_AUTHORIZED"
-            )
-            self.assertEqual(service.kernel.load(), before)
-            self.assertNotIn("content/acceptance", before.artifact_heads)
-            self.assertNotIn("content/blueprint", before.artifact_heads)
-            self.assertTrue(all(lineage))
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = ProjectKernel.initialize(Path(folder), project_id="stale")
+            first = build_content(kernel, "content-v1")
+            pass_content_gates(kernel)
+            self.assertIn("content/acceptance", kernel.load().artifact_heads)
+            second = build_content(kernel, "content-v2")
+            self.assertNotEqual(first, second)
+            current = kernel.load()
+            for slot in (
+                "content/gate/evidence",
+                "content/gate/presales-reading",
+                "content/acceptance",
+                "review/session/content-full-deck",
+            ):
+                self.assertNotIn(slot, current.artifact_heads)
+            before = authority_snapshot(kernel)
+            with self.assertRaises(GateBlockedError):
+                PresalesContentService(kernel).open_g0_review(
+                    command_id="reject-stale-acceptance",
+                    expected_revision=current.revision,
+                )
+            self.assertEqual(authority_snapshot(kernel), before)
 
     def test_missing_or_failed_review_blocks_acceptance(self) -> None:
-        with tempfile.TemporaryDirectory() as temp, patch.dict(
-            os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
-        ):
-            service = ContentService.initialize(Path(temp), project_id="p1")
-            revision, draft_ref, _refs = build_authorized_draft(service)
-            revision = register_reviews(
-                service,
-                revision,
-                draft_ref,
-                REQUIRED_CONTENT_REVIEW_ROLES[:-1],
-            )
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = ProjectKernel.initialize(Path(folder), project_id="missing")
+            build_content(kernel)
+            before = authority_snapshot(kernel)
             with self.assertRaises(GateBlockedError):
-                service.accept_content("missing-review", revision)
-            self.assertEqual(service.kernel.load().revision, revision)
-            with self.assertRaises(GateBlockedError):
-                service.confirm_g0("early-g0", revision, user_message_ref="")
+                PresalesContentService(kernel).open_g0_review(
+                    command_id="missing-gates",
+                    expected_revision=kernel.load().revision,
+                )
+            self.assertEqual(authority_snapshot(kernel), before)
 
-        with tempfile.TemporaryDirectory() as temp, patch.dict(
-            os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
-        ):
-            service = ContentService.initialize(Path(temp), project_id="p2")
-            revision, draft_ref, _refs = build_authorized_draft(service)
-            revision = register_reviews(
-                service,
-                revision,
-                draft_ref,
-                failed_role="evidence-reviewer",
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = ProjectKernel.initialize(Path(folder), project_id="failed")
+            blueprint_ref = build_content(kernel)
+            gates = ContentHardGateService(kernel)
+            _failed_ref, failed, _state = gates.run_evidence_gate(
+                command_id="failed-evidence",
+                expected_revision=kernel.load().revision,
+                semantic_check_results=[
+                    {
+                        "check_id": "unsupported-causality",
+                        "applicability": "applicable",
+                        "result": "failed",
+                        "hard": True,
+                        "evidence_refs": [blueprint_ref],
+                        "failure_reason": "存在无证因果跳跃",
+                    }
+                ],
+                reviewer_mode="isolated-review-task",
             )
+            self.assertEqual(failed["overall_result"], "failed")
+            before = authority_snapshot(kernel)
             with self.assertRaises(GateBlockedError):
-                service.accept_content("failed-review", revision)
-            self.assertEqual(service.kernel.load().revision, revision)
+                gates.run_presales_reading_gate(
+                    command_id="reading-after-failed-evidence",
+                    expected_revision=kernel.load().revision,
+                    semantic_check_results=[],
+                    reviewer_mode="isolated-review-task",
+                )
+            self.assertEqual(authority_snapshot(kernel), before)
+            self.assertNotIn("content/acceptance", kernel.load().artifact_heads)
 
 
 if __name__ == "__main__":

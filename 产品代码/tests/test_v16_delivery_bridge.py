@@ -23,7 +23,7 @@ class V16DeliveryBridgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
             delivery, revision, refs = prepared_delivery_ready(
-                project, slide_count=2
+                project, slide_count=3
             )
             payload = {
                 **valid_package_payload(refs, package_artifacts(delivery, refs)),
@@ -76,7 +76,7 @@ class V16DeliveryBridgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
             delivery, revision, refs = prepared_delivery_ready(
-                project, slide_count=2
+                project, slide_count=3
             )
             package_payload = {
                 **valid_package_payload(
@@ -135,7 +135,7 @@ class V16DeliveryBridgeTests(unittest.TestCase):
                 },
             )
             self.assertEqual(projection["phase"], "user-reviewable")
-            self.assertEqual(projection["slides"], {"completed": 2, "total": 2})
+            self.assertEqual(projection["slides"], {"completed": 3, "total": 3})
             self.assertEqual(
                 projection["quality_gates"],
                 {
@@ -149,7 +149,7 @@ class V16DeliveryBridgeTests(unittest.TestCase):
             self.assertEqual(len(projection["targets"]), 4)
             self.assertEqual(
                 {target["status"] for target in projection["targets"]},
-                {"passed"},
+                {"passed", "deferred"},
             )
             self.assertEqual(projection["hash_identity"], refs["pptx_sha256"])
             self.assertEqual(projection["chat_send"]["status"], "sent")
@@ -193,7 +193,7 @@ class V16DeliveryBridgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
             delivery, revision, _refs = prepared_delivery_ready(
-                project, slide_count=2
+                project, slide_count=3
             )
             with self.assertRaises(ContractValidationError):
                 dispatch_v16(

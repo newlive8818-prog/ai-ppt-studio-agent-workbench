@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the installed plugin and final v1.6 real-project acceptance state."""
+"""Verify the installed plugin and final real-project acceptance state."""
 
 from __future__ import annotations
 
@@ -20,8 +20,10 @@ from ai_ppt_studio.acceptance.ledger import (  # noqa: E402
     EvidenceIndex,
     extract_numbered_requirements,
 )
+from ai_ppt_studio.application.release_policy_service import (  # noqa: E402
+    ReleaseTargetPolicyService,
+)
 from ai_ppt_studio.domains.presentation.targets import (  # noqa: E402
-    REQUIRED_TARGET_IDS,
     TargetRenderEvidence,
     validate_required_targets,
 )
@@ -30,9 +32,9 @@ from ai_ppt_studio.kernel.references import ArtifactReference  # noqa: E402
 from ai_ppt_studio.kernel.transactions import ProjectKernel  # noqa: E402
 
 SOURCES = (
-    (PROJECT / "01-产品需求基线-v1.0.md", "PRD", "17"),
-    (PROJECT / "02-系统详细设计-v1.0.md", "SDD", "21"),
-    (PROJECT / "03-UI设计与交互规范-v1.0.md", "UI", "23"),
+    (PROJECT / "01-产品需求基线-v1.0.md", "PRD", "验收标准"),
+    (PROJECT / "02-系统详细设计-v1.0.md", "SDD", "测试策略"),
+    (PROJECT / "03-UI设计与交互规范-v1.0.md", "UI", "UI 验收"),
 )
 DEFAULT_INSTALL_EVIDENCE = (
     ROOT / "output" / "acceptance" / "v1.6" / "plugin-install" / "install-evidence.json"
@@ -65,15 +67,16 @@ def _canonical(payload: object) -> str:
 
 def _authoritative_ledger(index: EvidenceIndex) -> AcceptanceLedger:
     requirements = []
-    for path, prefix, section in SOURCES:
+    for path, prefix, section_title in SOURCES:
         requirements.extend(
             extract_numbered_requirements(
                 path.read_text(encoding="utf-8"),
                 source_prefix=prefix,
-                section_prefix=section,
+                source_file=path.name,
+                section_title=section_title,
             )
         )
-    return AcceptanceLedger("1.6", tuple(requirements)).with_evidence(index)
+    return AcceptanceLedger("2.2", tuple(requirements)).with_evidence(index)
 
 
 def _verify_ledger(
@@ -85,12 +88,21 @@ def _verify_ledger(
     index = EvidenceIndex.from_path(evidence_index_path)
     expected = _authoritative_ledger(index)
     checked_in = AcceptanceLedger.from_dict(_json(ledger_path))
+    if not checked_in.requirements:
+        raise ValueError("Final acceptance ledger is empty")
+    if checked_in.requirement_ids != expected.requirement_ids:
+        raise ValueError("Acceptance requirement identities drifted")
+    for actual, authoritative in zip(
+        checked_in.requirements, expected.requirements, strict=True
+    ):
+        if actual.text != authoritative.text:
+            raise ValueError(
+                f"Acceptance requirement text drifted: {actual.requirement_id}"
+            )
     if _canonical(checked_in.as_dict()) != _canonical(expected.as_dict()):
         raise ValueError(
             "Acceptance ledger does not match the authoritative baselines and evidence index"
         )
-    if len(checked_in.requirements) != 104:
-        raise ValueError("Final acceptance requires exactly 104 requirements")
     for requirement in checked_in.requirements:
         if (
             requirement.status != "passed"
@@ -156,6 +168,7 @@ def _verify_installed_release(
         raise ValueError("Installed release manifest identity changed")
     manifest = _json(manifest_path)
     files = manifest.get("files")
+    manifest_catalog_hash = str(manifest.get("tool_catalog_sha256") or "")
     if (
         str(manifest.get("schema_version")) != "1.0"
         or manifest.get("plugin_name") != "ai-ppt-studio"
@@ -170,24 +183,79 @@ def _verify_installed_release(
         if _sha(_safe_release_file(cache, str(relative))) != digest:
             raise ValueError(f"Installed release file hash mismatch: {relative}")
     probe = evidence.get("installed_probe")
+    tools = probe.get("tools") if isinstance(probe, dict) else None
+    probe_catalog_hash = (
+        str(probe.get("tool_catalog_sha256") or "")
+        if isinstance(probe, dict)
+        else ""
+    )
+    tool_catalog_valid = (
+        isinstance(tools, list)
+        and bool(tools)
+        and all(isinstance(tool, str) and tool for tool in tools)
+        and len(tools) == len(set(tools))
+        and probe.get("tool_count") == len(tools)
+        and bool(re.fullmatch(r"[0-9a-f]{64}", probe_catalog_hash))
+        and probe_catalog_hash == manifest_catalog_hash
+    )
+    professional_review = (
+        probe.get("professional_review") if isinstance(probe, dict) else None
+    )
+    host_open = (
+        professional_review.get("host_open")
+        if isinstance(professional_review, dict)
+        else None
+    )
+    host_notification = (
+        professional_review.get("host_notification")
+        if isinstance(professional_review, dict)
+        else None
+    )
+    ai_receipt = (
+        professional_review.get("ai_receipt")
+        if isinstance(professional_review, dict)
+        else None
+    )
+    professional_review_valid = (
+        isinstance(professional_review, dict)
+        and professional_review.get("review_session")
+        in {"available", "unavailable"}
+        and isinstance(
+            professional_review.get("content_review_projection"), bool
+        )
+        and isinstance(
+            professional_review.get("visual_review_projection"), bool
+        )
+        and isinstance(host_open, dict)
+        and host_open.get("status") in {"available", "unavailable"}
+        and host_open.get("code")
+        in {"BROWSER_REVIEW_UNAVAILABLE", "BROWSER_REVIEW_AVAILABLE"}
+        and isinstance(host_open.get("proofEligible"), bool)
+        and isinstance(host_open.get("realHostEvidence"), bool)
+        and isinstance(host_notification, dict)
+        and host_notification.get("status")
+        in {"available", "unavailable", "unverified"}
+        and isinstance(host_notification.get("proofEligible"), bool)
+        and isinstance(host_notification.get("realHostEvidence"), bool)
+        and isinstance(ai_receipt, dict)
+        and ai_receipt.get("status")
+        in {"available", "unavailable", "unverified", "received"}
+        and isinstance(ai_receipt.get("proofEligible"), bool)
+        and isinstance(ai_receipt.get("realHostEvidence"), bool)
+    )
     if (
         evidence.get("official_plugin_validation") != "passed"
         or evidence.get("runtime_recovery_test") != "passed"
         or not isinstance(probe, dict)
         or probe.get("status") != "passed"
         or probe.get("source_repository_pythonpath") is not False
-        or probe.get("tool_count") != 17
+        or not tool_catalog_valid
         or probe.get("chat_ui_template_count") != 0
         or probe.get("ordinary_tools_data_only") is not True
-        or probe.get("sidebar_capability_code")
-        not in {"HOST_SIDEBAR_UNAVAILABLE", "HOST_SIDEBAR_AVAILABLE"}
-        or probe.get("browser_capability_code")
-        not in {"BROWSER_REVIEW_UNAVAILABLE", "BROWSER_REVIEW_AVAILABLE"}
-        or not isinstance(probe.get("sidebar_real_host_evidence"), bool)
-        or not isinstance(probe.get("browser_real_host_evidence"), bool)
+        or not professional_review_valid
     ):
         raise ValueError(
-            "Installed plugin validation, recovery, MCP data-only, or host capability probe failed"
+            "Installed plugin validation, recovery, MCP tool catalog, data-only, or host capability probe failed"
         )
     if not fixture_mode and (
         evidence.get("simulation") is True or evidence.get("proof_eligible") is False
@@ -198,6 +266,8 @@ def _verify_installed_release(
         "cache_root": str(cache),
         "manifest_sha256": manifest_hash,
         "file_count": len(files),
+        "tool_count": len(tools),
+        "tool_catalog_sha256": probe_catalog_hash,
     }
 
 
@@ -219,11 +289,15 @@ def _artifact_payload(
 
 
 def _target_matrix(
-    kernel: ProjectKernel, state: Any, *, stage: str
+    kernel: ProjectKernel,
+    state: Any,
+    *,
+    stage: str,
+    required_target_ids: tuple[str, ...],
 ) -> tuple[str, tuple[str, ...]]:
     prefix = "visual" if stage == "G2" else "delivery"
     values: list[TargetRenderEvidence] = []
-    for target_id in REQUIRED_TARGET_IDS:
+    for target_id in required_target_ids:
         slot = f"{prefix}/target-evidence/{stage}/{target_id}"
         ref = state.artifact_heads.get(slot, "")
         if not ref:
@@ -237,9 +311,11 @@ def _target_matrix(
             raise ValueError(f"{stage} target slot identity mismatch: {target_id}")
         values.append(item)
     try:
-        matrix = validate_required_targets(values)
+        matrix = validate_required_targets(values, required_target_ids)
     except GateBlockedError as exc:
-        raise ValueError(f"{stage} four-target evidence matrix is not complete") from exc
+        raise ValueError(
+            f"{stage} release-target evidence matrix is not complete"
+        ) from exc
     return matrix.pptx_sha256, matrix.target_ids
 
 
@@ -255,11 +331,22 @@ def _verify_project(project_root: Path) -> dict[str, Any]:
         raise ValueError("Final acceptance project lacks project identity")
     kernel = ProjectKernel(project, project_id=project_id)
     state = kernel.load()
+    policy_ref, policy = ReleaseTargetPolicyService(kernel).current()
     for gate in ("G0", "G1", "G2", "G3", "G4"):
         if state.gate_status.get(gate) != "passed":
             raise ValueError(f"Final acceptance Gate is not passed: {gate}")
-    g2_hash, g2_targets = _target_matrix(kernel, state, stage="G2")
-    g4_hash, g4_targets = _target_matrix(kernel, state, stage="G4")
+    g2_hash, g2_targets = _target_matrix(
+        kernel,
+        state,
+        stage="G2",
+        required_target_ids=policy.required_target_ids,
+    )
+    g4_hash, g4_targets = _target_matrix(
+        kernel,
+        state,
+        stage="G4",
+        required_target_ids=policy.required_target_ids,
+    )
     if g2_hash != g4_hash:
         raise ValueError("G2 and G4 target matrices must use the same PPTX SHA-256")
     build_ref = state.artifact_heads.get("delivery/build", "")
@@ -274,6 +361,7 @@ def _verify_project(project_root: Path) -> dict[str, Any]:
     confirmation = _artifact_payload(kernel, confirmation_ref, "g4-confirmation")
     if (
         build.get("pptx_sha256") != g4_hash
+        or package.get("release_target_policy_ref") != policy_ref
         or package.get("build_ref") != build_ref
         or package.get("pptx_sha256") != g4_hash
         or receipt.get("build_ref") != build_ref
@@ -284,6 +372,7 @@ def _verify_project(project_root: Path) -> dict[str, Any]:
         or confirmation.get("build_ref") != build_ref
         or confirmation.get("package_ref") != package_ref
         or confirmation.get("receipt_ref") != receipt_ref
+        or confirmation.get("release_target_policy_ref") != policy_ref
         or not str(confirmation.get("user_message_ref") or "").startswith(
             "chat://message/"
         )
@@ -297,6 +386,9 @@ def _verify_project(project_root: Path) -> dict[str, Any]:
         "g4_pptx_sha256": g4_hash,
         "g2_targets": list(g2_targets),
         "g4_targets": list(g4_targets),
+        "release_target_policy_ref": policy_ref,
+        "required_target_ids": list(policy.required_target_ids),
+        "deferred_target_ids": list(policy.deferred_target_ids),
         "chat_message_ref": receipt["message_ref"],
         "g4_user_message_ref": confirmation["user_message_ref"],
     }
@@ -314,7 +406,9 @@ def verify_final_acceptance(
     evidence_file = (
         evidence_index_path.expanduser().resolve(strict=True)
         if evidence_index_path
-        else ledger_file.with_name("v1.6-evidence.json").resolve(strict=True)
+        else ledger_file.with_name(
+            ledger_file.name.replace("-acceptance-ledger.json", "-evidence.json")
+        ).resolve(strict=True)
     )
     install_file = (
         install_evidence_path.expanduser().resolve(strict=True)
@@ -331,10 +425,11 @@ def verify_final_acceptance(
         "evidence_identity": (
             "deterministic-contract-fixture"
             if fixture_mode
-            else "v1.6-final-acceptance"
+            else f"v{ledger.version}-final-acceptance"
         ),
         "proof_eligible": not fixture_mode,
         "simulation": fixture_mode,
+        "acceptance_ledger_version": ledger.version,
         "requirement_count": len(ledger.requirements),
         "passed_requirement_count": sum(
             item.status == "passed" for item in ledger.requirements

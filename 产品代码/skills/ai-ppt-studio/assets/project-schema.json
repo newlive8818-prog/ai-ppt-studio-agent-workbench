@@ -3,9 +3,10 @@
   "project_manifest": "project.json",
   "event_log": "events/events.jsonl",
   "state_file": "state/state.json",
-  "personal_experience_index": "personal-memory/experience-index.json",
-  "experience_versions": "personal-memory/experiences/<experience-id>/vNNNN.json",
+  "experience_index": "personal-memory/experience-index.json",
+  "same_type_experience_versions": "personal-memory/same-type/<experience-id>/vNNNN.json",
+  "global_experience_versions": "personal-memory/global/<experience-id>/vNNNN.json",
   "experience_applications": "evaluation/applications.jsonl",
   "experience_evaluations": "evaluation/evaluations.jsonl",
-  "experience_decisions": "evaluation/promotion-decisions.jsonl"
+  "experience_promotions": "evaluation/promotions.jsonl"
 }

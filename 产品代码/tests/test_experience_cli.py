@@ -8,11 +8,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.v22_experience_fixtures import experience_item
+
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class ExperienceCliTests(unittest.TestCase):
-    def run_cli(self, prefix: list[str], cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    def run_cli(
+        self, prefix: list[str], cwd: Path, *args: str
+    ) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
         env["PYTHONPATH"] = str(ROOT / "src")
         return subprocess.run(
@@ -26,149 +31,198 @@ class ExperienceCliTests(unittest.TestCase):
 
     @staticmethod
     def write_json(path: Path, payload: dict[str, object]) -> Path:
-        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+        )
         return path
 
-    def test_cli_runs_create_recommend_apply_evaluate_and_inspect_loop(self) -> None:
+    def test_cli_runs_v22_absorb_recommend_apply_evaluate_promote_and_rollback(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
             web = base / "web"
             web.mkdir()
-            runtime = base / "runtime"
             prefix = [
-                "--runtime-root", str(runtime),
-                "--source-repo-root", str(base / "repo"),
-                "--install-root", str(base / "install"),
-                "--upstream-root", str(web),
+                "--runtime-root",
+                str(base / "runtime"),
+                "--source-repo-root",
+                str(base / "repo"),
+                "--install-root",
+                str(base / "install"),
+                "--upstream-root",
+                str(web),
             ]
-            source_result = self.run_cli(prefix, web, "init", "--name", "来源项目")
-            target_result = self.run_cli(prefix, web, "init", "--name", "目标项目")
-            source = json.loads(source_result.stdout)["project"]["project_root"]
-            target = json.loads(target_result.stdout)["project"]["project_root"]
-            candidate_path = self.write_json(
-                base / "candidate.json",
-                {
-                    "name": "案例问题建设成效叙事",
-                    "experience_type": "content-strategy",
-                    "mechanism": "案例页先回答原有问题，再说明建设内容，最后用结果证明能力。",
-                    "model_interpretation": "单独罗列数据不能证明交付能力。",
-                    "source_refs": ["reviews/feedback/v0003.json"],
-                    "scope": {
-                        "scenes": ["售前方案"],
-                        "audiences": ["国企决策者"],
-                        "slide_tasks": ["项目案例"],
-                        "conditions": ["已验收"],
-                    },
-                    "evidence_refs": [],
-                    "before_after_refs": [],
-                    "counterexamples": ["只有指标数字，没有建设内容"],
-                    "privacy_level": "private",
-                    "portable_scope": "personal-installation",
-                    "sanitized_for_reuse": True,
-                },
+            target_result = self.run_cli(
+                prefix, web, "init", "--name", "目标项目"
             )
-            context_path = self.write_json(
-                base / "context.json",
-                {
-                    "scene": "售前方案",
-                    "audience": "国企决策者",
-                    "slide_task": "项目案例",
-                    "conditions": ["已验收"],
-                },
+            target_root = json.loads(target_result.stdout)["project"][
+                "project_root"
+            ]
+            item_path = self.write_json(
+                base / "experience.json", experience_item()
             )
-
             created = self.run_cli(
                 prefix,
                 web,
-                "experience-create",
-                "--project", source,
-                "--input", str(candidate_path),
+                "experience-absorb-same-type",
+                "--input",
+                str(item_path),
             )
             self.assertEqual(created.returncode, 0, created.stderr)
             experience = json.loads(created.stdout)["experience"]
+            original_ref = experience["experience_ref"]
 
-            listed = self.run_cli(prefix, web, "experience-list", "--level", "candidate")
+            listed = self.run_cli(
+                prefix,
+                web,
+                "experience-list",
+                "--domain",
+                "content",
+                "--layer",
+                "same-type",
+            )
             self.assertEqual(listed.returncode, 0, listed.stderr)
-            self.assertEqual(json.loads(listed.stdout)["experiences"][0]["experience_id"], experience["experience_id"])
+            self.assertEqual(
+                json.loads(listed.stdout)["experiences"][0]["experience_id"],
+                "exp-reading-path",
+            )
 
+            applicability = self.write_json(
+                base / "applicability.json",
+                {"conditions": ["阅读优先"]},
+            )
             recommended = self.run_cli(
-                prefix, web, "experience-recommend", "--input", str(context_path)
+                prefix,
+                web,
+                "experience-recommend",
+                "--domain",
+                "content",
+                "--type-signature",
+                "presales:transport:decision",
+                "--input",
+                str(applicability),
             )
             self.assertEqual(recommended.returncode, 0, recommended.stderr)
-            self.assertIn("slide_task:项目案例", json.loads(recommended.stdout)["recommendations"][0]["match_reasons"])
+            self.assertEqual(
+                json.loads(recommended.stdout)["recommendations"][0][
+                    "experience_ref"
+                ],
+                original_ref,
+            )
 
+            application_input = self.write_json(
+                base / "application.json",
+                {
+                    "target_type_signature": "presales:transport:decision",
+                    "context": {"conditions": ["阅读优先"]},
+                    "evidence_refs": [
+                        "artifact://reading-deck-blueprint/" + "1" * 64
+                    ],
+                    "applied_at": "2026-08-15T01:00:00+08:00",
+                },
+            )
             applied = self.run_cli(
                 prefix,
                 web,
                 "experience-apply",
-                "--project", target,
-                "--experience", experience["experience_id"],
-                "--input", str(context_path),
+                "--project",
+                target_root,
+                "--experience-ref",
+                original_ref,
+                "--input",
+                str(application_input),
             )
             self.assertEqual(applied.returncode, 0, applied.stderr)
-            application_id = json.loads(applied.stdout)["application"]["application_id"]
-            evaluation_path = self.write_json(
+            application_id = json.loads(applied.stdout)["application"][
+                "application_id"
+            ]
+            evaluation_input = self.write_json(
                 base / "evaluation.json",
                 {
                     "outcome": "success",
-                    "user_accepted": True,
-                    "notes": "案例可信度明显提升",
-                    "evidence_refs": ["reviews/delivery-review.html"],
+                    "user_outcome_ref": "host-message://accepted-target",
+                    "hard_gate_refs": [
+                        "artifact://content-hard-gate-record/" + "2" * 64
+                    ],
+                    "evidence_refs": [
+                        "artifact://reading-deck-blueprint/" + "3" * 64
+                    ],
+                    "evaluated_at": "2026-08-15T02:00:00+08:00",
                 },
             )
             evaluated = self.run_cli(
                 prefix,
                 web,
                 "experience-evaluate",
-                "--application", application_id,
-                "--input", str(evaluation_path),
+                "--application-id",
+                application_id,
+                "--input",
+                str(evaluation_input),
             )
             self.assertEqual(evaluated.returncode, 0, evaluated.stderr)
-            self.assertEqual(json.loads(evaluated.stdout)["experience"]["success_count"], 1)
 
             shown = self.run_cli(
                 prefix,
                 web,
                 "experience-show",
-                "--experience", experience["experience_id"],
+                "--domain",
+                "content",
+                "--layer",
+                "same-type",
+                "--experience-id",
+                "exp-reading-path",
             )
             self.assertEqual(shown.returncode, 0, shown.stderr)
-            self.assertGreater(json.loads(shown.stdout)["experience"]["version"], 1)
+            current = json.loads(shown.stdout)["experience"]
+            self.assertEqual(current["application_count"], 1)
 
-            disabled = self.run_cli(
+            promoted = self.run_cli(
                 prefix,
                 web,
-                "experience-set-level",
-                "--experience", experience["experience_id"],
-                "--level", "disabled",
-                "--reason", "验证禁用命令",
+                "experience-promote-global",
+                "--same-type-ref",
+                current["experience_ref"],
+                "--user-directive-ref",
+                "host-message://use-globally",
+                "--promoted-at",
+                "2026-08-15T03:00:00+08:00",
             )
-            self.assertEqual(disabled.returncode, 0, disabled.stderr)
-            self.assertFalse(json.loads(disabled.stdout)["experience"]["enabled"])
+            self.assertEqual(promoted.returncode, 0, promoted.stderr)
+            self.assertEqual(
+                json.loads(promoted.stdout)["experience"]["layer"], "global"
+            )
 
             rolled_back = self.run_cli(
                 prefix,
                 web,
                 "experience-rollback",
-                "--experience", experience["experience_id"],
-                "--version", "1",
-                "--reason", "验证恢复首版",
+                "--experience-ref",
+                current["experience_ref"],
+                "--target-version-ref",
+                original_ref,
+                "--reason",
+                "恢复首版",
+                "--rolled-back-at",
+                "2026-08-15T04:00:00+08:00",
             )
             self.assertEqual(rolled_back.returncode, 0, rolled_back.stderr)
             restored = json.loads(rolled_back.stdout)["experience"]
-            self.assertEqual(restored["level"], "candidate")
             self.assertEqual(restored["rollback_from_version"], 1)
+            self.assertNotIn("level", restored)
 
-    def test_preflight_reports_evidence_backed_experience_readiness(self) -> None:
+    def test_preflight_reports_evidence_backed_v22_experience_readiness(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
             web = base / "web"
             web.mkdir()
             prefix = [
-                "--runtime-root", str(base / "runtime"),
-                "--source-repo-root", str(base / "repo"),
-                "--install-root", str(base / "install"),
-                "--upstream-root", str(web),
+                "--runtime-root",
+                str(base / "runtime"),
+                "--source-repo-root",
+                str(base / "repo"),
+                "--install-root",
+                str(base / "install"),
+                "--upstream-root",
+                str(web),
             ]
             result = self.run_cli(prefix, web, "preflight")
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -176,12 +230,14 @@ class ExperienceCliTests(unittest.TestCase):
             evidence = payload["capability_evidence"]["experience_evolution"]
             self.assertTrue(payload["capabilities"]["experience_evolution"])
             self.assertTrue(evidence["ready"])
-            self.assertIn("rollback", evidence["operations"])
+            self.assertEqual(evidence["schema_version"], "2.2")
+            self.assertIn("promote_global", evidence["operations"])
+            self.assertNotIn("create_candidate", evidence["operations"])
             self.assertFalse(evidence["stable_kernel_auto_mutation"])
             self.assertTrue(Path(evidence["index_path"]).is_file())
             self.assertTrue(Path(evidence["application_log"]).is_file())
             self.assertTrue(Path(evidence["evaluation_log"]).is_file())
-            self.assertTrue(Path(evidence["decision_log"]).is_file())
+            self.assertTrue(Path(evidence["promotion_log"]).is_file())
 
 
 if __name__ == "__main__":

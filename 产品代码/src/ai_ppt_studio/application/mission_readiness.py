@@ -19,7 +19,7 @@ class MissionReadiness:
     mission_draft_ref: str
     mission_confirmation_ref: str
     material_mode: str
-    content_identity_mode: str
+    content_mode: str
     material_inventory_ref: str = ""
     empty_material_identity: str = ""
 
@@ -73,7 +73,7 @@ class MissionReadinessPolicy:
                 mission_draft_ref=draft_ref,
                 mission_confirmation_ref=confirmation_ref,
                 material_mode=mode,
-                content_identity_mode="material-backed",
+                content_mode="material-backed",
                 material_inventory_ref=current_materials,
             )
         if mode == "no-materials-confirmed":
@@ -88,7 +88,7 @@ class MissionReadinessPolicy:
                 mission_draft_ref=draft_ref,
                 mission_confirmation_ref=confirmation_ref,
                 material_mode=mode,
-                content_identity_mode="proposal-only",
+                content_mode="proposal-led",
                 empty_material_identity=expected_empty,
             )
         raise MaterialModeUnconfirmedError(
@@ -108,21 +108,29 @@ class MissionReadinessPolicy:
                 "mission_draft_ref": draft_ref,
                 "mission_confirmation_ref": confirmation_ref,
                 "material_mode": "unconfirmed",
-                "content_identity_mode": "blocked",
+                "content_mode": "blocked",
             }
         except MaterialModeUnconfirmedError:
             return {
                 "mission_draft_ref": draft_ref,
                 "mission_confirmation_ref": confirmation_ref,
                 "material_mode": "unconfirmed",
-                "content_identity_mode": "blocked",
+                "content_mode": "blocked",
             }
         return {
             "mission_draft_ref": ready.mission_draft_ref,
             "mission_confirmation_ref": ready.mission_confirmation_ref,
             "material_mode": ready.material_mode,
-            "content_identity_mode": ready.content_identity_mode,
+            "content_mode": ready.content_mode,
         }
+
+    def v22_material_mode(self, *, has_evidence_gaps: bool) -> str:
+        """Translate the trusted Mission boundary into the v2.2 content mode."""
+
+        ready = self.require_ready()
+        if ready.material_mode == "no-materials-confirmed":
+            return "proposal-led"
+        return "mixed-evidence" if has_evidence_gaps else "material-backed"
 
     def _resolve(self, value: str, kind: str) -> dict:
         reference = ArtifactReference.parse(value)

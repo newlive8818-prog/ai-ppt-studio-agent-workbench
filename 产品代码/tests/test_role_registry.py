@@ -24,7 +24,7 @@ class RoleRegistryTests(unittest.TestCase):
     def test_all_approved_roles_have_chinese_display_name_and_stable_id(self) -> None:
         """每一个已批准的正式角色都有中文显示名、稳定 roleId 和隔离组。"""
         registry = RoleRegistry.default()
-        self.assertGreaterEqual(len(registry.all()), 18)
+        self.assertGreaterEqual(len(registry.all()), 14)
         for role in registry.all():
             with self.subTest(role_id=role.role_id):
                 self.assertTrue(role.role_id, "role_id 不能为空")
@@ -56,28 +56,25 @@ class RoleRegistryTests(unittest.TestCase):
             r for r in registry.all()
             if r.role_group == "content" and r.authority == "reviewer"
         ]
-        self.assertGreaterEqual(len(content_producers), 3)
-        self.assertGreaterEqual(len(content_reviewers), 3)
+        self.assertEqual({role.role_id for role in content_producers}, {"presales-solution-chief"})
+        self.assertEqual(
+            {role.role_id for role in content_reviewers},
+            {"content-evidence-gate-reviewer", "content-presales-reading-gate-reviewer"},
+        )
         # 不同隔离组
         producer_ids = {r.role_id for r in content_producers}
         reviewer_ids = {r.role_id for r in content_reviewers}
         self.assertFalse(producer_ids.intersection(reviewer_ids))
-        # 审查组必须有独立总编辑
-        self.assertTrue(registry.has("deck-coherence-editor"))
-        editor = registry.get("deck-coherence-editor")
-        self.assertEqual(editor.authority, "reviewer")
-        self.assertEqual(editor.role_group, "content")
+        self.assertFalse(registry.get("content-evidence-gate-reviewer").can_release_gate)
 
-    def test_content_review_team_contains_the_five_v16_specialists(self) -> None:
+    def test_content_roles_are_the_v22_chief_and_two_hard_gates(self) -> None:
         registry = RoleRegistry.default()
         expected = {
-            "presales-content-reviewer",
-            "audience-decision-reviewer",
-            "content-fact-checker",
-            "argument-logic-reviewer",
-            "reading-experience-reviewer",
+            "presales-solution-chief",
+            "content-evidence-gate-reviewer",
+            "content-presales-reading-gate-reviewer",
         }
-        self.assertTrue(expected.issubset({role.role_id for role in registry.all()}))
+        self.assertEqual(expected, {role.role_id for role in registry.by_group("content")})
 
     def test_formal_visual_roles_enforce_strict_b(self) -> None:
         """正式视觉生产角色必须绑定 strict-B 路线。"""
@@ -131,9 +128,10 @@ class ScenarioPackTests(unittest.TestCase):
         pack = registry.resolve(scene="presales", task_type="reading-first")
         self.assertIsInstance(pack, PresalesScenarioPack)
         self.assertEqual(pack.scene, "presales")
-        self.assertGreaterEqual(len(pack.production_roles), 5)
-        self.assertGreaterEqual(len(pack.review_roles), 5)
-        self.assertIn("presales-content-reviewer", pack.review_roles)
+        self.assertIn("presales-solution-chief", pack.production_roles)
+        self.assertIn("content-evidence-gate-reviewer", pack.review_roles)
+        self.assertIn("content-presales-reading-gate-reviewer", pack.review_roles)
+        self.assertNotIn("presales-content-strategist", pack.production_roles)
 
     def test_unknown_scenario_raises(self) -> None:
         registry = ScenarioPackRegistry.default()
