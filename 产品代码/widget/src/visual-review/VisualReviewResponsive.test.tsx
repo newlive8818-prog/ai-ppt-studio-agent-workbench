@@ -6,6 +6,14 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync(resolve(process.cwd(), "widget/src/styles/visual-review.css"), "utf8");
 
 describe("visual anchor review responsive contracts", () => {
+  it("uses a white project topbar with a segmented review switch and compact status", () => {
+    expect(css).toMatch(/\.visual-professional-header\.visual-review-topbar\s*\{[^}]*border-bottom:\s*1px solid[^}]*background:\s*rgba\(255,\s*255,\s*255,\s*\.96\)/s);
+    expect(css).toMatch(/\.visual-professional-ai-mark\s*\{[^}]*display:\s*grid[^}]*place-items:\s*center/s);
+    expect(css).toMatch(/\.visual-professional-review-view-switch\s*\{[^}]*border:\s*1px solid[^}]*border-radius:\s*9px[^}]*background:/s);
+    expect(css).toMatch(/\.visual-professional-review-view-switch button\[aria-selected="true"\]\s*\{[^}]*background:\s*#fff/s);
+    expect(css).toMatch(/\.visual-professional-compact-status\s*\{[^}]*display:\s*flex/s);
+  });
+
   it("uses a bounded assistant column without shrinking the primary slide workbench", () => {
     expect(css).toMatch(/\.anchor-review-layout\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(300px,\s*360px\)/s);
     expect(css).toMatch(/\.anchor-review-main\s*\{[^}]*min-width:\s*0/s);

@@ -258,12 +258,15 @@ function VisualProfessionalReviewRoot({
 
   return (
     <main ref={rootRef} className="visual-professional-page">
-      <header className="visual-professional-header">
-        <div className="visual-professional-project">
-          <strong>{initialData.review.project_name}</strong>
-          <span>{visibleSourceVersion} · revision {revision}</span>
+      <header className="visual-professional-header visual-review-topbar visual-professional-topbar">
+        <div className="visual-professional-project visual-professional-project-identity">
+          <span className="visual-professional-ai-mark" aria-hidden="true">AI</span>
+          <div className="visual-professional-project-copy">
+            <strong>{initialData.review.project_name}</strong>
+            <span>{visibleSourceVersion} · revision {revision}</span>
+          </div>
         </div>
-        <div className="visual-professional-view-tabs" role="tablist" aria-label="视觉专业审核视图">
+        <div className="visual-professional-view-tabs visual-professional-review-view-switch" role="tablist" aria-label="视觉专业审核视图">
           <button
             ref={(node) => { tabRefs.current.anchors = node; }}
             id={anchorsTabId}
@@ -285,7 +288,7 @@ function VisualProfessionalReviewRoot({
             onClick={() => selectView("contract")}
           >完整视觉合同</button>
         </div>
-        <div className="visual-professional-gates">
+        <div className="visual-professional-gates visual-professional-compact-status">
           <span>G1 {initialData.review.gate_status.G1}</span>
           <span>G2 {initialData.review.gate_status.G2}</span>
           <span>视觉确认 {visibleConfirmation}</span>

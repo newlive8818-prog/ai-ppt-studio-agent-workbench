@@ -33,14 +33,6 @@ interface DragState {
 
 type ImageStatus = "loading" | "ready" | "unavailable";
 
-const regionPresets: Array<{ label: string; region: NormalizedRegion }> = [
-  { label: "整页", region: { x: 0, y: 0, width: 1, height: 1 } },
-  { label: "上半区", region: { x: 0, y: 0, width: 1, height: 0.5 } },
-  { label: "下半区", region: { x: 0, y: 0.5, width: 1, height: 0.5 } },
-  { label: "左侧", region: { x: 0, y: 0, width: 0.5, height: 1 } },
-  { label: "右侧", region: { x: 0.5, y: 0, width: 0.5, height: 1 } },
-];
-
 function clamp(value: number) {
   return Math.min(1, Math.max(0, value));
 }
@@ -217,20 +209,6 @@ export function RegionFeedbackEditor({
     setDragPreview(null);
   };
 
-  const choosePreset = (region: NormalizedRegion) => {
-    if (disabled || imageStatus !== "ready" || hasPersistedComposer || !isValidNormalizedRegion(region)) return;
-    drag.current = null;
-    setDragPreview(null);
-    setAnnotationMode(false);
-    onSliceChange(drafts, {
-      anchor_slide_id: slideId,
-      candidate_region: { ...region },
-      editing_feedback_id: "",
-      comment: "",
-    });
-    setMessage(`${slideId} 预设区域已定位，请在幻灯片下方输入意见。`);
-  };
-
   return (
     <section className="region-feedback-editor" aria-label={`${slideId} 区域反馈`}>
       <div className="anchor-toolbar">
@@ -248,16 +226,6 @@ export function RegionFeedbackEditor({
           >{annotationMode ? "取消标注" : "开始标注"}</button>
         </div>
       </div>
-      {annotationMode && imageStatus === "ready" ? (
-        <div className="anchor-region-presets" role="group" aria-label="预设标注范围">
-          <span>键盘预设范围</span>
-          {regionPresets.map((preset) => (
-            <button key={preset.label} type="button" disabled={disabled || hasPersistedComposer} onClick={() => choosePreset(preset.region)}>
-              {preset.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
       <div
         className={`anchor-canvas${annotationMode ? " annotating" : ""}`}
         data-testid="anchor-canvas"

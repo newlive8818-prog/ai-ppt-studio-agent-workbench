@@ -1218,7 +1218,8 @@ describe("visual professional review surface", () => {
     const start = screen.getByRole("button", { name: "开始标注" });
     expect(start).toBeEnabled();
     fireEvent.click(start);
-    expect(screen.getByRole("group", { name: "预设标注范围" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "预设标注范围" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "取消标注" })).toBeInTheDocument();
   });
 
   it("[7C B] clears only the anchor slice after one strictly closed success", async () => {
@@ -2134,6 +2135,11 @@ describe("visual professional review surface", () => {
     const { container } = render(<VisualProfessionalReviewPage initialData={data} bridge={bridge} />);
 
     const header = container.querySelector<HTMLElement>(".visual-professional-header")!;
+    expect(header).toHaveClass("visual-review-topbar", "visual-professional-topbar");
+    expect(header.querySelector(".visual-professional-project-identity")).toBeInTheDocument();
+    expect(header.querySelector(".visual-professional-ai-mark")).toHaveTextContent("AI");
+    expect(header.querySelector(".visual-professional-review-view-switch")).toHaveAttribute("role", "tablist");
+    expect(header.querySelector(".visual-professional-compact-status")).toBeInTheDocument();
     expect(within(header).getByText("测试项目")).toBeInTheDocument();
     expect(within(header).getByText("visual-v1 · revision 12")).toBeInTheDocument();
     expect(within(header).getByText("G1 passed")).toBeInTheDocument();
@@ -3110,22 +3116,17 @@ describe("visual professional review surface", () => {
     expect(screen.getByRole("button", { name: "加入本轮反馈" })).toBeInTheDocument();
   });
 
-  it("closes annotation and prevents a preset from overwriting saved-region editing", async () => {
+  it("closes annotation and protects saved-region editing without visible presets", async () => {
     mockSlideRect();
     const { bridge } = host();
     render(<VisualProfessionalReviewPage initialData={visualData()} bridge={bridge} />);
     await addRegion("已保存区域的原意见");
 
     fireEvent.click(screen.getByRole("button", { name: "开始标注" }));
-    const stalePreset = screen.getByRole("button", { name: "右侧" });
+    expect(screen.queryByRole("group", { name: "预设标注范围" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "S01 已标注区域 1" }));
     expect(screen.getByRole("button", { name: "更新本条反馈" })).toBeInTheDocument();
     expect(screen.getByLabelText("当前框选区域反馈")).toHaveValue("已保存区域的原意见");
-    expect(screen.queryByRole("group", { name: "预设标注范围" })).not.toBeInTheDocument();
-
-    fireEvent.click(stalePreset);
-    expect(screen.getByLabelText("当前框选区域反馈")).toHaveValue("已保存区域的原意见");
-    expect(screen.getByRole("button", { name: "更新本条反馈" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("当前框选区域反馈"), { target: { value: "更新后的已保存意见" } });
     fireEvent.click(screen.getByRole("button", { name: "更新本条反馈" }));
     expect(screen.queryByLabelText("当前框选区域反馈")).not.toBeInTheDocument();
@@ -3133,7 +3134,8 @@ describe("visual professional review surface", () => {
     const start = screen.getByRole("button", { name: "开始标注" });
     expect(start).toBeEnabled();
     fireEvent.click(start);
-    expect(screen.getByRole("group", { name: "预设标注范围" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "预设标注范围" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "取消标注" })).toBeInTheDocument();
   });
 
   it("prevents active or subsequent drags from overwriting saved-region editing until discard", async () => {
@@ -3168,7 +3170,8 @@ describe("visual professional review surface", () => {
     expect(screen.getByRole("button", { name: "加入本轮反馈" })).toBeInTheDocument();
   });
 
-  it("offers keyboard-operable preset regions without introducing a chat sidebar", async () => {
+  it("keeps pointer-drag feedback as the only formal region path without introducing a chat sidebar", async () => {
+    mockSlideRect();
     const { bridge, callTool } = host();
     render(<VisualProfessionalReviewPage initialData={visualData()} bridge={bridge} />);
     await readyActiveAnchor();
@@ -3176,23 +3179,27 @@ describe("visual professional review surface", () => {
     const start = screen.getByRole("button", { name: "开始标注" });
     start.focus();
     fireEvent.click(start, { detail: 0 });
-    const presets = screen.getByRole("group", { name: "预设标注范围" });
-    expect(within(presets).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "整页", "上半区", "下半区", "左侧", "右侧",
-    ]);
+    expect(screen.queryByRole("group", { name: "预设标注范围" })).not.toBeInTheDocument();
+    for (const preset of ["整页", "上半区", "下半区", "左侧", "右侧"]) {
+      expect(screen.queryByRole("button", { name: preset })).not.toBeInTheDocument();
+    }
 
-    const right = within(presets).getByRole("button", { name: "右侧" });
-    right.focus();
-    fireEvent.click(right, { detail: 0 });
+    const canvas = screen.getByTestId("anchor-canvas");
+    fireEvent.pointerDown(canvas, { pointerId: 131, button: 0, clientX: 500, clientY: 120, isPrimary: true });
+    fireEvent.pointerMove(canvas, { pointerId: 131, clientX: 760, clientY: 420, isPrimary: true });
+    fireEvent.pointerUp(canvas, { pointerId: 131, clientX: 760, clientY: 420, isPrimary: true });
     expect(screen.getByLabelText("当前框选区域反馈")).toHaveFocus();
-    fireEvent.change(screen.getByLabelText("当前框选区域反馈"), { target: { value: "压缩右侧证据密度" } });
+    fireEvent.change(screen.getByLabelText("当前框选区域反馈"), { target: { value: "压缩框选区域的证据密度" } });
     fireEvent.click(screen.getByRole("button", { name: "加入本轮反馈" }), { detail: 0 });
     fireEvent.click(screen.getByRole("button", { name: "统一提交 1 条反馈" }), { detail: 0 });
 
     await waitFor(() => expect(callTool.mock.calls.some(([name]) => name === "submit_visual_anchor_feedback_batch")).toBe(true));
     const call = callTool.mock.calls.find(([name]) => name === "submit_visual_anchor_feedback_batch")!;
     const submitted = (call[1] as { feedback: AnchorFeedbackBatch["items"] }).feedback[0];
-    expect(submitted.normalized_region).toEqual({ x: 0.5, y: 0, width: 0.5, height: 1 });
+    expect(submitted.normalized_region.x).toBeCloseTo(0.5, 10);
+    expect(submitted.normalized_region.y).toBeCloseTo(120 / 562, 10);
+    expect(submitted.normalized_region.width).toBeCloseTo(0.26, 10);
+    expect(submitted.normalized_region.height).toBeCloseTo(300 / 562, 10);
     expect(screen.queryByRole("complementary", { name: /聊天/ })).not.toBeInTheDocument();
   });
 
