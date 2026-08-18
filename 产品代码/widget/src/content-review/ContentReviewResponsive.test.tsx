@@ -25,7 +25,13 @@ describe("content review responsive contracts", () => {
     expect(css).toMatch(/@media\s*\(max-width:\s*380px\)[\s\S]*?\.page-decision-option\s*\{[^}]*white-space:\s*nowrap/s);
   });
 
-  it("wraps long chapter page navigation without widening the review body", () => {
-    expect(css).toMatch(/\.content-review-chapter-pages\s*\{[^}]*min-width:\s*0[^}]*flex:\s*1\s+1\s+240px[^}]*flex-wrap:\s*wrap/s);
+  it("keeps long chapter page links compact inside the horizontal strip", () => {
+    expect(css).toMatch(/\.content-review-chapter-pages\s*\{[^}]*flex:\s*0\s+0\s+auto[^}]*flex-wrap:\s*nowrap/s);
+  });
+
+  it("keeps the chapter navigator as one compact horizontal strip", () => {
+    expect(css).toMatch(/\.content-review-chapter-nav\s*\{[^}]*flex-wrap:\s*nowrap[^}]*overflow-x:\s*auto/s);
+    expect(css).toMatch(/\.content-review-chapter-nav-item\s*\{[^}]*flex:\s*0\s+0\s+auto/s);
+    expect(css).not.toMatch(/\.content-review-chapter-nav-item\s*\{[^}]*flex:\s*1\s+1\s+320px/s);
   });
 });

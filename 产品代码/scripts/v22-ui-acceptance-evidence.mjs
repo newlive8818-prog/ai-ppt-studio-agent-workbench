@@ -118,6 +118,59 @@ function finiteViewport(value) {
   return { width: value.width, height: value.height };
 }
 
+export const CONTENT_REVIEW_SPATIAL_CONTRACT = Object.freeze({
+  viewport: Object.freeze({ width: 1280, height: 720 }),
+  maxHeaderHeight: 96,
+  maxChapterNavHeight: 64,
+  maxDeckIntroHeight: 160,
+});
+
+export function assertContentReviewSpatialFidelity(measurement) {
+  const viewport = finiteViewport(measurement?.viewport);
+  const expected = CONTENT_REVIEW_SPATIAL_CONTRACT.viewport;
+  if (viewport.width !== expected.width || viewport.height !== expected.height) {
+    throw new Error(`Content spatial fidelity requires ${expected.width}x${expected.height}; received ${viewport.width}x${viewport.height}.`);
+  }
+  const header = finiteRect(measurement?.header, "Content header");
+  const chapterNav = finiteRect(measurement?.chapterNav, "Content chapter navigation");
+  const deckIntro = finiteRect(measurement?.deckIntro, "Content deck intro");
+  const firstChapterHeading = finiteRect(measurement?.firstChapterHeading, "First chapter heading");
+  const firstSlideHeading = finiteRect(measurement?.firstSlideHeading, "First slide heading");
+  const firstReadingGrid = finiteRect(measurement?.firstReadingGrid, "First reading grid");
+  if (header.height > CONTENT_REVIEW_SPATIAL_CONTRACT.maxHeaderHeight) {
+    throw new Error("Content header exceeds the spatial budget.");
+  }
+  if (chapterNav.height > CONTENT_REVIEW_SPATIAL_CONTRACT.maxChapterNavHeight) {
+    throw new Error("Content chapter navigation exceeds the spatial budget.");
+  }
+  if (deckIntro.height > CONTENT_REVIEW_SPATIAL_CONTRACT.maxDeckIntroHeight) {
+    throw new Error("Content deck intro exceeds the spatial budget.");
+  }
+  const order = [header, chapterNav, deckIntro, firstChapterHeading, firstSlideHeading, firstReadingGrid];
+  for (let index = 0; index < order.length - 1; index += 1) {
+    if (order[index].y > order[index + 1].y) {
+      throw new Error("Content review regions are not in the approved reading order.");
+    }
+  }
+  if (firstReadingGrid.y >= viewport.height) {
+    throw new Error("First-page reading content does not enter the initial viewport.");
+  }
+  if (!Number.isFinite(measurement?.scrollWidth)
+      || !Number.isFinite(measurement?.clientWidth)
+      || measurement.scrollWidth > measurement.clientWidth) {
+    throw new Error("Content review has horizontal overflow.");
+  }
+  return {
+    viewport,
+    header,
+    chapterNav,
+    deckIntro,
+    firstChapterHeading,
+    firstSlideHeading,
+    firstReadingGrid,
+  };
+}
+
 export function computeCandidateRegion({ candidateRect, canvasRect, viewport }) {
   const candidate = finiteRect(candidateRect, "Candidate");
   const canvas = finiteRect(canvasRect, "Canvas");

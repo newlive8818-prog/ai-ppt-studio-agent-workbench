@@ -668,7 +668,7 @@ export function ContentFullDeckReviewPage({ initialData, bridge }: Props) {
   return (
     <>
     <main className="content-review-page" inert={evidenceSlide ? true : undefined}>
-      <header className="content-review-head content-review-header">
+      <header className="content-review-head content-review-header" data-content-review-header>
         <div>
           <p className="content-review-kicker">内容全稿审核</p>
           <h1>完整售前阅读稿</h1>
@@ -697,6 +697,17 @@ export function ContentFullDeckReviewPage({ initialData, bridge }: Props) {
             {submitting ? "正在提交…" : "完成本轮审核，交给 Codex 集中处理"}
           </button>
         </div>
+        <div
+          className="content-review-progress-track"
+          data-content-review-progress-track
+          role="progressbar"
+          aria-label="全稿审核完成进度"
+          aria-valuemin={0}
+          aria-valuemax={slides.length}
+          aria-valuenow={completed}
+        >
+          <span style={{ width: `${slides.length ? (completed / slides.length) * 100 : 0}%` }} />
+        </div>
       </header>
 
       {projectionInvalid ? (
@@ -704,7 +715,11 @@ export function ContentFullDeckReviewPage({ initialData, bridge }: Props) {
       ) : null}
       {withdrawnBatch ? <p className="content-review-page-message">上一批次已撤回</p> : null}
       {pageMessage ? <p className="content-review-page-message" role="status">{pageMessage}</p> : null}
-      <nav className="content-review-chapter-nav content-review-outline" aria-label="章节导航">
+      <nav
+        className="content-review-chapter-nav content-review-outline"
+        data-content-review-chapter-nav
+        aria-label="章节导航"
+      >
         {chapters.map((chapter, chapterIndex) => (
           <div className="content-review-chapter-nav-item" key={chapter.sectionId}>
             <a
@@ -734,9 +749,13 @@ export function ContentFullDeckReviewPage({ initialData, bridge }: Props) {
         ))}
       </nav>
 
-      <section className="content-review-deck-intro" aria-labelledby="content-review-deck-intro-title">
-        <p className="content-review-kicker">本轮审核说明</p>
-        <h2 id="content-review-deck-intro-title">按最终页序连续审核完整阅读稿</h2>
+      <section
+        className="content-review-deck-intro"
+        data-content-review-deck-intro
+        aria-labelledby="content-review-deck-intro-title"
+      >
+        <p className="content-review-kicker">本稿阅读导语</p>
+        <h2 id="content-review-deck-intro-title">按最终页序连续阅读完整稿</h2>
         <p><strong>{initialData.review.material_mode}</strong> · {chapters.length} 个章节 · {slides.length} 页 · {initialData.review.source_version}</p>
         <p>从第一章连续读到最后一页；正文、材料、证据身份、演讲备注和跨页关系保持在当前审核上下文中。</p>
       </section>
@@ -758,7 +777,7 @@ export function ContentFullDeckReviewPage({ initialData, bridge }: Props) {
               <p>第 {chapter.slides[0].order}–{chapter.slides.at(-1)?.order} 页 · {chapter.slides.length} 页</p>
             </header>
             <div className="content-review-chapter-slides">
-              {chapter.slides.map((slide) => {
+              {chapter.slides.map((slide, slideIndex) => {
                 const draft = drafts[slide.slide_id];
                 return (
             <article className="content-review-slide" id={`content-${slide.slide_id}`} key={slide.slide_id} data-content-slide>
@@ -769,7 +788,10 @@ export function ContentFullDeckReviewPage({ initialData, bridge }: Props) {
                 <p><strong>阅读问题：</strong>{slide.reading_question}</p>
               </header>
 
-              <div className="content-slide-reading-grid">
+              <div
+                className="content-slide-reading-grid"
+                data-content-review-first-reading-grid={chapterIndex === 0 && slideIndex === 0 ? "true" : undefined}
+              >
                 <div className="content-slide-main">
                   <section aria-label={`${slide.slide_id} 完整正文`}>
                     <h3>完整可见文字</h3>

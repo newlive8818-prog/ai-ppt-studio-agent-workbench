@@ -793,6 +793,14 @@ describe("ContentFullDeckReviewPage", () => {
     expect(chapters).toHaveLength(2);
     expect(summary).not.toBeNull();
 
+    expect(head).toHaveAttribute("data-content-review-header");
+    expect(head?.querySelector("[data-content-review-progress-track]")).not.toBeNull();
+    expect(chapterNav).toHaveAttribute("data-content-review-chapter-nav");
+    expect(deckIntro).toHaveAttribute("data-content-review-deck-intro");
+    expect(container.querySelectorAll("[data-content-review-first-reading-grid]")).toHaveLength(1);
+    expect(deckIntro).toHaveTextContent("本稿阅读导语");
+    expect(deckIntro).not.toHaveTextContent("本轮审核说明");
+
     expect(within(chapterNav!).getByRole("link", { name: "第 1 章 · 客户业务事项" })).toBeInTheDocument();
     expect(within(chapterNav!).getByRole("link", { name: "第 2 章 · 问题与验证方案" })).toBeInTheDocument();
     expect(deckIntro).toHaveTextContent("mixed-evidence");

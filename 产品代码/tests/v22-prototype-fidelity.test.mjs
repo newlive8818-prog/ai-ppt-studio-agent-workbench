@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  CONTENT_REVIEW_SPATIAL_CONTRACT,
   LOCAL_PREVIEW_EVIDENCE,
   PROTOTYPE_FIDELITY_REQUIREMENTS,
   REQUIRED_INTERACTION_STATES,
+  assertContentReviewSpatialFidelity,
   assertInteractionEvidenceCoverage,
   assertPrototypeFidelityCounts,
 } from "../scripts/v22-ui-acceptance-evidence.mjs";
@@ -34,6 +36,20 @@ const expectedSelectors = {
     ".visual-overlay-drawer",
   ],
 };
+
+function validContentSpatialMeasurement() {
+  return {
+    viewport: { width: 1280, height: 720 },
+    header: { x: 16, y: 0, width: 1248, height: 82 },
+    chapterNav: { x: 16, y: 90, width: 1248, height: 48 },
+    deckIntro: { x: 16, y: 146, width: 1248, height: 118 },
+    firstChapterHeading: { x: 16, y: 276, width: 1248, height: 58 },
+    firstSlideHeading: { x: 16, y: 342, width: 1248, height: 116 },
+    firstReadingGrid: { x: 16, y: 458, width: 1248, height: 420 },
+    scrollWidth: 1280,
+    clientWidth: 1280,
+  };
+}
 
 test("prototype fidelity requirements cover the approved 08, 07, and contract regions", () => {
   assert.deepEqual(Object.keys(PROTOTYPE_FIDELITY_REQUIREMENTS), Object.keys(expectedSelectors));
@@ -94,11 +110,36 @@ test("local preview evidence can never claim real-host or formal proof", () => {
   assert.equal(Object.isFrozen(LOCAL_PREVIEW_EVIDENCE), true);
 });
 
+test("content spatial fidelity fails closed for oversized chrome, hidden first-page reading, and overflow", () => {
+  assert.deepEqual(CONTENT_REVIEW_SPATIAL_CONTRACT, {
+    viewport: { width: 1280, height: 720 },
+    maxHeaderHeight: 96,
+    maxChapterNavHeight: 64,
+    maxDeckIntroHeight: 160,
+  });
+  assert.doesNotThrow(() => assertContentReviewSpatialFidelity(validContentSpatialMeasurement()));
+  for (const invalid of [
+    { header: { ...validContentSpatialMeasurement().header, height: 97 } },
+    { chapterNav: { ...validContentSpatialMeasurement().chapterNav, height: 65 } },
+    { deckIntro: { ...validContentSpatialMeasurement().deckIntro, height: 161 } },
+    { firstReadingGrid: { ...validContentSpatialMeasurement().firstReadingGrid, y: 720 } },
+    { scrollWidth: 1281 },
+  ]) {
+    assert.throws(() => assertContentReviewSpatialFidelity({
+      ...validContentSpatialMeasurement(),
+      ...invalid,
+    }));
+  }
+});
+
 test("browser runner consumes the fidelity contracts and scopes readability to each current slide contract", () => {
+  assert.match(runnerSource, /assertContentReviewSpatialFidelity/);
   assert.match(runnerSource, /assertPrototypeFidelityCounts/);
   assert.match(runnerSource, /assertInteractionEvidenceCoverage/);
   assert.match(runnerSource, /PROTOTYPE_FIDELITY_REQUIREMENTS/);
   assert.match(runnerSource, /LOCAL_PREVIEW_EVIDENCE/);
+  assert.match(runnerSource, /data-content-review-first-reading-grid/);
+  assert.match(runnerSource, /firstViewportScreenshot/);
   assert.doesNotMatch(runnerSource, /\.visual-contract-title-page code/);
   assert.match(runnerSource, /contract\.locator\(slideReadableSelector\)/);
 });

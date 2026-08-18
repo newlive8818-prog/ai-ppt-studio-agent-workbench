@@ -8,6 +8,7 @@ import {
   LOCAL_PREVIEW_DISCLAIMER,
   LOCAL_PREVIEW_EVIDENCE,
   PROTOTYPE_FIDELITY_REQUIREMENTS,
+  assertContentReviewSpatialFidelity,
   assertInteractionEvidenceCoverage,
   assertPrototypeFidelityCounts,
   atomicPublishAcceptanceReport,
@@ -175,8 +176,8 @@ const browser = await chromium.launch({ headless: true });
 const results = [];
 const interactionEvidence = [];
 
-async function openPage(file, width) {
-  const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
+async function openPage(file, width, height = 900) {
+  const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
   const page = await context.newPage();
   const consoleErrors = [];
   page.on("console", (message) => message.type() === "error" && consoleErrors.push(message.text()));
@@ -288,9 +289,9 @@ async function revealDeferredContentForScreenshot(page) {
   await settleLayout(page);
 }
 
-async function checkReview(reviewType, width) {
-  const identity = `${reviewType}-review@${width}`;
-  const { context, page, consoleErrors } = await openPage(`ai-ppt-${reviewType}-review-preview.html`, width);
+async function checkReview(reviewType, width, height = 900) {
+  const identity = height === 900 ? `${reviewType}-review@${width}` : `${reviewType}-review@${width}x${height}`;
+  const { context, page, consoleErrors } = await openPage(`ai-ppt-${reviewType}-review-preview.html`, width, height);
   try {
     await page.waitForSelector(reviewType === "content" ? ".content-review-page" : ".visual-professional-page");
     const layout = await metrics(page);
@@ -299,9 +300,36 @@ async function checkReview(reviewType, width) {
     let evidenceLayer = false;
     let materialSourceCount = 0;
     let stickyProof = null;
+    let spatialFidelity = null;
+    let firstViewportScreenshot = null;
     const prototypeFidelity = {};
     if (reviewType === "content") {
       prototypeFidelity["content-review"] = await assertPrototypeFidelity(page, "content-review");
+      if (width === 1280 && height === 720) {
+        await settleLayout(page);
+        spatialFidelity = await page.evaluate(() => {
+          const readRect = (selector) => {
+            const element = document.querySelector(selector);
+            if (!element) throw new Error(`Missing spatial fidelity element: ${selector}`);
+            const rect = element.getBoundingClientRect();
+            return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+          };
+          return {
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+            header: readRect("[data-content-review-header]"),
+            chapterNav: readRect("[data-content-review-chapter-nav]"),
+            deckIntro: readRect("[data-content-review-deck-intro]"),
+            firstChapterHeading: readRect("[data-content-chapter] .content-review-chapter-heading"),
+            firstSlideHeading: readRect("[data-content-slide] .content-slide-heading"),
+            firstReadingGrid: readRect("[data-content-review-first-reading-grid]"),
+            scrollWidth: document.documentElement.scrollWidth,
+            clientWidth: document.documentElement.clientWidth,
+          };
+        });
+        assertContentReviewSpatialFidelity(spatialFidelity);
+        firstViewportScreenshot = previewPath(`${identity}-first-viewport.png`);
+        await page.screenshot({ path: firstViewportScreenshot, fullPage: false });
+      }
       objectCount = await page.locator("[data-content-slide]").count();
       assert(objectCount === 3, `${identity}: expected 3 content pages, received ${objectCount}`);
       const materialCards = page.locator(".content-material-card");
@@ -585,10 +613,12 @@ async function checkReview(reviewType, width) {
     results.push({
       reviewType,
       width,
+      height,
       objectCount,
       evidenceLayer,
       ...(materialSourceCount ? { materialSourceCount } : {}),
       ...(stickyProof ? { stickyProof } : {}),
+      ...(spatialFidelity ? { spatialFidelity, firstViewportScreenshot } : {}),
       prototypeFidelity,
       ...layout,
       consoleErrors,
@@ -643,7 +673,13 @@ await completeAcceptanceRun({
   runChecks: async () => {
     try {
       for (const reviewType of ["content", "visual"]) {
-        for (const width of [360, 760, 1000, 1440]) await checkReview(reviewType, width);
+        for (const viewport of [
+          { width: 360, height: 900 },
+          { width: 760, height: 900 },
+          { width: 1000, height: 900 },
+          { width: 1280, height: 720 },
+          { width: 1440, height: 900 },
+        ]) await checkReview(reviewType, viewport.width, viewport.height);
       }
       await checkLongReview("content", 60);
       await checkLongReview("visual", 120);
@@ -651,7 +687,7 @@ await completeAcceptanceRun({
     } finally {
       await browser.close();
     }
-    assert(results.length === 8, `Expected 8 screenshots, received ${results.length}`);
+    assert(results.length === 10, `Expected 10 review results, received ${results.length}`);
     assertInteractionEvidenceCoverage(interactionEvidence);
     return {
       ok: true,
