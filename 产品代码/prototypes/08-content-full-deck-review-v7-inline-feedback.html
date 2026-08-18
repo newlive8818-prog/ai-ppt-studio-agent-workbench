@@ -51,10 +51,14 @@
     .mark-dot.evidence { background:var(--red); }
     .page-body { display:grid; grid-template-columns:minmax(340px,.9fr) minmax(500px,1.1fr); gap:16px; align-items:start; padding:16px; }
     .page-text { min-width:0; }
+    .purpose { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:10px; }
+    .purpose > div { padding:9px; border-radius:8px; background:var(--paper-2); }
     .label { display:block; margin-bottom:4px; color:#68758a; font-size:9px; font-weight:800; letter-spacing:.05em; }
-    .draft-content { padding:2px 2px 0; }
-    .draft-content ul { margin:0; padding-left:18px; }
-    .draft-content li { margin:0 0 9px; font-size:12px; line-height:1.68; }
+    .purpose p { margin:0; font-size:11px; line-height:1.52; }
+    .draft-content { padding:10px; border-left:3px solid #b7c8e9; background:#f8faff; }
+    .draft-content h4 { margin:0 0 7px; font-size:12px; }
+    .draft-content ul { margin:0; padding-left:17px; }
+    .draft-content li { margin:0 0 5px; font-size:11px; line-height:1.52; }
     .visual-evidence { min-width:0; margin-bottom:0; }
     .visual-evidence > img { display:block; width:100%; aspect-ratio:16/9; object-fit:cover; border:1px solid #cfd7e3; border-radius:8px; background:#e9edf3; }
     .decision-question { padding:10px 12px; border-top:1px solid var(--line); background:#fffaf2; color:#67421c; font-size:10px; line-height:1.5; }
@@ -100,6 +104,7 @@
       .draft-content,.visual-evidence { margin-bottom:10px; }
     }
     @media (max-width:380px) {
+      .purpose { grid-template-columns:1fr; }
       .actions { grid-template-columns:1fr 1fr; }
     }
   </style>
@@ -127,7 +132,7 @@
 
       <section class="review-summary">
         <h3>全稿审核收口</h3>
-        <p>已展示本原型重点页。正式侧边栏将以同一结构连续呈现全部 29 页，并保留所有可见文字、图片材料、逐字稿与审核标记，不以缩略摘要代替完整内容。</p>
+        <p>本原型以同一结构展示重点页。正式内容审核页按最终页序连续呈现全部页面，并保留页面实际文字、图片材料和审核标记，不以缩略摘要代替完整内容。</p>
       </section>
     </div>
   </main>
@@ -173,14 +178,15 @@
       return `<article id="p${p.no}" class="page ${compact?'compact-page':''}" data-page="${p.no}" data-mark="${p.mark||''}">
         <header class="page-head">
           <span class="page-no">P${p.no}</span>
-          <div class="page-title"><h3>${p.title}</h3><p><strong>页面任务：</strong>${p.goal}</p></div>
+          <div class="page-title"><h3>${p.title}</h3><p>${p.judgment}</p></div>
           <span class="mark-dot ${p.mark||''}" aria-label="${p.mark?statusText[p.mark]:'未标记'}"></span>
         </header>
         <div class="page-body">
           <div class="page-text">
-            <section class="draft-content" aria-label="P${p.no} 实际成稿正文"><ul>${p.copy.map(x=>`<li>${x}</li>`).join('')}</ul></section>
+            <div class="purpose"><div><span class="label">这一页的目标</span><p>${p.goal}</p></div><div><span class="label">希望客户形成的判断</span><p>${p.judgment}</p></div></div>
+            <section class="draft-content" aria-label="P${p.no} 实际成稿正文"><span class="label">页面实际文字</span><h4>${p.title}</h4><ul>${p.copy.map(x=>`<li>${x}</li>`).join('')}</ul></section>
           </div>
-          <section class="visual-evidence" aria-label="P${p.no} 页面画面"><img src="${assetUrl(p.image)}" alt="重庆机电全域数字化方案实际成稿第 ${p.no} 页画面" /></section>
+          <section class="visual-evidence" aria-label="P${p.no} 页面画面"><span class="label">文字与图片材料一起审核</span><img src="${assetUrl(p.image)}" alt="重庆机电全域数字化方案实际成稿第 ${p.no} 页画面" /></section>
         </div>
         <div class="decision-question"><b>阅读问题：</b>${p.question}</div>
         <div class="actions" aria-label="P${p.no} 审核标记">
