@@ -22,7 +22,10 @@ evidenceScope: local-development-preview
 proofEligible: false
 realHostEvidence: false
 userUiAcceptance: pending
+prototypeUiAcceptance: accepted-in-separate-record
 ```
+
+这里的 `userUiAcceptance: pending` 专指首轮生产 React 实现页面。用户已于 2026-08-18 验收通过修正后的 08 HTML 原型，详见 [内容审核原型用户 UI 验收记录](./2026-08-18-content-review-prototype-ui-acceptance.md)；原型通过不自动改变本记录的生产实现验收状态。
 
 | 证据层 | 当前状态 | 可以证明 | 不能证明 |
 |---|---|---|---|
@@ -205,3 +208,5 @@ docs/validation/2026-08-18-content-review-spatial-fidelity-acceptance.md
 - 不开始视觉审核页整改；
 - 不把本地预览描述为真实宿主 ReviewSession；
 - 不把保存状态描述为宿主通知或 AI 已接收。
+
+2026-08-18 的后续用户确认只接受了修正后的 08 HTML 原型，不是对本记录所指首轮生产 React 页面的追认；因此本记录的 `userUiAcceptance` 仍为 `pending`。
