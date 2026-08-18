@@ -1,0 +1,242 @@
+# 内容审核页前端优先合同重置设计
+
+## 1. 文档状态
+
+- 日期：2026-08-18
+- 决策状态：`用户已确认方案 B`
+- 当前阶段：`只冻结前端合同；尚未授权本文件直接修改 Runtime、MCP 或持久化合同`
+- 适用表面：内容全稿审核页
+- 参考原型：`产品代码/prototypes/08-content-full-deck-review-v7-inline-feedback.html`
+- 实现分支：`codex/review-surface-v22`
+- 隔离 worktree：`/private/tmp/ai-ppt-v22-TmBomR`
+
+本文取代 [内容全稿审核页空间保真还原设计](./2026-08-18-content-review-spatial-fidelity-design.md) 中“保留所有后台拆解字段为前端可见模块”的要求。后者关于紧凑页头、连续阅读、首屏空间、图文同屏、PageDecision 相对位置和验收证据分层的要求继续有效。
+
+## 2. 用户最新决定
+
+2026-08-18，用户明确决定：
+
+1. 前端展示内容、功能和交互以用户确认的 UI 设计为需求源；
+2. 后台已有字段不能自动成为前端模块；
+3. 原型中没有、用户没有确认的“可能有用”功能不得自行增加；
+4. 先冻结前端合同，再按照前端真实需要拆解后端字段；
+5. 删除后台字段目录式展示，但保留用户真正要审核的实际成稿正文；
+6. 采用方案 B：建立前端专用 ViewModel，旧投影先由 adapter 过渡，Runtime/MCP 收窄放在 UI 验收后的独立阶段。
+
+用户对 2026-08-18 首轮内容审核页实现的 UI 验收结论是“不通过”。任何本地自动化、构建或截图都不能把该状态改写为通过。
+
+## 3. 问题根因
+
+首轮实现直接把 `ReadingDeckBlueprint` / `ContentReviewProjection` 的内部字段逐项映射成可见区块，形成了：
+
+- “完整可见文字”；
+- “分析、假设与建议”；
+- “完整演讲备注”；
+- “证据与身份”及来源证据按钮；
+- “问题—方案映射”；
+- “跨页关系”；
+- “阅读质量”。
+
+这些字段可以服务内容生产、硬门、审计和后端治理，但不因此获得前端展示权。根因不是折叠不足、间距不佳或视觉层级不够，而是前端合同被后台对象反向定义。
+
+## 4. 已确认的前端可见合同
+
+### 4.1 页面级内容
+
+内容全稿审核页只呈现完成审核任务所必需的内容：
+
+- 紧凑项目头、sourceVersion、revision 和审核进度；
+- 单行章节定位；
+- 紧凑 deck intro；
+- 章节与页面按最终页序连续阅读；
+- 页码、slideId 和中立标题；
+- 页面任务与阅读问题；
+- 实际成稿正文，直接以标题、段落和要点呈现；
+- 真实材料本体或页面画面，与实际成稿正文同屏；
+- 四类 `PageDecision`；
+- 非 `approved` 的页内意见输入；
+- 单页保存状态；
+- 全稿完成后的集中批次提交。
+
+“实际成稿正文”必须完整可读，不允许用摘要、截断或省略号替代；但它不能被包装成名为“完整可见文字”的后台字段卡，也不能显示内部 identity 标签。
+
+### 4.2 明确禁止的前端模块
+
+以下信息不得在内容全稿审核页中显示：
+
+- “完整可见文字”字段标题或字段卡；
+- “分析、假设与建议”；
+- “完整演讲备注”；
+- “证据与身份”；
+- “查看来源证据”按钮或独立证据 Browser 入口；
+- “问题—方案映射”；
+- “跨页关系”；
+- “阅读质量”；
+- 来源文件、页码/区域、用途、处理方式和证据身份的目录式元数据；
+- 面向研发或后台治理的状态解释、字段解释和工程摘要。
+
+禁止项不能被转移到折叠区、抽屉、tooltip、hover、二级弹层或“高级信息”中变相保留。
+
+### 4.3 不改变的审核业务语义
+
+- `approved | modify | evidence | merge-or-delete` 四选一互斥；
+- 非 `approved` 意见必填，最多 1200 Unicode code points；
+- 单页保存不调用模型、不改稿、不确认 G0；
+- 全部页面完成、无未保存输入且版本一致时才能提交；
+- `ContentReviewBatch` 提交后不可原地修改；
+- 新版必须全篇复审；
+- 用户 UI 验收与 G0、宿主通知、AI 接收回执彼此独立。
+
+## 5. 前端 ViewModel
+
+### 5.1 目的
+
+新增前端专用 `ContentReviewPageViewModel`，使 React 组件只依赖用户可见需求，不依赖内部内容治理对象的完整形状。
+
+建议最小结构：
+
+```text
+ContentReviewPageViewModel
+|- projectLabel
+|- sourceVersion
+|- revision
+|- progress
+|- sections[]
+|- slides[]
+|  |- slideId
+|  |- order
+|  |- sectionId
+|  |- neutralTitle
+|  |- pageTask
+|  |- readingQuestion
+|  |- draftContent
+|  |  |- title
+|  |  `- blocks[]: paragraph | bullet
+|  |- materialVisuals[]
+|  |  |- visualId
+|  |  |- assetRef
+|  |  `- altText
+|  |- savedDecision
+|  `- localDraftState
+|- batchState
+`- availableActions
+```
+
+这是前端投影视图，不是新的权威业务对象。它不保存第二套事实，不计算 Gate，不替代 Runtime。
+
+### 5.2 过渡 adapter
+
+当前阶段保留现有 `ContentReviewProjection` 输入和校验边界，在 Widget 内新增纯函数 adapter：
+
+```text
+ContentReviewProjection
+        |
+        v
+toContentReviewPageViewModel()
+        |
+        v
+ContentReviewPageViewModel
+        |
+        v
+ContentFullDeckReviewPage
+```
+
+adapter 的规则：
+
+- `visible_copy_blocks` 只作为过渡数据源转换为 `draftContent.blocks`；其 `identity` 不进入 ViewModel；
+- `material_views` 只提取渲染页面画面所需的 `assetRef` 与 `altText`；来源、区域、用途、处理方式和证据身份不进入 ViewModel；
+- `analysis_or_proposal_blocks`、`identity_labels`、`evidence_bindings`、`solution_mapping_refs`、`previous_relation`、`next_relation`、`speaker_notes` 和 `reading_quality` 明确忽略；
+- adapter 不修改输入，不推断 Gate，不写入 Runtime；
+- PageDecision、批次、sourceVersion 和 revision 继续使用现有权威标识。
+
+## 6. 后端字段反向拆解
+
+后端收窄必须在前端 UI 通过用户验收后作为独立阶段进行：
+
+1. 以前端 `ContentReviewPageViewModel` 的真实消费字段为依据；
+2. 区分内部 `ReadingDeckBlueprint` 与外部内容审核页投影；
+3. 内部字段可以继续服务生产、硬门、审计和视觉生产，但不能因为存在就暴露到前端；
+4. Runtime/MCP 的内容审核投影最终只输出前端需要的数据与写入所需的稳定身份；
+5. 删除或废弃字段必须有兼容策略、契约测试和独立可回退提交；
+6. 不在本轮 UI 修复提交中混入 Runtime、MCP 或持久化迁移。
+
+## 7. 原型同步规则
+
+08 HTML 原型同步为当前前端合同：
+
+- 保留连续阅读、实际成稿正文、页面画面、四类 PageDecision 和页内意见；
+- 删除完整逐字稿折叠区、阅读质量、相邻页面关系和材料元数据目录；
+- 实际成稿正文改为无后台字段标签的主阅读内容；
+- 原型内未被渲染的示例数据不构成后端合同；
+- 旧 JPG 只记录 2026-08-15 的空间参考，不能用来恢复 2026-08-18 已删除的模块；当前 HTML 和 v2.3 基线优先。
+
+## 8. 实施边界
+
+### 8.1 当前合同冻结阶段
+
+允许修改：
+
+- 四份唯一基线；
+- 本设计规格；
+- 08 HTML 原型；
+- 旧空间保真规格的取代声明。
+
+不允许修改：
+
+- React 页面实现；
+- Runtime、MCP、Review Bridge；
+- Python 领域合同或持久化；
+- 视觉专业审核页；
+- PPT 运行数据。
+
+### 8.2 下一实施阶段
+
+用户确认本书面合同后，再用独立实现计划约束：
+
+- 前端 ViewModel 与 adapter；
+- 内容审核页组件和 CSS；
+- 前端校验边界；
+- DOM、交互、响应式和浏览器验收；
+- 一个可独立 `git revert` 的实现提交。
+
+## 9. 测试与验收合同
+
+### 9.1 必须失败后再通过的测试
+
+- 被禁止的八类模块标题和入口不得出现在 DOM；
+- 实际成稿标题、段落和要点完整存在；
+- 实际成稿正文与页面画面位于同一页面审核上下文；
+- 页面任务、阅读问题、四类 PageDecision 和页内意见仍存在；
+- adapter 输出没有后台字段目录；
+- 60 页顺序、保存、批次、revision 冲突和草稿恢复回归不退化。
+
+### 9.2 验收分层
+
+- 单元测试：只证明 ViewModel、adapter 和交互行为；
+- 浏览器几何与截图：只证明当前本地页面结构和空间；
+- 用户 UI 验收：决定是否满足用户确认的 UI；
+- Runtime/MCP 验收：留在后续投影收窄阶段；
+- 真实宿主与 AI 回执：继续保持 `待验证`。
+
+用户明确接受前，`userUiAcceptance` 必须保持 `pending`。
+
+## 10. 版本与回退
+
+1. 本设计、四份基线、08 原型和取代声明组成“前端合同冻结”提交；
+2. React/ViewModel/adapter/test 组成后续“内容审核页前端实现”提交；
+3. Runtime/MCP/持久化收窄组成再后续“内容审核投影迁移”提交；
+4. 三个阶段不得混在同一提交；
+5. 任一阶段失败使用 `git revert <commit>` 回退，不重写共享历史。
+
+## 11. 阶段出口
+
+本合同冻结阶段只有同时满足以下条件才完成：
+
+1. 四份唯一基线统一表达前端合同优先；
+2. 08 HTML 不再显示被用户否决的后台模块；
+3. 旧空间保真规格已明确被本设计局部取代；
+4. Markdown 相对链接可解析；
+5. 07/08 被引用原型真实存在；
+6. diff 中没有 React、Runtime、MCP、视觉审核页或 PPT 运行数据修改；
+7. 形成一个可独立回退的 Git 提交；
+8. 用户审阅本书面合同后，再进入实现计划。

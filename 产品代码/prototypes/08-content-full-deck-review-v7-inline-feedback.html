@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>全稿视觉决策伴随｜真实案例原型</title>
+  <title>内容全稿审核｜交互原型</title>
   <style>
     :root {
       --bg:#eef1f5; --paper:#fff; --paper-2:#f8fafc; --line:#dde3eb; --text:#172033; --muted:#667085;
@@ -51,32 +51,12 @@
     .mark-dot.evidence { background:var(--red); }
     .page-body { display:grid; grid-template-columns:minmax(340px,.9fr) minmax(500px,1.1fr); gap:16px; align-items:start; padding:16px; }
     .page-text { min-width:0; }
-    .purpose { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:10px; }
-    .purpose > div { padding:9px; border-radius:8px; background:var(--paper-2); }
     .label { display:block; margin-bottom:4px; color:#68758a; font-size:9px; font-weight:800; letter-spacing:.05em; }
-    .purpose p { margin:0; font-size:11px; line-height:1.52; }
-    .visible-copy { padding:10px; margin-bottom:0; border-left:3px solid #b7c8e9; background:#f8faff; }
-    .visible-copy h4 { margin:0 0 7px; font-size:12px; }
-    .visible-copy ul { margin:0; padding-left:17px; }
-    .visible-copy li { margin:0 0 5px; font-size:11px; line-height:1.52; }
+    .draft-content { padding:2px 2px 0; }
+    .draft-content ul { margin:0; padding-left:18px; }
+    .draft-content li { margin:0 0 9px; font-size:12px; line-height:1.68; }
     .visual-evidence { min-width:0; margin-bottom:0; }
     .visual-evidence > img { display:block; width:100%; aspect-ratio:16/9; object-fit:cover; border:1px solid #cfd7e3; border-radius:8px; background:#e9edf3; }
-    .image-caption { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-top:6px; color:var(--muted); font-size:9px; line-height:1.4; }
-    .image-caption b { color:#425169; font-weight:700; }
-    .material-map { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:8px; }
-    .material-map > div { padding:8px; border:1px solid var(--line); border-radius:8px; background:#fafbfc; }
-    .material-map p { margin:0; font-size:10px; line-height:1.48; }
-    .material-map .missing { border-color:#efd3d6; background:var(--red-soft); color:#86313a; }
-    details { border-top:1px solid var(--line); }
-    summary { list-style:none; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; color:#455469; font-size:10px; font-weight:700; cursor:pointer; }
-    summary::-webkit-details-marker { display:none; }
-    summary:after { content:'＋'; color:#8491a4; font-size:13px; }
-    details[open] summary:after { content:'−'; }
-    .script { padding:0 12px 12px; color:#334155; font-size:11px; line-height:1.7; }
-    .quality { display:grid; grid-template-columns:1fr 1fr; gap:7px; padding:10px 12px; border-top:1px solid var(--line); background:#fbfcfe; }
-    .quality p { margin:0; font-size:10px; line-height:1.45; }
-    .quality strong { color:var(--green); }
-    .quality .warning strong { color:var(--amber); }
     .decision-question { padding:10px 12px; border-top:1px solid var(--line); background:#fffaf2; color:#67421c; font-size:10px; line-height:1.5; }
     .actions { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; padding:8px 10px; border-top:1px solid var(--line); background:#f6f8fb; }
     .action { display:flex; align-items:center; justify-content:center; gap:6px; min-height:42px; border:1px solid #aeb9c8; border-radius:8px; padding:10px 8px; background:#fff; color:#344054; font-size:10px; font-weight:700; line-height:1.2; cursor:pointer; box-shadow:0 1px 2px rgba(23,35,58,.06); transition:background-color .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease,transform .16s ease; }
@@ -105,7 +85,7 @@
     .saved-feedback p { margin:0; color:#334155; font-size:10px; line-height:1.55; white-space:pre-wrap; }
     .saved-feedback button { flex:none; border:0; background:transparent; color:var(--blue); font-size:9px; cursor:pointer; }
     .compact-page .page-body { display:none; }
-    .compact-page details,.compact-page .quality,.compact-page .decision-question,.compact-page .actions { display:none; }
+    .compact-page .decision-question,.compact-page .actions { display:none; }
     .compact-page .page-head { border-bottom:0; }
     .more { width:100%; border:1px dashed #c7d0dc; border-radius:10px; padding:11px; background:transparent; color:#526174; font-size:10px; cursor:pointer; }
     .review-summary { margin-top:14px; padding:12px; border:1px solid var(--line); border-radius:10px; background:#fff; }
@@ -117,10 +97,9 @@
       .app { width:100%; }
       .document { padding:13px 12px 40px; }
       .page-body { grid-template-columns:1fr; padding:12px; }
-      .visible-copy,.visual-evidence { margin-bottom:10px; }
+      .draft-content,.visual-evidence { margin-bottom:10px; }
     }
     @media (max-width:380px) {
-      .purpose,.material-map,.quality { grid-template-columns:1fr; }
       .actions { grid-template-columns:1fr 1fr; }
     }
   </style>
@@ -129,7 +108,7 @@
   <main class="app">
     <header class="head">
       <div class="head-main">
-        <div class="project"><b>重庆机电智能制造全域数字化解决方案</b><span>全稿视觉决策伴随 · 内容 v3 · 29 页</span></div>
+        <div class="project"><b>重庆机电智能制造全域数字化解决方案</b><span>内容全稿审核 · 内容 v3 · 29 页</span></div>
         <div class="review-progress"><b id="reviewedCount">3</b> / 29 已标记</div>
       </div>
       <div class="progress"><span id="progressBar"></span></div>
@@ -194,24 +173,21 @@
       return `<article id="p${p.no}" class="page ${compact?'compact-page':''}" data-page="${p.no}" data-mark="${p.mark||''}">
         <header class="page-head">
           <span class="page-no">P${p.no}</span>
-          <div class="page-title"><h3>${p.title}</h3><p>${p.judgment}</p></div>
+          <div class="page-title"><h3>${p.title}</h3><p><strong>页面任务：</strong>${p.goal}</p></div>
           <span class="mark-dot ${p.mark||''}" aria-label="${p.mark?statusText[p.mark]:'未标记'}"></span>
         </header>
         <div class="page-body">
           <div class="page-text">
-            <div class="purpose"><div><span class="label">这一页的目标</span><p>${p.goal}</p></div><div><span class="label">希望客户形成的判断</span><p>${p.judgment}</p></div></div>
-            <section class="visible-copy"><span class="label">页面实际文字</span><h4>${p.title}</h4><ul>${p.copy.map(x=>`<li>${x}</li>`).join('')}</ul></section>
+            <section class="draft-content" aria-label="P${p.no} 实际成稿正文"><ul>${p.copy.map(x=>`<li>${x}</li>`).join('')}</ul></section>
           </div>
-          <section class="visual-evidence"><span class="label">文字与图片材料一起审核</span><img src="${assetUrl(p.image)}" alt="重庆机电全域数字化方案实际成稿第 ${p.no} 页" /><div class="image-caption"><span><b>${p.source}</b><br>${p.use}</span><span>16:9 原页</span></div>${p.missing?`<div class="material-map"><div><span class="label">当前使用</span><p>${p.use}</p></div><div class="missing"><span class="label">材料举证缺口</span><p>${p.missing}</p></div></div>`:''}</section>
+          <section class="visual-evidence" aria-label="P${p.no} 页面画面"><img src="${assetUrl(p.image)}" alt="重庆机电全域数字化方案实际成稿第 ${p.no} 页画面" /></section>
         </div>
-        <details><summary>完整逐字稿</summary><div class="script">${p.script}</div></details>
-        <div class="quality"><p><span class="label">阅读质量</span><strong>${p.quality}</strong></p><p class="${p.missing?'warning':''}"><span class="label">相邻页面关系</span><strong>${p.relation}</strong></p></div>
-        <div class="decision-question"><b>待你判断：</b>${p.question}</div>
+        <div class="decision-question"><b>阅读问题：</b>${p.question}</div>
         <div class="actions" aria-label="P${p.no} 审核标记">
           ${[['approved','认可本页'],['modify','需要修改'],['evidence','证据不足'],['merge','考虑删并']].map(([v,t])=>`<button class="action ${p.mark===v?'selected':''}" data-value="${v}">${t}</button>`).join('')}
         </div>
         <div class="feedback-editor" aria-label="P${p.no} 审核意见输入">
-          <div class="feedback-editor-head"><div><b class="feedback-title">写下修改意见</b><br><span>保存后将连同页码、意见类型和本页原文交给 Codex 读取。</span></div></div>
+          <div class="feedback-editor-head"><div><b class="feedback-title">写下修改意见</b><br><span>保存后将与本页判断一起进入本轮审核批次。</span></div></div>
           <textarea maxlength="1200" placeholder="请具体说明哪里不对、希望改成什么，或缺少哪一类证据……"></textarea>
           <div class="feedback-actions"><button class="cancel-feedback">取消</button><button class="save-feedback">保存意见</button></div>
         </div>
