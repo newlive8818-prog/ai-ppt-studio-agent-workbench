@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ContentReviewSurfaceData } from "../types/content-review";
 import type { VisualReviewSurfaceData } from "../types/visual-review";
 import {
+  DESIGN_SYSTEM_FIELD_ORDER,
+  REVIEWABLE_SLIDE_FIELD_KEYS,
+} from "../visual-review/visual-contract-field-contract";
+import {
   REVIEW_DRAFT_MAX_RAW_BYTES,
   applyReviewDraftUpdate,
   clonePlainData,
@@ -633,8 +637,8 @@ describe("review draft store", () => {
       reviewType: "visual",
       sourceRevision: 8,
       anchorSlideIds: ["S01"],
-      visualContractFields: { S01: ["slide_id", "composition_intent"] },
-      deckDesignSystemFields: ["typography_tokens"],
+      visualContractFields: { S01: [...REVIEWABLE_SLIDE_FIELD_KEYS] },
+      deckDesignSystemFields: [...DESIGN_SYSTEM_FIELD_ORDER],
     }));
   });
 });

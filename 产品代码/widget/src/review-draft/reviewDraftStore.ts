@@ -3,6 +3,10 @@ import { clonePlainData } from "../lib/plain-data";
 import type { ContentReviewSurfaceData } from "../types/content-review";
 import type { NormalizedRegion, VisualReviewSurfaceData } from "../types/visual-review";
 import { isValidNormalizedRegion } from "../visual-review/normalized-region";
+import {
+  DESIGN_SYSTEM_FIELD_ORDER,
+  REVIEWABLE_SLIDE_FIELD_KEYS,
+} from "../visual-review/visual-contract-field-contract";
 
 export { clonePlainData } from "../lib/plain-data";
 
@@ -396,9 +400,9 @@ export function createReviewDraftContext(data: ContentReviewSurfaceData | Visual
     },
     anchorSlideIds: review.anchors.map((anchor) => anchor.slide_id),
     visualContractFields: Object.fromEntries(review.slide_visual_contracts.map((contract) => (
-      [contract.slide_id, Object.keys(contract)]
+      [contract.slide_id, [...REVIEWABLE_SLIDE_FIELD_KEYS]]
     ))),
-    deckDesignSystemFields: Object.keys(review.deck_design_system),
+    deckDesignSystemFields: [...DESIGN_SYSTEM_FIELD_ORDER],
   };
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import type {
   ContractMarkComposerState,
@@ -19,6 +20,11 @@ import {
   withReviewWriteDeadline,
 } from "./review-write-deadline";
 import { VisualReceiptRecoveryControls } from "./VisualReceiptRecoveryControls";
+import {
+  DESIGN_SYSTEM_FIELD_ORDER,
+  FROZEN_SLIDE_FIELD_ORDER,
+  VISUAL_SLIDE_FIELD_ORDER,
+} from "./visual-contract-field-contract";
 
 interface Props {
   data: VisualReviewSurfaceData;
@@ -26,6 +32,7 @@ interface Props {
   revision: number;
   onRevision: (revision: number) => void;
   commandIdentity: string;
+  toolbarHost?: HTMLElement | null;
   drafts: ContractMarkDraftState[];
   composer: ContractMarkComposerState | null;
   onSliceChange: (
@@ -61,11 +68,11 @@ const DESIGN_LABELS: Record<string, string> = {
 };
 
 const SLIDE_LABELS: Record<string, string> = {
-  page_task: "页面任务",
+  core_claim: "核心主张",
   page_family: "页面家族",
-  frozen_copy: "当前冻结文案",
-  visible_copy_blocks: "当前冻结文案",
-  speaker_notes: "演讲备注",
+  visible_copy: "页面可见文案",
+  visible_copy_blocks: "页面可见文案",
+  speaker_notes: "讲解备注",
   source_refs: "来源引用",
   communication_goal: "沟通目标",
   composition_intent: "构图意图",
@@ -101,45 +108,6 @@ const CONTRACT_VALUE_LABELS: Record<string, string> = {
 
 const MISSING_CONTRACT_VALUE = "待后端按前端字段合同提供";
 
-const DESIGN_SYSTEM_FIELD_ORDER = [
-  "theme_proposition",
-  "composition_grammar",
-  "color_tokens",
-  "typography_tokens",
-  "page_families",
-  "density_rhythm",
-  "imagery_strategy",
-  "diagram_strategy",
-  "table_strategy",
-  "editability_rules",
-  "accessibility_rules",
-  "forbidden_patterns",
-  "anchor_specification",
-] as const;
-
-const FROZEN_SLIDE_FIELD_ORDER = [
-  "page_task",
-  "frozen_copy",
-  "speaker_notes",
-  "source_refs",
-] as const;
-
-const VISUAL_SLIDE_FIELD_ORDER = [
-  "communication_goal",
-  "composition_intent",
-  "information_hierarchy",
-  "reading_order",
-  "regions",
-  "object_relationships",
-  "diagram_chart_table_treatment",
-  "image_selection_and_crop",
-  "color_application",
-  "typography_application",
-  "native_bitmap_routing",
-  "editability_requirements",
-  "fallbacks",
-  "acceptance_criteria",
-] as const;
 const ARTIFACT_KIND_LABELS: Record<string, string> = {
   "visual-contract": "视觉合同",
   "visual-contract-set": "视觉合同集",
@@ -169,16 +137,18 @@ function presentContractValue(value: unknown): unknown {
     : value;
 }
 
-function visibleFrozenCopy(slide: Record<string, unknown>): unknown {
-  if (slide.frozen_copy !== undefined) return presentContractValue(slide.frozen_copy);
-  if (!Array.isArray(slide.visible_copy_blocks)) return MISSING_CONTRACT_VALUE;
-  const copy = slide.visible_copy_blocks.flatMap((block) => {
+function visibleCopy(slide: Record<string, unknown>): unknown {
+  if (slide.visible_copy !== undefined) return presentContractValue(slide.visible_copy);
+  const copy = Array.isArray(slide.visible_copy_blocks) ? slide.visible_copy_blocks.flatMap((block) => {
     if (typeof block === "string") return block.trim() ? [block] : [];
     if (!block || typeof block !== "object") return [];
     const text = (block as Record<string, unknown>).text;
     return typeof text === "string" && text.trim() ? [text] : [];
-  });
-  return copy.length ? copy : MISSING_CONTRACT_VALUE;
+  }) : [];
+  if (copy.length) return copy;
+  return slide.frozen_copy !== undefined
+    ? presentContractValue(slide.frozen_copy)
+    : MISSING_CONTRACT_VALUE;
 }
 
 function visibleSourceRefs(slide: Record<string, unknown>): unknown {
@@ -196,7 +166,7 @@ function visibleSourceRefs(slide: Record<string, unknown>): unknown {
 }
 
 function slideFieldValue(slide: Record<string, unknown>, key: string): unknown {
-  if (key === "frozen_copy") return visibleFrozenCopy(slide);
+  if (key === "visible_copy") return visibleCopy(slide);
   if (key === "source_refs") return visibleSourceRefs(slide);
   return presentContractValue(slide[key]);
 }
@@ -215,6 +185,57 @@ function ContractValue({ value }: { value: unknown }) {
     );
   }
   return <p>{value === null || value === undefined || value === "" ? "无" : String(value)}</p>;
+}
+
+function paletteTextIsDark(color: string): boolean {
+  const match = /^#([\da-f]{6})$/i.exec(color.trim());
+  if (!match) return false;
+  const value = match[1];
+  const red = Number.parseInt(value.slice(0, 2), 16);
+  const green = Number.parseInt(value.slice(2, 4), 16);
+  const blue = Number.parseInt(value.slice(4, 6), 16);
+  return ((red * 299) + (green * 587) + (blue * 114)) / 1000 > 170;
+}
+
+function ColorPaletteValue({ value }: { value: unknown }) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return <ContractValue value={value} />;
+  const colors = Object.entries(value as Record<string, unknown>).filter((entry): entry is [string, string] => (
+    typeof entry[1] === "string"
+    && /^(?:#[\da-f]{3,8}|rgba?\(|hsla?\()/i.test(entry[1].trim())
+  ));
+  if (!colors.length) return <ContractValue value={value} />;
+  return (
+    <div className="visual-palette-line" data-testid="visual-color-palette">
+      {colors.map(([key, color]) => (
+        <span
+          className={`visual-palette-swatch${paletteTextIsDark(color) ? " light" : ""}`}
+          style={{ background: color }}
+          key={key}
+        >
+          <strong>{labelFor(key, CONTRACT_VALUE_LABELS)}</strong>
+          <small>{color}</small>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function readableContractParts(value: unknown, prefix = ""): string[] {
+  if (value === null || value === undefined || value === "") return [];
+  if (Array.isArray(value)) return value.flatMap((item) => readableContractParts(item, prefix));
+  if (typeof value !== "object") return [prefix ? `${prefix}${String(value)}` : String(value)];
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, item]) => (
+    readableContractParts(item, `${prefix}${labelFor(key, CONTRACT_VALUE_LABELS)}：`)
+  ));
+}
+
+function DeckDesignSystemValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
+  if (fieldKey === "color_tokens") return <ColorPaletteValue value={value} />;
+  if (fieldKey === "typography_tokens" || fieldKey === "density_rhythm") {
+    const parts = readableContractParts(value);
+    return parts.length ? <p>{parts.join("；")}</p> : <ContractValue value={value} />;
+  }
+  return <ContractValue value={value} />;
 }
 
 function notificationLabel(status: VisualContractReviewMarkSet["host_notification_status"]) {
@@ -252,6 +273,7 @@ export function VisualContractView({
   revision,
   onRevision,
   commandIdentity,
+  toolbarHost,
   drafts,
   composer,
   onSliceChange,
@@ -266,6 +288,7 @@ export function VisualContractView({
   const [saving, setSaving] = useState(false);
   const [retryPending, setRetryPending] = useState(false);
   const [message, setMessage] = useState("");
+  const [selectionToolbar, setSelectionToolbar] = useState<{ top: number; left: number } | null>(null);
   const saveMutationGuard = useRef<symbol | null>(null);
   const mounted = useRef(true);
   const generation = useRef(0);
@@ -296,10 +319,15 @@ export function VisualContractView({
       const pageFamily = typeof slide?.page_family === "string" && slide.page_family.trim()
         ? slide.page_family
         : "锚点视觉证据";
-      const pageTask = typeof slide?.page_task === "string" && slide.page_task.trim()
-        ? slide.page_task
+      const titleCandidate = slide?.anchor_title ?? slide?.neutral_title ?? slide?.title;
+      const title = typeof titleCandidate === "string" && titleCandidate.trim()
+        ? titleCandidate
+        : pageFamily;
+      const purposeCandidate = slide?.validation_purpose ?? slide?.anchor_validation_purpose ?? slide?.page_task;
+      const pageTask = typeof purposeCandidate === "string" && purposeCandidate.trim()
+        ? purposeCandidate
         : data.review.anchor_identity.selection_reason;
-      return { slideId, pageFamily, pageTask };
+      return { slideId, title, pageTask };
     }),
     [data.review.anchor_identity.selection_reason, data.review.anchor_identity.slide_ids, slideById],
   );
@@ -331,6 +359,35 @@ export function VisualContractView({
     && revision < Number.MAX_SAFE_INTEGER;
   const draftsLocked = saving || retryPending;
 
+  const updateSelectionToolbar = () => {
+    if (draftsLocked) {
+      setSelectionToolbar(null);
+      return;
+    }
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.toString().trim() || !selection.rangeCount) {
+      setSelectionToolbar(null);
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    const valueForNode = (node: Node) => {
+      const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
+      return element?.closest<HTMLElement>("[data-contract-value]") || null;
+    };
+    const contractValue = valueForNode(range.startContainer);
+    if (!contractValue || valueForNode(range.endContainer) !== contractValue || !rootRef.current?.contains(contractValue)) {
+      setSelectionToolbar(null);
+      return;
+    }
+    const rect = typeof range.getBoundingClientRect === "function"
+      ? range.getBoundingClientRect()
+      : contractValue.getBoundingClientRect();
+    setSelectionToolbar({
+      top: Math.max(70, rect.top - 42),
+      left: Math.max(12, Math.min(window.innerWidth - 150, rect.left + (rect.width / 2) - 60)),
+    });
+  };
+
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -342,6 +399,16 @@ export function VisualContractView({
       }
     };
   }, []);
+
+  useEffect(() => {
+    const clearSelectionToolbar = () => setSelectionToolbar(null);
+    document.addEventListener("selectionchange", updateSelectionToolbar);
+    window.addEventListener("resize", clearSelectionToolbar);
+    return () => {
+      document.removeEventListener("selectionchange", updateSelectionToolbar);
+      window.removeEventListener("resize", clearSelectionToolbar);
+    };
+  }, [draftsLocked]);
 
   useEffect(() => {
     if (!saveMutationGuard.current && !retryRequestRef.current) return;
@@ -399,6 +466,7 @@ export function VisualContractView({
       context_after: "",
       comment: "",
     });
+    setSelectionToolbar(null);
     setDrawer("marks");
   };
 
@@ -678,29 +746,34 @@ export function VisualContractView({
           slide_id: location.slideId,
           deck_section_id: location.deckSectionId,
           target_key: key,
-        })}>＋ 标记</button>
+        })} />
       </header>
       <div data-contract-value>
-        <ContractValue value={value} />
+        {location.deckSectionId === "deck-design-system"
+          ? <DeckDesignSystemValue fieldKey={key} value={value} />
+          : <ContractValue value={value} />}
       </div>
     </section>
   );
 
+  const commandBar = (
+    <div className="visual-contract-commandbar" aria-label="视觉合同操作">
+      <div className="visual-contract-command-actions">
+        <button type="button" aria-label="打开合同目录" onClick={() => setDrawer("outline")}>目录</button>
+        <span className="visual-contract-command-status" aria-live="polite" aria-atomic="true">
+          {drafts.length ? `${drafts.length} 条待保存标记` : "所有标记已保存"}
+        </span>
+        <button type="button" aria-label="打开标记记录" onClick={() => setDrawer("marks")}><span className="visual-contract-mark-count">{drafts.length}</span>标记</button>
+        <button className="visual-primary-action" type="button" disabled={!drafts.length || hasUncommittedMark || saving || !revisionIsValid} onClick={save}>
+          {saving ? "正在保存…" : drafts.length ? `保存 ${drafts.length} 条合同标记` : "保存合同标记"}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <section ref={rootRef} className="visual-contract-view" aria-label="完整视觉合同正文">
-      <div className="visual-contract-commandbar" aria-label="视觉合同操作">
-        <div className="visual-contract-command-status" aria-live="polite" aria-atomic="true">
-          {drafts.length ? `${drafts.length} 条待保存标记` : "所有标记已保存"}
-        </div>
-        <div className="visual-contract-command-actions">
-          <button type="button" aria-label="打开合同目录" onClick={() => setDrawer("outline")}>目录</button>
-          <button type="button" disabled={draftsLocked} aria-label="标记选中文字" onMouseDown={(event) => event.preventDefault()} onClick={startSelectionMark}>标记选中文字</button>
-          <button type="button" aria-label="打开标记记录" onClick={() => setDrawer("marks")}>{drafts.length} 标记</button>
-          <button className="visual-primary-action" type="button" disabled={!drafts.length || hasUncommittedMark || saving || !revisionIsValid} onClick={save}>
-            {saving ? "正在保存…" : drafts.length ? `保存 ${drafts.length} 条合同标记` : "保存合同标记"}
-          </button>
-        </div>
-      </div>
+      {toolbarHost ? createPortal(commandBar, toolbarHost) : commandBar}
       <div className="visual-contract-feedback-facts">
         {!revisionIsValid ? <p className="visual-operation-message" role="alert">{invalidRevisionMessage}</p> : null}
         {hasUncommittedMark ? <p className="visual-operation-message">请先加入合同标记或放弃当前输入，再统一保存。</p> : null}
@@ -732,17 +805,22 @@ export function VisualContractView({
         ) : null}
       </div>
 
-      <article className="visual-contract-document">
+      {selectionToolbar ? <div className="visual-selection-toolbar" style={selectionToolbar}>
+        <button type="button" disabled={draftsLocked} aria-label="标记选中文字" onMouseDown={(event) => event.preventDefault()} onClick={startSelectionMark}>标记选中文字</button>
+      </div> : null}
+
+      <article className="visual-contract-document" onMouseUp={updateSelectionToolbar}>
         <header className="visual-contract-title-page">
           <div className="visual-contract-kicker">Visual Contract · User Review</div>
           <h1>完整视觉合同</h1>
           <p>从整套设计系统到全部逐页视觉合同连续展开。请判断全套视觉需求是否一致，以及每一页是否被 AI 正确理解；目录只负责定位，标记抽屉只在需要时覆盖打开。</p>
           <div className="visual-contract-identity-line">
-            <span><strong>项目</strong> {data.review.project_name}</span>
-            <span><strong>视觉版本</strong> {visualSourceVersionLabel(data.review.source_version)}</span>
-            <span><strong>revision</strong> {revision}</span>
+            <span><strong>审核对象</strong> {visualSourceVersionLabel(data.review.source_version)}</span>
             <span><strong>范围</strong> {slides.length} 页逐页合同</span>
+            <span><strong>生产路线</strong> {String(presentContractValue(data.review.deck_design_system.production_route))}</span>
             <span><strong>状态</strong> G3 {visualConfirmationLabel(data.review.gate_status.G3)}</span>
+            <span className="visual-hidden-technical"><strong>项目</strong> {data.review.project_name}</span>
+            <span className="visual-hidden-technical"><strong>revision</strong> {revision}</span>
           </div>
         </header>
         <section
@@ -766,10 +844,10 @@ export function VisualContractView({
         >
           <header className="visual-contract-section-head"><h2>Anchor Slide Evidence</h2><span>{anchorEvidence.length} 页原生锚点身份</span></header>
           <div className="visual-anchor-evidence-strip">
-            {anchorEvidence.map(({ slideId, pageFamily, pageTask }) => (
+            {anchorEvidence.map(({ slideId, pageTask, title }) => (
               <article className="visual-anchor-evidence-item" key={slideId}>
                 <b>{slideId}</b>
-                <strong>{pageFamily}</strong>
+                <strong>{title}</strong>
                 <span>{pageTask}</span>
               </article>
             ))}
@@ -823,7 +901,7 @@ export function VisualContractView({
             })}
           </div>
         </section>
-        <details className="visual-contract-technical">
+        <details className="visual-contract-technical" hidden aria-hidden="true">
           <summary>技术信息</summary>
           <dl>
             {artifactSourceVersion && data.review.source_version === data.review.visual_contract_ref ? (
@@ -847,14 +925,16 @@ export function VisualContractView({
         </details>
       </article>
 
-      <ReviewOverlayDrawer open={drawer === "outline"} title="视觉合同目录" onClose={() => setDrawer(null)}>
+      <ReviewOverlayDrawer open={drawer === "outline"} title="视觉合同目录" side="left" onClose={() => setDrawer(null)}>
         <nav className="visual-contract-outline" aria-label="视觉合同章节定位">
-          <button type="button" onClick={() => navigateFromOutline(() => designSystemRef.current)}>Deck Design System</button>
-          <button type="button" onClick={() => navigateFromOutline(() => anchorIdentityRef.current)}>Anchor Slide Evidence</button>
-          {slides.map((slide) => <button type="button" key={String(slide.slide_id)} onClick={() => navigateFromOutline(() => slideRefs.current.get(String(slide.slide_id)))}>{String(slide.slide_id)} · {String(slide.neutral_title || slide.title || slide.page_task || "视觉合同")}</button>)}
+          <p className="visual-contract-outline-group">整套合同</p>
+          <button type="button" data-index="00" onClick={() => navigateFromOutline(() => designSystemRef.current)}>Deck Design System</button>
+          <button type="button" data-index="A" onClick={() => navigateFromOutline(() => anchorIdentityRef.current)}>Anchor Slide Evidence</button>
+          <p className="visual-contract-outline-group">{slides.length} 页页面合同</p>
+          {slides.map((slide) => <button type="button" data-index={String(slide.slide_id)} key={String(slide.slide_id)} onClick={() => navigateFromOutline(() => slideRefs.current.get(String(slide.slide_id)))}>{String(slide.neutral_title || slide.title || slide.page_task || "视觉合同")}</button>)}
         </nav>
       </ReviewOverlayDrawer>
-      <ReviewOverlayDrawer open={drawer === "marks"} title="合同标记记录" onClose={closeMarks}>
+      <ReviewOverlayDrawer open={drawer === "marks"} title="合同标记" side="right" onClose={closeMarks}>
         {composer ? (
           <div className="contract-mark-composer">
             <strong>{composer.editing_mark_id ? `正在编辑：${markTargetLabel(composer)}` : markTargetLabel(composer)}</strong>

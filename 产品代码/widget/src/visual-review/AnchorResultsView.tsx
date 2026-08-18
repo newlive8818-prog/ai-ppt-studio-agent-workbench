@@ -345,11 +345,15 @@ export function AnchorResultsView({
     onRevision(nextRevision);
   };
 
+  const showInlineBatch = feedbackRecords.length > 0
+    || Boolean(message)
+    || recoveryRequired
+    || !revisionIsWritable;
+
   return (
     <section ref={viewRef} className="anchor-results-view" aria-label="3 页锚点成果" tabIndex={-1}>
       <header className="visual-section-head">
-        <div><h1>3 页锚点成果</h1><p>在真实渲染上拖动框选，可跨页积累多条意见后统一提交。</p></div>
-        <span className="visual-section-identity">{data.review.project_name} · {anchors.length} 页锚点</span>
+        <div><h1>审核视觉锚点成果</h1><p>在真实渲染上拖动框选，可跨页积累多条意见后统一提交。</p></div>
       </header>
       <div className="anchor-review-layout">
         <div className="anchor-review-main">
@@ -406,11 +410,9 @@ export function AnchorResultsView({
               </div>
             );
           }) : <p className="visual-empty">当前视觉版本没有可审核的锚点成果。</p>}
-        </div>
 
-        <aside className="anchor-review-assistant" aria-label="视觉反馈辅助区">
-          <section className="anchor-batch-panel" aria-label="本轮反馈记录">
-            <header><h2>本轮反馈记录</h2><strong>{batch ? `${batch.items.length} 条已提交` : `${drafts.length} 条待提交`}</strong></header>
+          {showInlineBatch ? <section className="anchor-batch-panel anchor-batch-inline" aria-label="本轮反馈批次">
+            <header><h2>本轮反馈</h2><strong>{batch ? `${batch.items.length} 条已提交` : `${drafts.length} 条待提交`}</strong></header>
             {batch ? <p className="anchor-batch-id">{`反馈批次 ${batch.batch_id}`}</p> : null}
             {feedbackRecords.length ? (
               <ol className="anchor-draft-list">
@@ -439,17 +441,17 @@ export function AnchorResultsView({
             {hasUncommittedFeedback && !batch ? <p className="visual-operation-message">请先加入本轮反馈或放弃当前输入，再统一提交。</p> : null}
             {!revisionIsWritable ? <p className="visual-operation-message" role="alert">{invalidRevisionMessage}</p> : null}
             {message ? <p className="visual-operation-message" role="status">{message}</p> : null}
-            <section className="anchor-capability-facts" aria-label="宿主与回执能力">
+            {batch || recoveryRequired ? <section className="anchor-capability-facts" aria-label="宿主与回执能力">
               <h3>能力事实</h3>
               <p>宿主通知能力：{capabilityStatus(data.review.host_submission_capability)}</p>
               <p>AI 回执能力：{capabilityStatus(data.review.ai_receipt_capability)}</p>
-            </section>
-            <div className="visual-receipt-row" aria-label="反馈提交事实">
+            </section> : null}
+            {batch || recoveryRequired ? <div className="visual-receipt-row" aria-label="反馈提交事实">
               <span>持久化：{recoveryRequired ? "无法确认，请刷新/重新打开" : batch ? "已保存" : "尚未提交"}</span>
               <span>宿主通知：{recoveryRequired ? "无法确认，请刷新/重新打开" : batch ? hostStatus(batch.host_notification_status) : "尚无批次回执"}</span>
               <span>AI 接收：{recoveryRequired ? "无法确认，请刷新/重新打开" : batch ? aiStatus(batch.ai_receipt_status) : "尚无批次回执"}</span>
               <strong>保存反馈不等于 G3 通过</strong>
-            </div>
+            </div> : null}
             {batch ? <VisualReceiptRecoveryControls
               bridge={bridge}
               commandIdentity={commandIdentity}
@@ -465,8 +467,8 @@ export function AnchorResultsView({
               onHostSent={(nextRevision) => installReceiptFact("host", nextRevision)}
               onAiReceived={(nextRevision) => installReceiptFact("ai", nextRevision)}
             /> : null}
-          </section>
-        </aside>
+          </section> : null}
+        </div>
       </div>
       {comparisonOpen && active?.previous_asset_ref ? (
         <AnchorComparisonDialog

@@ -123,6 +123,8 @@ function visualData(
           ? { neutral_title: "系统在线，经营仍然断裂" }
           : { title: "一期围绕经营闭环建设" }),
         page_family: order === 1 ? "问题诊断页" : "方案设计页",
+        core_claim: `核心主张 ${order}`,
+        visible_copy: `页面可见文案 ${order}`,
         page_task: `页面任务 ${order}`,
         frozen_copy: `冻结正文 ${order}`,
         speaker_notes: `完整备注 ${order}`,
@@ -242,8 +244,8 @@ function contractDraft(
     target_type: "text-range",
     slide_id: "S01",
     deck_section_id: "",
-    target_key: "frozen_copy",
-    selected_text: "冻结正文 1",
+    target_key: "visible_copy",
+    selected_text: "页面可见文案 1",
     context_before: "选中文本前文",
     context_after: "选中文本后文",
     comment,
@@ -260,8 +262,8 @@ function contractComposer(
     target_type: "text-range",
     slide_id: "S01",
     deck_section_id: "",
-    target_key: "frozen_copy",
-    selected_text: "冻结正文 1",
+    target_key: "visible_copy",
+    selected_text: "页面可见文案 1",
     context_before: "选中文本前文",
     context_after: "选中文本后文",
     comment,
@@ -1663,9 +1665,9 @@ describe("visual professional review surface", () => {
     render(<VisualProfessionalReviewPage initialData={data} bridge={bridge} />);
 
     expect(screen.getByRole("tab", { name: "完整视觉合同" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("dialog", { name: "合同标记记录" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "合同标记" })).toBeInTheDocument();
     expect(screen.getByText("已恢复的合同草稿")).toBeInTheDocument();
-    expect(screen.getByText("S01 · 当前冻结文案")).toBeInTheDocument();
+    expect(screen.getByText("S01 · 页面可见文案")).toBeInTheDocument();
     expect(screen.getByLabelText("合同标记意见")).toHaveValue("已恢复的合同输入");
     fireEvent(window, new PageTransitionEvent("pagehide"));
 
@@ -1676,8 +1678,8 @@ describe("visual professional review surface", () => {
       target_type: "text-range",
       slide_id: "S01",
       deck_section_id: "",
-      target_key: "frozen_copy",
-      selected_text: "冻结正文 1",
+      target_key: "visible_copy",
+      selected_text: "页面可见文案 1",
       context_before: "选中文本前文",
       context_after: "选中文本后文",
     }));
@@ -1710,8 +1712,8 @@ describe("visual professional review surface", () => {
       target_type: "text-range",
       slide_id: "S01",
       deck_section_id: "",
-      target_key: "frozen_copy",
-      selected_text: "冻结正文 1",
+      target_key: "visible_copy",
+      selected_text: "页面可见文案 1",
       context_before: "选中文本前文",
       context_after: "选中文本后文",
     }));
@@ -2085,7 +2087,7 @@ describe("visual professional review surface", () => {
     const { bridge, callTool } = host(undefined, () => pending.promise);
     const rendered = render(<VisualProfessionalReviewPage initialData={data} bridge={bridge} />);
     fireEvent.click(screen.getByRole("tab", { name: "完整视觉合同" }));
-    fireEvent.click(screen.getByRole("button", { name: "标记 S01 页面任务" }));
+    fireEvent.click(screen.getByRole("button", { name: "标记 S01 核心主张" }));
     fireEvent.change(screen.getByLabelText("合同标记意见"), { target: { value: "新 revision 中必须保留的合同标记" } });
     fireEvent.click(screen.getByRole("button", { name: "加入合同标记" }));
     fireEvent.click(screen.getByRole("button", { name: "保存 1 条合同标记" }));
@@ -2139,7 +2141,7 @@ describe("visual professional review surface", () => {
     expect(header.querySelector(".visual-professional-project-identity")).toBeInTheDocument();
     expect(header.querySelector(".visual-professional-ai-mark")).toHaveTextContent("AI");
     expect(header.querySelector(".visual-professional-review-view-switch")).toHaveAttribute("role", "tablist");
-    expect(header.querySelector(".visual-professional-compact-status")).toBeInTheDocument();
+    expect(header.querySelector(".visual-professional-status-ledger")).toBeInTheDocument();
     expect(within(header).getByText("测试项目")).toBeInTheDocument();
     expect(within(header).getByText("visual-v1 · revision 12")).toBeInTheDocument();
     expect(within(header).getByText("G1 passed")).toBeInTheDocument();
@@ -2301,15 +2303,15 @@ describe("visual professional review surface", () => {
     expect(header).not.toHaveTextContent(artifactSource);
   });
 
-  it("shows an existing immutable feedback batch id in the assistant", () => {
+  it("shows an existing immutable feedback batch id in the inline batch", () => {
     const { bridge } = host();
     const batch = existingAnchorBatch();
     render(<VisualProfessionalReviewPage initialData={visualData({}, batch)} bridge={bridge} />);
 
-    const assistant = screen.getByRole("complementary", { name: "视觉反馈辅助区" });
-    expect(within(assistant).getByText(`反馈批次 ${batch.batch_id}`)).toBeInTheDocument();
-    expect(within(assistant).getByRole("button", { name: "本轮反馈已冻结" })).toBeDisabled();
-    expect(within(assistant).queryByText(batch.visual_contract_ref)).not.toBeInTheDocument();
+    const inlineBatch = screen.getByRole("region", { name: "本轮反馈批次" });
+    expect(within(inlineBatch).getByText(`反馈批次 ${batch.batch_id}`)).toBeInTheDocument();
+    expect(within(inlineBatch).getByRole("button", { name: "本轮反馈已冻结" })).toBeDisabled();
+    expect(within(inlineBatch).queryByText(batch.visual_contract_ref)).not.toBeInTheDocument();
   });
 
   it.each([
@@ -2364,15 +2366,18 @@ describe("visual professional review surface", () => {
     expect(assetCalls.every(([, args]) => !("asset_ref" in args))).toBe(true);
   });
 
-  it("keeps the composer under the slide in the main column and the assistant limited to review facts", async () => {
+  it("removes the empty anchor assistant and reveals a compact inline batch only after feedback is added", async () => {
     mockSlideRect();
     const { bridge } = host();
     const { container } = render(<VisualProfessionalReviewPage initialData={visualData()} bridge={bridge} />);
     const layout = container.querySelector(".anchor-review-layout")!;
     const main = container.querySelector(".anchor-review-main")!;
-    const assistant = container.querySelector(".anchor-review-assistant")!;
     expect(layout.children[0]).toBe(main);
-    expect(layout.children[1]).toBe(assistant);
+    expect(layout.children).toHaveLength(1);
+    expect(container.querySelector(".visual-section-identity")).not.toBeInTheDocument();
+    expect(container.querySelector(".anchor-review-assistant")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "本轮反馈记录" })).not.toBeInTheDocument();
+    expect(container.querySelector(".anchor-batch-inline")).not.toBeInTheDocument();
 
     await readyActiveAnchor();
     fireEvent.click(screen.getByRole("button", { name: "开始标注" }));
@@ -2383,10 +2388,14 @@ describe("visual professional review surface", () => {
 
     expect(canvas.nextElementSibling).toHaveClass("anchor-feedback-composer");
     expect(within(main as HTMLElement).getByLabelText("当前框选区域反馈")).toBeInTheDocument();
-    expect(within(assistant as HTMLElement).getByRole("heading", { name: "本轮反馈记录" })).toBeInTheDocument();
-    expect(within(assistant as HTMLElement).getByText("宿主通知能力：不可用")).toBeInTheDocument();
-    expect(within(assistant as HTMLElement).getByText("AI 回执能力：不可用")).toBeInTheDocument();
-    expect(within(assistant as HTMLElement).queryByText(/聊天|合同正文|确认 G3/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("当前框选区域反馈"), { target: { value: "降低底部信息权重" } });
+    fireEvent.click(screen.getByRole("button", { name: "加入本轮反馈" }));
+
+    const inlineBatch = container.querySelector<HTMLElement>(".anchor-batch-inline")!;
+    expect(inlineBatch).toBeInTheDocument();
+    expect(within(inlineBatch).getByRole("heading", { name: "本轮反馈" })).toBeInTheDocument();
+    expect(within(inlineBatch).getByRole("button", { name: "统一提交 1 条反馈" })).toBeInTheDocument();
+    expect(within(inlineBatch).getByText("降低底部信息权重")).toBeInTheDocument();
   });
 
   it("compares previous and current controlled images in a focus-safe modal and disables first-version comparison", async () => {
@@ -3458,7 +3467,7 @@ describe("visual professional review surface", () => {
     expect(screen.queryByText("旧身份中的已加入反馈")).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue("旧身份中的未加入反馈")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("当前框选区域反馈")).not.toBeInTheDocument();
-    expect(screen.getByText("0 条待提交")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "本轮反馈批次" })).not.toBeInTheDocument();
   });
 
   it("does not retain a submitted batch across a source identity change", async () => {
@@ -3474,7 +3483,7 @@ describe("visual professional review surface", () => {
     rerender(<VisualProfessionalReviewPage initialData={nextData} bridge={bridge} />);
     expect(screen.queryByText("反馈批次 anchor-batch-1")).not.toBeInTheDocument();
     expect(screen.queryByText("只属于旧来源的反馈批次")).not.toBeInTheDocument();
-    expect(screen.getByText("0 条待提交")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "本轮反馈批次" })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -3511,7 +3520,7 @@ describe("visual professional review surface", () => {
     expect(screen.queryByLabelText("合同标记意见")).not.toBeInTheDocument();
     const titlePage = document.querySelector<HTMLElement>(".visual-contract-title-page")!;
     expect(within(titlePage).getByText("revision").parentElement).toHaveTextContent("30");
-    expect(document.querySelector(".visual-contract-command-status")).toHaveTextContent("所有标记已保存");
+    expect(screen.getByLabelText("视觉合同操作").querySelector(".visual-contract-command-status")).toHaveTextContent("所有标记已保存");
   });
 
   it("ignores an old pending contract save after a complete identity change", async () => {
@@ -3533,7 +3542,7 @@ describe("visual professional review surface", () => {
     nextData.review.visual_contract_ref = NEXT_VISUAL_CONTRACT_REF;
     rerender(<VisualProfessionalReviewPage initialData={nextData} bridge={bridge} />);
     fireEvent.click(screen.getByRole("tab", { name: "完整视觉合同" }));
-    fireEvent.click(screen.getByRole("button", { name: "标记 S01 页面任务" }));
+    fireEvent.click(screen.getByRole("button", { name: "标记 S01 核心主张" }));
     fireEvent.change(screen.getByLabelText("合同标记意见"), { target: { value: "新身份中的合同草稿" } });
     fireEvent.click(screen.getByRole("button", { name: "加入合同标记" }));
     fireEvent.click(screen.getByRole("button", { name: "标记 S01 构图意图" }));
@@ -3570,7 +3579,7 @@ describe("visual professional review surface", () => {
     expect(titlePage).toHaveTextContent("2 页逐页合同");
     expect(titlePage).toHaveTextContent("G3 尚未确认");
     expect(screen.queryByRole("region", { name: "视觉合同摘要" })).not.toBeInTheDocument();
-    expect(document.querySelector(".visual-contract-command-status")).toHaveTextContent("所有标记已保存");
+    expect(screen.getByLabelText("视觉合同操作").querySelector(".visual-contract-command-status")).toHaveTextContent("所有标记已保存");
 
     const technical = screen.getByText("技术信息").closest("details");
     expect(technical).not.toBeNull();
@@ -3601,18 +3610,18 @@ describe("visual professional review surface", () => {
     fireEvent.click(screen.getByRole("button", { name: "标记 Deck Design System 设计命题" }));
     fireEvent.change(screen.getByLabelText("合同标记意见"), { target: { value: "首屏摘要测试" } });
     fireEvent.click(screen.getByRole("button", { name: "加入合同标记" }));
-    const commandStatus = document.querySelector<HTMLElement>(".visual-contract-command-status")!;
+    const commandStatus = screen.getByLabelText("视觉合同操作").querySelector<HTMLElement>(".visual-contract-command-status")!;
     expect(commandStatus).toHaveTextContent("1 条待保存标记");
     expect(commandStatus).toHaveAttribute("aria-live", "polite");
     expect(commandStatus).toHaveAttribute("aria-atomic", "true");
 
-    const commandbar = document.querySelector<HTMLElement>(".visual-contract-commandbar")!;
-    expect(VISUAL_REVIEW_CSS).toMatch(/\.visual-contract-commandbar\s*\{[^}]*position:\s*sticky;/s);
+    const commandbar = screen.getByLabelText("视觉合同操作");
+    expect(VISUAL_REVIEW_CSS).not.toMatch(/\.visual-contract-commandbar\s*\{[^}]*position:\s*sticky;/s);
     const topSave = within(commandbar).getByRole("button", { name: /保存 .*合同标记/ });
     expect(topSave.compareDocumentPosition(screen.getByText("Deck Design System")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     expect(screen.getByRole("button", { name: "标记 Deck Design System 设计命题" })).toBeInTheDocument();
-    expect(VISUAL_REVIEW_CSS).toMatch(/\.visual-contract-field header button\s*\{[^}]*min-height:\s*42px;[^}]*font-size:\s*11px;[^}]*opacity:\s*1;/s);
+    expect(VISUAL_REVIEW_CSS).toMatch(/\.visual-contract-field header button\s*\{[^}]*width:\s*27px;[^}]*height:\s*27px;[^}]*opacity:\s*\.72;/s);
   });
 
   it("validates one 120-slide saved mark set without repeated slide scans while the composer changes", () => {
@@ -3720,10 +3729,9 @@ describe("visual professional review surface", () => {
     await waitFor(() => expect(callTool.mock.calls.filter(([name]) => name === "save_visual_contract_review_marks")).toHaveLength(1));
 
     const fieldEntry = screen.getByRole("button", { name: "标记 Deck Design System 设计命题" });
-    const selectionEntry = screen.getByRole("button", { name: "标记选中文字" });
     const edit = screen.getByRole("button", { name: "编辑 提交快照中的标记" });
     const remove = screen.getByRole("button", { name: "移除 提交快照中的标记" });
-    for (const control of [fieldEntry, selectionEntry, edit, remove]) {
+    for (const control of [fieldEntry, edit, remove]) {
       expect(control).toBeDisabled();
     }
 
@@ -4273,7 +4281,7 @@ describe("visual professional review surface", () => {
     const { container } = render(<VisualProfessionalReviewPage initialData={data} bridge={bridge} />);
     fireEvent.click(screen.getByRole("tab", { name: "完整视觉合同" }));
 
-    const commandbar = container.querySelector<HTMLElement>(".visual-contract-commandbar");
+    const commandbar = container.querySelector<HTMLElement>(".visual-professional-header .visual-contract-commandbar");
     expect(commandbar).toBeInTheDocument();
     expect(commandbar).toHaveAttribute("aria-label", "视觉合同操作");
     expect(within(commandbar!).queryByRole("heading", { name: "完整视觉合同" })).not.toBeInTheDocument();
@@ -4284,14 +4292,13 @@ describe("visual professional review surface", () => {
     const designSystem = document.querySelector<HTMLElement>("[data-contract-logical-object='deck-design-system']")!;
     const anchorEvidence = document.querySelector<HTMLElement>("[data-contract-logical-object='anchor-slide-evidence']")!;
     const slideContracts = document.querySelector<HTMLElement>(".visual-slide-contracts")!;
-    const technical = document.querySelector<HTMLElement>(".visual-contract-technical")!;
     const documentChildren = Array.from(document.children);
 
     expect(document.firstElementChild).toBe(titlePage);
     expect(documentChildren.indexOf(titlePage)).toBeLessThan(documentChildren.indexOf(designSystem));
     expect(documentChildren.indexOf(designSystem)).toBeLessThan(documentChildren.indexOf(anchorEvidence));
     expect(documentChildren.indexOf(anchorEvidence)).toBeLessThan(documentChildren.indexOf(slideContracts));
-    expect(documentChildren.indexOf(slideContracts)).toBeLessThan(documentChildren.indexOf(technical));
+    expect(document.querySelector(".visual-contract-technical")).not.toBeVisible();
     expect(anchorEvidence.querySelectorAll(".visual-anchor-evidence-item")).toHaveLength(3);
     expect(slideContracts.querySelectorAll(".visual-slide-contract")).toHaveLength(2);
     expect(Array.from(slideContracts.querySelectorAll(".visual-contract-column > h4")).filter((heading) => heading.textContent === "冻结内容")).toHaveLength(2);
@@ -4305,12 +4312,36 @@ describe("visual professional review surface", () => {
     }
 
     const slideOne = within(slideContracts).getByRole("article", { name: "系统在线，经营仍然断裂" });
-    for (const label of ["页面任务", "当前冻结文案", "演讲备注", "来源引用", "沟通目标", "构图意图", "信息层级", "阅读顺序", "页面区域", "对象关系", "图示／图表／表格", "图像选择与裁切", "色彩应用", "字体应用", "原生／位图路由", "可编辑要求", "降级策略", "验收标准"]) {
+    for (const label of ["核心主张", "页面可见文案", "讲解备注", "来源引用", "沟通目标", "构图意图", "信息层级", "阅读顺序", "页面区域", "对象关系", "图示／图表／表格", "图像选择与裁切", "色彩应用", "字体应用", "原生／位图路由", "可编辑要求", "降级策略", "验收标准"]) {
       expect(within(slideOne).getByRole("heading", { level: 4, name: label })).toBeInTheDocument();
     }
+    expect(within(slideOne).queryByRole("heading", { name: "页面任务" })).not.toBeInTheDocument();
+    expect(within(slideOne).queryByRole("heading", { name: "当前冻结文案" })).not.toBeInTheDocument();
+
+    const palette = within(designSystem).getByTestId("visual-color-palette");
+    expect(palette).toHaveClass("visual-palette-line");
+    expect(palette.querySelectorAll(".visual-palette-swatch")).toHaveLength(2);
+    expect(palette).toHaveTextContent("#1D2421");
+    expect(palette).toHaveTextContent("#234B3D");
     for (const internalLabel of ["reading question", "material mode", "previous relation", "solution mapping refs"]) {
       expect(within(slideOne).queryByRole("heading", { name: internalLabel })).not.toBeInTheDocument();
     }
+  });
+
+  it("keeps a confirmed frontend contract field markable when the backend projection key is missing", () => {
+    const { bridge } = host();
+    const data = visualData();
+    delete (data.review.slide_visual_contracts[0] as Record<string, unknown>).core_claim;
+
+    render(<VisualProfessionalReviewPage initialData={data} bridge={bridge} />);
+    fireEvent.click(screen.getByRole("tab", { name: "完整视觉合同" }));
+
+    const coreClaimField = screen.getByTestId("contract-field-S01-core_claim");
+    expect(within(coreClaimField).getByText("待后端按前端字段合同提供")).toBeInTheDocument();
+    fireEvent.click(within(coreClaimField).getByRole("button", { name: "标记 S01 核心主张" }));
+
+    expect(screen.getByLabelText("合同标记意见")).toBeInTheDocument();
+    expect(screen.getByText("S01 · 核心主张")).toBeInTheDocument();
   });
 
   it("reads the full contract in order and saves field plus selected-text marks once", async () => {
@@ -4331,9 +4362,9 @@ describe("visual professional review surface", () => {
     );
     const slideOne = within(document).getByRole("article", { name: "系统在线，经营仍然断裂" });
     expect(within(slideOne).getByText("问题诊断页 · 第 1 页")).toBeInTheDocument();
-    const pageTaskField = within(slideOne).getByTestId("contract-field-S01-page_task");
-    expect(within(pageTaskField).getByText("页面任务")).toBeInTheDocument();
-    expect(within(pageTaskField).getByText("页面任务 1")).toBeInTheDocument();
+    const coreClaimField = within(slideOne).getByTestId("contract-field-S01-core_claim");
+    expect(within(coreClaimField).getByText("核心主张")).toBeInTheDocument();
+    expect(within(coreClaimField).getByText("核心主张 1")).toBeInTheDocument();
     const slideTwo = within(document).getByRole("article", { name: "一期围绕经营闭环建设" });
     expect(within(slideTwo).getByText("方案设计页 · 第 2 页")).toBeInTheDocument();
 
@@ -4341,8 +4372,8 @@ describe("visual professional review surface", () => {
     fireEvent.change(screen.getByLabelText("合同标记意见"), { target: { value: "标题层级更克制" } });
     fireEvent.click(screen.getByRole("button", { name: "加入合同标记" }));
 
-    fireEvent.click(within(pageTaskField).getByRole("button", { name: "标记 S01 页面任务" }));
-    fireEvent.change(screen.getByLabelText("合同标记意见"), { target: { value: "页面任务需要更明确" } });
+    fireEvent.click(within(coreClaimField).getByRole("button", { name: "标记 S01 核心主张" }));
+    fireEvent.change(screen.getByLabelText("合同标记意见"), { target: { value: "核心主张需要更明确" } });
     fireEvent.click(screen.getByRole("button", { name: "加入合同标记" }));
 
     const target = screen.getByTestId("contract-field-S01-composition_intent");
@@ -4352,6 +4383,7 @@ describe("visual professional review surface", () => {
     const selection = window.getSelection()!;
     selection.removeAllRanges();
     selection.addRange(range);
+    fireEvent.mouseUp(target);
     fireEvent.click(screen.getByRole("button", { name: "标记选中文字" }));
     fireEvent.change(screen.getByLabelText("合同标记意见"), { target: { value: "强调因果链" } });
     fireEvent.click(screen.getByRole("button", { name: "加入合同标记" }));
@@ -4363,8 +4395,8 @@ describe("visual professional review surface", () => {
     expect(args.marks.map((mark) => mark.target_type)).toEqual(["contract-field", "contract-field", "text-range"]);
     expect(args.marks).toContainEqual(expect.objectContaining({
       slide_id: "S01",
-      target_key: "page_task",
-      comment: "页面任务需要更明确",
+      target_key: "core_claim",
+      comment: "核心主张需要更明确",
     }));
     expect(args.marks[2]).toEqual(expect.objectContaining({
       slide_id: "S01",
@@ -4396,6 +4428,7 @@ describe("visual professional review surface", () => {
     const selection = window.getSelection()!;
     selection.removeAllRanges();
     selection.addRange(range);
+    fireEvent.mouseUp(target);
     fireEvent.click(screen.getByRole("button", { name: "标记选中文字" }));
     fireEvent.change(screen.getByLabelText("合同标记意见"), { target: { value: "保留 beta" } });
     fireEvent.click(screen.getByRole("button", { name: "加入合同标记" }));
@@ -4425,6 +4458,7 @@ describe("visual professional review surface", () => {
     const selection = window.getSelection()!;
     selection.removeAllRanges();
     selection.addRange(range);
+    fireEvent.mouseUp(target);
     fireEvent.click(screen.getByRole("button", { name: "标记选中文字" }));
     fireEvent.change(screen.getByLabelText("合同标记意见"), { target: { value: "标记第二个 alpha" } });
     fireEvent.click(screen.getByRole("button", { name: "加入合同标记" }));
@@ -4447,7 +4481,7 @@ describe("visual professional review surface", () => {
 
       const field = screen.getByTestId("contract-field-S01-composition_intent");
       const title = within(field).getByRole("heading", { name: "构图意图" }).firstChild as Text;
-      const button = within(field).getByRole("button", { name: "标记 S01 构图意图" }).firstChild as Text;
+      const button = within(field).getByRole("button", { name: "标记 S01 构图意图" });
       const body = within(field).getByText("左侧事实，右侧因果链").firstChild as Text;
       const range = window.document.createRange();
       if (selectionKind === "title") {
@@ -4462,9 +4496,9 @@ describe("visual professional review surface", () => {
       selection.removeAllRanges();
       selection.addRange(range);
 
-      fireEvent.click(screen.getByRole("button", { name: "标记选中文字" }));
+      fireEvent.mouseUp(field);
 
-      expect(screen.getByText("选中文字必须完整位于一个合同字段正文内。")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "标记选中文字" })).not.toBeInTheDocument();
       expect(screen.queryByLabelText("合同标记意见")).not.toBeInTheDocument();
     },
   );
@@ -4480,6 +4514,6 @@ describe("visual professional review surface", () => {
     expect(screen.getByRole("region", { name: "完整视觉合同正文" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "打开标记记录" }));
     expect(screen.queryByRole("dialog", { name: "视觉合同目录" })).not.toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "合同标记记录" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "合同标记" })).toBeInTheDocument();
   });
 });

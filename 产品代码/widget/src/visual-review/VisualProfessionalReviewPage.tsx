@@ -110,6 +110,7 @@ function VisualProfessionalReviewRoot({
     identity: contractIdentity,
     revision: initialData.snapshotRevision,
   }));
+  const [contractToolbarHost, setContractToolbarHost] = useState<HTMLDivElement | null>(null);
   const revision = revisionState.identity === contractIdentity
     ? revisionState.revision
     : initialData.snapshotRevision;
@@ -257,13 +258,13 @@ function VisualProfessionalReviewRoot({
   const visibleConfirmation = visualConfirmationLabel(initialData.review.gate_status.G3);
 
   return (
-    <main ref={rootRef} className="visual-professional-page">
+    <main ref={rootRef} className={`visual-professional-page visual-review-view-${view}`}>
       <header className="visual-professional-header visual-review-topbar visual-professional-topbar">
         <div className="visual-professional-project visual-professional-project-identity">
           <span className="visual-professional-ai-mark" aria-hidden="true">AI</span>
           <div className="visual-professional-project-copy">
             <strong>{initialData.review.project_name}</strong>
-            <span>{visibleSourceVersion} · revision {revision}</span>
+            <span>{view === "anchors" ? "视觉设计 · 3 页锚点成果" : "视觉设计 · 完整视觉合同"}</span>
           </div>
         </div>
         <div className="visual-professional-view-tabs visual-professional-review-view-switch" role="tablist" aria-label="视觉专业审核视图">
@@ -288,7 +289,14 @@ function VisualProfessionalReviewRoot({
             onClick={() => selectView("contract")}
           >完整视觉合同</button>
         </div>
-        <div className="visual-professional-gates visual-professional-compact-status">
+        <div
+          ref={setContractToolbarHost}
+          className="visual-professional-contract-tools"
+          hidden={view !== "contract"}
+          aria-label="完整视觉合同操作区"
+        />
+        <div className="visual-professional-status-ledger" aria-hidden="true">
+          <span>{visibleSourceVersion} · revision {revision}</span>
           <span>G1 {initialData.review.gate_status.G1}</span>
           <span>G2 {initialData.review.gate_status.G2}</span>
           <span>视觉确认 {visibleConfirmation}</span>
@@ -342,6 +350,7 @@ function VisualProfessionalReviewRoot({
           revision={revision}
           onRevision={updateRevision}
           commandIdentity={pageIdentity}
+          toolbarHost={view === "contract" ? contractToolbarHost : null}
           drafts={reviewDraft.ui.contract_mark_drafts}
           composer={reviewDraft.ui.contract_mark_composer}
           onSliceChange={(drafts, composer) => reviewDraft.updateDraft({
