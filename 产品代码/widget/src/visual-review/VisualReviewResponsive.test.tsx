@@ -34,4 +34,15 @@ describe("visual anchor review responsive contracts", () => {
       /@media\s*\(max-width:\s*900px\)[\s\S]*?\.anchor-review-assistant\s*\{[^}]*top:\s*116px[^}]*max-height:\s*calc\(100vh\s*-\s*136px\)/s,
     );
   });
+
+  it("keeps the contract command bar compact and collapses contract columns on narrow screens", () => {
+    expect(css).toMatch(/\.visual-contract-commandbar\s*\{[^}]*position:\s*sticky[^}]*display:\s*flex/s);
+    expect(css).toMatch(/\.visual-contract-document\s*\{[^}]*width:\s*min\(1180px,/s);
+    expect(css).toMatch(/\.visual-anchor-evidence-strip\s*\{[^}]*grid-template-columns:\s*repeat\(3,/s);
+    expect(css).toMatch(/\.visual-slide-contract\s*\{[^}]*contain-intrinsic-inline-size:\s*none;[^}]*contain-intrinsic-block-size:\s*auto\s+860px;/s);
+    expect(css).not.toMatch(/\.visual-slide-contract\s*\{[^}]*contain-intrinsic-size:\s*auto\s+860px;/s);
+    expect(css).toMatch(/@media\s*\(max-width:\s*900px\)[\s\S]*?\.visual-contract-columns\s*\{[^}]*grid-template-columns:\s*1fr/s);
+    expect(css).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*?\.visual-anchor-evidence-strip\s*\{[^}]*grid-template-columns:\s*1fr/s);
+    expect(css).toMatch(/@media\s*\(max-width:\s*480px\)[\s\S]*?\.visual-contract-section,\s*\.visual-slide-contract\s*\{[^}]*scroll-margin-top:\s*213px/s);
+  });
 });
