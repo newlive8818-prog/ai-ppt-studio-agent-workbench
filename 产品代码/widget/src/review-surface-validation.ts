@@ -36,7 +36,7 @@ const visualFields = [
 ] as const;
 const contentSlideFields = [
   "slide_id", "order", "section_id", "page_task", "reading_question", "neutral_title",
-  "visible_copy_blocks", "identity_labels", "evidence_bindings", "material_views",
+  "customerJudgment", "visible_copy_blocks", "identity_labels", "evidence_bindings", "material_views",
   "analysis_or_proposal_blocks", "solution_mapping_refs", "previous_relation", "next_relation",
   "speaker_notes", "reading_quality", "material_mode",
 ] as const;
@@ -238,7 +238,8 @@ function validateContentSlide(value: unknown): boolean {
   if (
     !isText(value.slide_id) || !isRevision(value.order) || value.order < 1
     || !isText(value.section_id) || !isText(value.page_task) || !isText(value.reading_question)
-    || !isText(value.neutral_title) || !isStringArray(value.identity_labels)
+    || !isText(value.neutral_title) || !isText(value.customerJudgment)
+    || !isStringArray(value.identity_labels)
     || !isStringArray(value.solution_mapping_refs, false)
     || !isText(value.previous_relation, true) || !isText(value.next_relation, true)
     || !isText(value.speaker_notes, true)

@@ -21,7 +21,12 @@ class ContentReviewProjectionService:
 
     def project(self, review_session_id: str) -> dict[str, Any]:
         context = review_context(self.kernel, review_session_id)
-        slides = copy.deepcopy(context.blueprint["slides"])
+        slides = []
+        for source_slide in context.blueprint["slides"]:
+            projected_slide = copy.deepcopy(source_slide)
+            customer_decision_item = projected_slide.pop("customer_decision_item")
+            projected_slide["customerJudgment"] = customer_decision_item["text"]
+            slides.append(projected_slide)
         decisions = self._decisions(context.blueprint_ref)
         completed = len(decisions)
         total = len(slides)

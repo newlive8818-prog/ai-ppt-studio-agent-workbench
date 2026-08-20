@@ -325,6 +325,51 @@ def _material_view(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _customer_decision_item(
+    row: Any, *, material_mode: str
+) -> dict[str, Any]:
+    if not isinstance(row, dict):
+        raise ContractValidationError(
+            "customer_decision_item must be an object"
+        )
+    _require_exact_keys(
+        row,
+        ("text", "identity", "evidence_refs"),
+        "customer_decision_item",
+    )
+    raw_text = row.get("text")
+    text = _text(row, "text")
+    if raw_text != text:
+        raise ContractValidationError(
+            "customer_decision_item text must be normalized"
+        )
+    if STRONG_TITLE_PATTERN.search(text):
+        raise ContractValidationError(
+            "customer_decision_item contains an unsupported conclusion"
+        )
+    identity = _text(row, "identity")
+    if identity not in CONTENT_IDENTITIES:
+        raise ContractValidationError(
+            "customer_decision_item identity is unsupported"
+        )
+    evidence_refs = _v22_strings(row, "evidence_refs")
+    if identity in {"来源事实", "用户已确认"} and not evidence_refs:
+        raise ContractValidationError(
+            "Factual customer_decision_item requires evidence"
+        )
+    if material_mode == "proposal-led" and (
+        identity in {"来源事实", "用户已确认"} or evidence_refs
+    ):
+        raise ContractValidationError(
+            "proposal-led customer_decision_item cannot claim customer facts or project evidence"
+        )
+    return {
+        "text": text,
+        "identity": identity,
+        "evidence_refs": evidence_refs,
+    }
+
+
 def validate_reading_deck_blueprint(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ContractValidationError("ReadingDeckBlueprint must be an object")
@@ -357,6 +402,7 @@ def validate_reading_deck_blueprint(payload: dict[str, Any]) -> dict[str, Any]:
                 "page_task",
                 "reading_question",
                 "neutral_title",
+                "customer_decision_item",
                 "visible_copy_blocks",
                 "identity_labels",
                 "evidence_bindings",
@@ -414,6 +460,9 @@ def validate_reading_deck_blueprint(payload: dict[str, Any]) -> dict[str, Any]:
             "page_task": _text(row, "page_task"),
             "reading_question": _text(row, "reading_question"),
             "neutral_title": title,
+            "customer_decision_item": _customer_decision_item(
+                row.get("customer_decision_item"), material_mode=slide_mode
+            ),
             "visible_copy_blocks": [_content_block(block) for block in _v22_objects(row, "visible_copy_blocks", non_empty=True)],
             "identity_labels": _v22_strings(row, "identity_labels", non_empty=True),
             "evidence_bindings": bindings,

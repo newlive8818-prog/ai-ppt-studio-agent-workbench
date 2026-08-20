@@ -130,6 +130,7 @@ function contentSlide(slideId: string, order: number, sectionId: string) {
     page_task: `页面任务 ${order}`,
     reading_question: `阅读问题 ${order}`,
     neutral_title: `中立标题 ${order}`,
+    customerJudgment: `客户形成第 ${order} 页的明确判断。`,
     visible_copy_blocks: [],
     identity_labels: ["方案建议"],
     evidence_bindings: [],
@@ -307,6 +308,29 @@ describe("on-demand professional-review routing", () => {
 
     expect(screen.getByRole("heading", { name: "完整售前阅读稿" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["missing", (slide: ReturnType<typeof contentSlide>) => {
+      delete (slide as unknown as Record<string, unknown>).customerJudgment;
+    }],
+    ["blank", (slide: ReturnType<typeof contentSlide>) => {
+      slide.customerJudgment = "";
+    }],
+    ["unnormalized", (slide: ReturnType<typeof contentSlide>) => {
+      slide.customerJudgment = "  客户先核实现状  ";
+    }],
+  ])("rejects a content projection with %s customerJudgment without using legacy text as fallback", (_label, mutate) => {
+    const slide = contentSlide("S01", 1, "problem");
+    mutate(slide);
+    const content = contentReviewSurface([slide]);
+
+    render(<ReviewSurfaceRouter data={content} bridge={bridge} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/审核数据无效.*重新打开/);
+    expect(screen.queryByText(slide.neutral_title)).not.toBeInTheDocument();
+    expect(screen.queryByText(slide.reading_question)).not.toBeInTheDocument();
+    expect(screen.queryByText(slide.page_task)).not.toBeInTheDocument();
   });
 
   it.each([

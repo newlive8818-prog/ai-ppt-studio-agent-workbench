@@ -103,6 +103,7 @@ class ContentRepairLoopTests(unittest.TestCase):
                 build_content(kernel, slide_count=3)
             slides = captured["payload"]["slides"]
             for field in (
+                "customer_decision_item",
                 "visible_copy_blocks",
                 "identity_labels",
                 "evidence_bindings",

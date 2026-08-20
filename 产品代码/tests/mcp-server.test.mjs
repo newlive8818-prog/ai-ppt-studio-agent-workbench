@@ -43,6 +43,10 @@ const review = {
   title: "内容蓝图专业审阅",
   source_version: "content-v0001-abc123",
   source_refs: ["content-blueprint:v0001:abc123"],
+  slides: [{
+    slide_id: "S01",
+    customerJudgment: "客户确认现状边界后，再判断是否进入联合方案验证。",
+  }],
   sections: [{ anchor: "content-overview", title: "整套内容", value: {} }],
   outline: [{ anchor: "content-overview", title: "整套内容" }],
   mark_set: { marks: [] },
@@ -290,6 +294,10 @@ test("content review tools use exact v2.2 session-bound operations", async () =>
       },
     });
     assert.equal(result.structuredContent.review.review_type, "content-full-deck");
+    assert.equal(
+      result.structuredContent.review.slides[0].customerJudgment,
+      "客户确认现状边界后，再判断是否进入联合方案验证。",
+    );
     assert.equal(calls.at(-1).operation, "get-content-review-projection");
     assert.equal(calls.at(-1).review_session_id, "content-full-deck-session-1");
   } finally {

@@ -35,6 +35,7 @@ export interface ContentReviewSlide {
   page_task: string;
   reading_question: string;
   neutral_title: string;
+  customerJudgment: string;
   visible_copy_blocks: Array<{ block_id: string; text: string; identity: string }>;
   identity_labels: string[];
   evidence_bindings: Array<Record<string, unknown>>;

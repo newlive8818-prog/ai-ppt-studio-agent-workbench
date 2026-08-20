@@ -91,6 +91,7 @@ function projection(count = 2): ContentReviewProjection {
       page_task: `完整页面任务 ${index + 1}`,
       reading_question: `阅读问题 ${index + 1}`,
       neutral_title: `当前业务事项 ${index + 1}`,
+      customerJudgment: `客户形成第 ${index + 1} 页的明确判断。`,
       visible_copy_blocks: [{
         block_id: `copy-${index + 1}`,
         text: `完整可见正文 ${index + 1}，不使用摘要或省略号。`,

@@ -1,12 +1,10 @@
 import { expect, it } from "vitest";
 
-import type { ContentReviewProjection, ContentReviewSlide } from "../types/content-review";
+import type { ContentReviewProjection } from "../types/content-review";
 import {
   ContentReviewPageViewModelAdapterError,
   toContentReviewPageViewModel,
 } from "./content-review-page-view-model";
-
-type SlideWithCustomerJudgment = ContentReviewSlide & { customerJudgment?: string };
 
 function projection(
   customerJudgment: string | null = "客户确认现状边界后，再判断是否进入联合方案验证。",
@@ -29,6 +27,8 @@ function projection(
       page_task: "确认当前流程断点及证据边界",
       reading_question: "现有材料能否支撑当前判断？",
       neutral_title: "当前流程断点与证据边界",
+      customerJudgment: customerJudgment
+        ?? "客户确认现状边界后，再判断是否进入联合方案验证。",
       visible_copy_blocks: [{
         block_id: "copy-1",
         text: "当前流程存在三个待核实断点。",
@@ -69,13 +69,8 @@ function projection(
     revision_plan: null,
     content_acceptance_ref: `artifact://content-acceptance/${"c".repeat(64)}`,
   };
-  if (customerJudgment !== null) {
-    Object.defineProperty(value.slides[0] as SlideWithCustomerJudgment, "customerJudgment", {
-      configurable: true,
-      enumerable: true,
-      value: customerJudgment,
-      writable: true,
-    });
+  if (customerJudgment === null) {
+    delete (value.slides[0] as unknown as Record<string, unknown>).customerJudgment;
   }
   return value;
 }
@@ -231,16 +226,3 @@ it.each([null, "", " 未去除空白 "])(
     }
   },
 );
-
-it("rejects inherited or accessor-backed customerJudgment without invoking a getter", () => {
-  const inherited = projection(null);
-  Object.setPrototypeOf(inherited.slides[0], { customerJudgment: "继承值" });
-  expect(() => toContentReviewPageViewModel(inherited)).toThrow(ContentReviewPageViewModelAdapterError);
-
-  const accessor = projection(null);
-  Object.defineProperty(accessor.slides[0], "customerJudgment", {
-    enumerable: true,
-    get() { throw new Error("getter must not run"); },
-  });
-  expect(() => toContentReviewPageViewModel(accessor)).toThrow(ContentReviewPageViewModelAdapterError);
-});

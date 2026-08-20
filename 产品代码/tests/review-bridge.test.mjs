@@ -18,6 +18,10 @@ const review = {
   source_version:
     "artifact://content-blueprint/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   revision: 7,
+  slides: [{
+    slide_id: "S01",
+    customerJudgment: "客户确认现状边界后，再判断是否进入联合方案验证。",
+  }],
   sections: [],
   outline: [],
   mark_set: { marks: [] },
@@ -228,6 +232,10 @@ test("Review Bridge reads the fixed projection with Bearer and security headers"
     assert.match(response.headers.get("content-security-policy"), /default-src 'none'/);
     const payload = await response.json();
     assert.equal(payload.review.source_version, review.source_version);
+    assert.equal(
+      payload.review.slides[0].customerJudgment,
+      "客户确认现状边界后，再判断是否进入联合方案验证。",
+    );
     assert.equal(calls.at(-1).operation, "get-content-review-projection");
     assert.equal(calls.at(-1).review_session_id, "content-session-1");
   } finally {

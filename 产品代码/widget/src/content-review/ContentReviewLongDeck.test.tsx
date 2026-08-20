@@ -15,6 +15,7 @@ it("keeps all 60 slides in the continuous document", () => {
     page_task: `任务 ${index + 1}`,
     reading_question: `问题 ${index + 1}`,
     neutral_title: `中立标题 ${index + 1}`,
+    customerJudgment: `客户形成第 ${index + 1} 页的明确判断。`,
     visible_copy_blocks: [{ block_id: `b${index}`, text: `完整正文 ${index + 1}`, identity: "来源事实" }],
     identity_labels: ["来源事实"], evidence_bindings: [], analysis_or_proposal_blocks: [],
     material_views: [],

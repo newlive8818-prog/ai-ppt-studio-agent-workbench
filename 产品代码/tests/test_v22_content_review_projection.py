@@ -68,6 +68,11 @@ class ContentReviewProjectionTests(unittest.TestCase):
             self.assertEqual(projection["reading_blueprint_ref"], blueprint_ref)
             self.assertEqual(projection["slides"][0]["neutral_title"], "当前流程断点与证据边界")
             self.assertEqual(
+                projection["slides"][0]["customerJudgment"],
+                "客户确认现状边界后，再判断是否进入联合方案验证。",
+            )
+            self.assertNotIn("customer_decision_item", projection["slides"][0])
+            self.assertEqual(
                 projection["slides"][0]["material_views"],
                 [{
                     "material_view_id": "S01-M01",
@@ -82,6 +87,8 @@ class ContentReviewProjectionTests(unittest.TestCase):
                 }],
             )
             self.assertNotIn("desired_customer_judgment", projection["slides"][0])
+            self.assertNotIn("desiredCustomerJudgment", projection["slides"][0])
+            self.assertNotIn("customer_judgment", projection["slides"][0])
             self.assertNotIn("framework", str(projection).lower())
 
             state = kernel.load()
@@ -382,6 +389,10 @@ class ContentReviewProjectionTests(unittest.TestCase):
             )
             self.assertEqual(
                 projected["review"]["review_type"], "content-full-deck"
+            )
+            self.assertEqual(
+                projected["review"]["slides"][0]["customerJudgment"],
+                "客户确认现状边界后，再判断是否进入联合方案验证。",
             )
             saved = dispatch_v16(
                 {

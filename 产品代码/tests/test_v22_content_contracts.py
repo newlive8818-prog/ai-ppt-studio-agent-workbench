@@ -133,6 +133,11 @@ def blueprint(mode: str = "material-backed") -> dict:
             "page_task": "说明当前已知断点和证据边界",
             "reading_question": "当前已知什么，仍需验证什么",
             "neutral_title": "当前流程断点与证据边界",
+            "customer_decision_item": {
+                "text": "客户确认现状边界后，再判断是否进入联合方案验证。",
+                "identity": "待联合验证",
+                "evidence_refs": [],
+            },
             "visible_copy_blocks": [{"block_id": "b1", "text": "材料记录了流程断点", "identity": "来源事实"}],
             "identity_labels": ["来源事实"] if mode != "proposal-led" else ["诊断假设", "方案建议", "待联合验证"],
             "evidence_bindings": [] if mode == "proposal-led" else [{"content_ref": "b1", "source_refs": [REF]}],
@@ -155,7 +160,16 @@ class V22ContentContractTests(unittest.TestCase):
         self.assertEqual(validate_presales_evidence_book(evidence_book())["material_mode"], "material-backed")
         self.assertEqual(validate_customer_decision_context(decision_context())["decision_stage"], "联合方案验证")
         self.assertEqual(validate_problem_solution_fit_map(fit_map())["mappings"][0]["mapping_id"], "mapping-1")
-        self.assertEqual(validate_reading_deck_blueprint(blueprint())["slides"][0]["neutral_title"], "当前流程断点与证据边界")
+        validated = validate_reading_deck_blueprint(blueprint())
+        self.assertEqual(validated["slides"][0]["neutral_title"], "当前流程断点与证据边界")
+        self.assertEqual(
+            validated["slides"][0]["customer_decision_item"],
+            {
+                "text": "客户确认现状边界后，再判断是否进入联合方案验证。",
+                "identity": "待联合验证",
+                "evidence_refs": [],
+            },
+        )
 
     def test_rejects_legacy_opinion_first_fields_anywhere(self) -> None:
         for payload, validator, key in (
@@ -182,6 +196,67 @@ class V22ContentContractTests(unittest.TestCase):
         del incomplete["mappings"][0]["evidence_refs"]
         with self.assertRaises(ContractValidationError):
             validate_problem_solution_fit_map(incomplete)
+
+    def test_customer_decision_item_is_closed_normalized_and_non_coercive(self) -> None:
+        for invalid_item in (None, [], "not-an-object"):
+            invalid = blueprint()
+            invalid["slides"][0]["customer_decision_item"] = invalid_item
+            with self.subTest(invalid_item=invalid_item), self.assertRaises(
+                ContractValidationError
+            ):
+                validate_reading_deck_blueprint(invalid)
+
+        for mutation in (
+            lambda item: item.pop("text"),
+            lambda item: item.__setitem__("unknown", "not closed"),
+            lambda item: item.__setitem__("text", ""),
+            lambda item: item.__setitem__("text", "  客户先核实现状  "),
+            lambda item: item.__setitem__("text", "客户必须选择唯一平台才能成功"),
+            lambda item: item.__setitem__("identity", "未知身份"),
+        ):
+            invalid = blueprint()
+            mutation(invalid["slides"][0]["customer_decision_item"])
+            with self.subTest(item=invalid["slides"][0]["customer_decision_item"]), self.assertRaises(
+                ContractValidationError
+            ):
+                validate_reading_deck_blueprint(invalid)
+
+    def test_factual_customer_decision_item_requires_evidence(self) -> None:
+        for identity in ("来源事实", "用户已确认"):
+            with self.subTest(identity=identity):
+                invalid = blueprint()
+                invalid["slides"][0]["customer_decision_item"].update(
+                    identity=identity,
+                    evidence_refs=[],
+                )
+                with self.assertRaises(ContractValidationError):
+                    validate_reading_deck_blueprint(invalid)
+
+                valid = blueprint()
+                valid["slides"][0]["customer_decision_item"].update(
+                    identity=identity,
+                    evidence_refs=[REF],
+                )
+                self.assertEqual(
+                    validate_reading_deck_blueprint(valid)["slides"][0][
+                        "customer_decision_item"
+                    ]["evidence_refs"],
+                    [REF],
+                )
+
+    def test_proposal_led_customer_decision_item_cannot_claim_customer_facts(self) -> None:
+        proposal = blueprint("proposal-led")
+        proposal["slides"][0]["customer_decision_item"].update(
+            identity="来源事实",
+            evidence_refs=[REF],
+        )
+        with self.assertRaises(ContractValidationError):
+            validate_reading_deck_blueprint(proposal)
+
+        proposal = blueprint("proposal-led")
+        proposal["slides"][0]["customer_decision_item"]["evidence_refs"] = [REF]
+        with self.assertRaises(ContractValidationError):
+            validate_reading_deck_blueprint(proposal)
 
     def test_proposal_led_is_complete_but_cannot_claim_customer_facts(self) -> None:
         proposal = validate_reading_deck_blueprint(blueprint("proposal-led"))

@@ -11,15 +11,12 @@ import type {
   ContentDecisionChoice,
   ContentPageDecision,
   ContentReviewProjection,
-  ContentReviewSlide,
   ContentReviewSurfaceData,
 } from "../types/content-review";
 import type { HostBridge } from "../types/host";
 import type { ContentReviewPageViewModel } from "./content-review-page-view-model";
 import { toContentReviewPageViewModel } from "./content-review-page-view-model";
 import { ContentReviewViewModelController } from "./ContentReviewViewModelController";
-
-type SlideWithCustomerJudgment = ContentReviewSlide & { customerJudgment?: string };
 
 beforeEach(() => {
   vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
@@ -43,6 +40,7 @@ function projection(count = 2): ContentReviewProjection {
       page_task: `确认第 ${order} 页的目标`,
       reading_question: `第 ${order} 页是否足以支持客户判断？`,
       neutral_title: `第 ${order} 页中性标题`,
+      customerJudgment: `客户形成第 ${order} 页的明确判断。`,
       visible_copy_blocks: [{
         block_id: `copy-${order}`,
         text: `第 ${order} 页页面实际文字。`,
@@ -66,13 +64,7 @@ function projection(count = 2): ContentReviewProjection {
         review_note: `后台质量记录 ${order}`,
       },
       material_mode: "mixed-evidence" as const,
-    } as SlideWithCustomerJudgment;
-    Object.defineProperty(slide, "customerJudgment", {
-      configurable: true,
-      enumerable: true,
-      value: `客户形成第 ${order} 页的明确判断。`,
-      writable: true,
-    });
+    };
     return slide;
   });
   return {

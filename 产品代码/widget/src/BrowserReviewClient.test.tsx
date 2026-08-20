@@ -59,6 +59,7 @@ function contentReviewProjection(materialAssetRef = "") {
       page_task: "建立问题共识",
       reading_question: "为何现在行动",
       neutral_title: "经营协同仍有断点",
+      customerJudgment: "客户确认现状边界后，再判断是否进入联合方案验证。",
       visible_copy_blocks: [],
       identity_labels: [],
       evidence_bindings: [],

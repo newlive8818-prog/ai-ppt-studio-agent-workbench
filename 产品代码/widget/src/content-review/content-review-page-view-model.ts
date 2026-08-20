@@ -79,10 +79,7 @@ export class ContentReviewPageViewModelAdapterError extends Error {
 }
 
 function customerJudgmentOf(slide: ContentReviewSlide, index: number): string {
-  const descriptor = Object.getOwnPropertyDescriptor(slide, "customerJudgment");
-  const value = descriptor && descriptor.enumerable && "value" in descriptor
-    ? descriptor.value
-    : undefined;
+  const value = slide.customerJudgment;
   if (typeof value !== "string" || !value || value !== value.trim()) {
     throw new ContentReviewPageViewModelAdapterError(
       slide.slide_id,
