@@ -1,4 +1,6 @@
-# 内容审核原型用户 UI 验收记录
+# 内容审核前端 UI 验收历史记录
+
+> 2026-08-19 用户进一步澄清：本记录绑定的 `08-content-full-deck-review-v7-inline-feedback.html` 就是已经验收的内容审核页前端，不是“仅原型”。当前有效口径见 [内容审核前端 UI 验收口径澄清记录](./2026-08-19-content-review-frontend-ui-acceptance-clarification.md)。
 
 ## 1. 验收身份
 
@@ -10,13 +12,14 @@
 - 对象文件 SHA-256：`18e680304a7218e86e0e553067123aa24f42b7d12da3e64fe3d94ca9989b7692`
 - 验收证据类型：当前 Codex 任务中的用户明确消息
 
-本记录保存用户对当前 08 HTML 原型的 UI 验收结论。它不把原型、本地文件或用户对原型的认可改写为生产 React、Runtime、MCP、Review Bridge 或真实宿主能力已经实现。
+本记录保存用户对当前 08 HTML 内容审核前端的 UI 验收结论。它不证明活动 React 路由、Runtime、MCP、Review Bridge 或真实宿主能力已经完成。
 
 ## 2. 状态结论
 
 ```yaml
-prototypeUiAcceptance: accepted
-productionReactUiAcceptance: pending
+contentReviewFrontendUiAcceptance: accepted
+acceptedFrontendArtifact: 产品代码/prototypes/08-content-full-deck-review-v7-inline-feedback.html
+activeProductionRouteIntegration: pending
 runtimeMcpAcceptance: not-in-scope
 realHostEvidence: false
 gateConfirmation: none
@@ -49,16 +52,16 @@ gateConfirmation: none
 
 ## 5. 验收边界
 
-本次通过只代表当前 HTML 原型已经满足用户确认的 UI 设计范围，不代表：
+本次通过代表当前 HTML 已作为内容审核页前端满足用户确认的 UI 设计范围，不代表：
 
-- 生产 React 页面已经按原型完成；
+- 当前活动 React 路由已经忠实接入该前端；
 - `ContentReviewPageViewModel` 或 adapter 已实现；
 - `customerJudgment` 已有权威 Runtime/MCP 投影字段；
 - 真实 ReviewSession 已打开、恢复或写入；
 - 宿主通知或 AI 接收回执已经取得；
 - G0、G3、G4 或任何产品 Gate 已确认。
 
-生产页面完成后必须使用新的实现提交、当前构建和当前页面重新取得用户 UI 验收；不能复用本记录把生产实现标记为通过。
+活动路由接入必须通过实现提交、当前构建和页面对照证明没有偏离已验收前端；出现偏差按工程缺陷处理，不另设第二个内容审核 UI 验收状态。
 
 ## 6. 下一阶段准入
 
@@ -68,6 +71,6 @@ gateConfirmation: none
 2. 从当前正式投影到 ViewModel 的纯 adapter；
 3. 生产 React 页面与 CSS 的原型合同迁移；
 4. DOM、交互、响应式和浏览器验证；
-5. 修正后的生产页面用户 UI 验收。
+5. 活动路由与已验收前端的浏览器保真对照。
 
 Runtime/MCP 投影收窄仍在生产 UI 验收后的独立阶段进行，不与前端实现混入同一提交。

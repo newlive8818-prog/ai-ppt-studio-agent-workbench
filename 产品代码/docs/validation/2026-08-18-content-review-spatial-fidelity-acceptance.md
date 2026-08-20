@@ -21,20 +21,21 @@ implementationStatus: implemented-and-locally-verified
 evidenceScope: local-development-preview
 proofEligible: false
 realHostEvidence: false
-userUiAcceptance: pending
-prototypeUiAcceptance: accepted-in-separate-record
+historicalReactCandidateAcceptance: rejected
+contentReviewFrontendUiAcceptance: accepted-in-later-clarification
+activeProductionRouteIntegration: pending
 ```
 
-这里的 `userUiAcceptance: pending` 专指首轮生产 React 实现页面。用户已于 2026-08-18 验收通过修正后的 08 HTML 原型，详见 [内容审核原型用户 UI 验收记录](./2026-08-18-content-review-prototype-ui-acceptance.md)；原型通过不自动改变本记录的生产实现验收状态。
+本记录只描述首轮 React 候选实现的历史工程证据，该候选页未获用户接受。用户已经验收修正后的 08 HTML 作为内容审核页前端，当前有效状态见 [内容审核前端 UI 验收口径澄清记录](./2026-08-19-content-review-frontend-ui-acceptance-clarification.md)。活动路由尚未忠实接入是工程迁移缺口，不形成第二个 UI 验收门。
 
 | 证据层 | 当前状态 | 可以证明 | 不能证明 |
 |---|---|---|---|
 | 单元、DOM、响应式源码合同 | 通过 | 结构顺序、语义标识、空间合同失败关闭、PageDecision 与既有业务回归 | 浏览器实际几何或用户视觉认可 |
 | 本地受控 Chromium | 通过 | 当前构建在指定视口的真实 bounding box、无横向溢出、首屏进入第一页正文 | 真实 Codex 宿主打开、宿主通知、AI 接收或用户验收 |
-| 用户 UI 验收 | 待验收 | 用户是否认可与 08 原型确认范围的还原程度 | Runtime 或 Review Bridge 真实性 |
+| 历史 React 候选 | 未接受 | 该候选实现不能覆盖已验收内容审核前端 | Runtime 或 Review Bridge 真实性 |
 | 真实宿主 / AI 回执 | 本轮未获取 | 本记录不作任何通过声明 | 真实 ReviewSession、宿主通知和 AI 回执 |
 
-只有用户在当前实现页面上明确接受，`userUiAcceptance` 才能从 `pending` 更新为 `accepted`。自动化、截图或本地 HTTP 页面不得替代该决定。
+自动化、截图或本地 HTTP 页面只能证明工程对照；它们不能改写已验收前端，也不能证明 Runtime、Review Bridge 或真实宿主能力。
 
 ## 3. 本轮空间合同
 
@@ -209,4 +210,4 @@ docs/validation/2026-08-18-content-review-spatial-fidelity-acceptance.md
 - 不把本地预览描述为真实宿主 ReviewSession；
 - 不把保存状态描述为宿主通知或 AI 已接收。
 
-2026-08-18 的后续用户确认只接受了修正后的 08 HTML 原型，不是对本记录所指首轮生产 React 页面的追认；因此本记录的 `userUiAcceptance` 仍为 `pending`。
+本记录所指首轮 React 候选实现仍未获接受。2026-08-19 用户进一步澄清，修正后的 08 HTML 本身就是已验收的内容审核页前端；因此当前状态应分别记录为 `contentReviewFrontendUiAcceptance = accepted` 与 `activeProductionRouteIntegration = pending`，不再使用“原型通过、生产 React 待再次验收”的双 UI 验收口径。

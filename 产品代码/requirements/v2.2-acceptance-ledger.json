@@ -243,6 +243,102 @@
     {
       "missing_evidence": [
         "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-011",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "内容审核页只显示用户确认的实际成稿、材料/页面画面和审核控件，不出现演讲备注、证据身份、来源入口、映射、跨页关系或阅读质量模块；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-012",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "后台内部字段通过前端 ViewModel 明确过滤，不能直接决定 React 模块；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-013",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "`contentReviewFrontendUiAcceptance = accepted` 必须绑定已验收前端文件、提交和哈希；活动路由接入不另设第二个 UI 验收门。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-014",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "每页显示“这一页的目标”和“希望客户形成的判断”，两项均有实际内容；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-015",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "左栏显示“页面实际文字”，右栏显示“文字与图片材料一起审核”；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-016",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "恢复上述四项不得带回演讲备注、证据身份/来源入口、映射、跨页关系、阅读质量或材料元数据目录。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
         "runtime-evidence",
         "target-evidence",
         "real-project"
@@ -826,6 +922,150 @@
         "automated-test",
         "runtime-evidence"
       ],
+      "requirement_id": "SDD-ACC-INTEGRATION-016",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "ContentReviewProjection 经过纯 adapter 只生成用户确认的 ContentReviewPageViewModel 字段；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-017",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "内容审核页 DOM 不出现演讲备注、证据身份/来源入口、映射、跨页关系或阅读质量模块。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-018",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "每页 DOM 同时存在“这一页的目标”“希望客户形成的判断”“页面实际文字”“文字与图片材料一起审核”，并有对应内容或画面；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-019",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "customerJudgment 缺少权威投影事实时显式失败，不从其他字段或模型推断。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-020",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "VisualReviewProjection 经过纯 adapter 只生成 `VisualReviewPageViewModel` 允许的可见字段，后台新增字段不自动增加页面模块；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-021",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "锚点空状态无项目徽标、常驻右侧辅助区或批次面板，第一条有效反馈后批次只在画布下方内联出现；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-022",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "完整合同只有一条顶栏，目录从左侧覆盖、标记从右侧覆盖，正文不出现可见技术账本；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-023",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "`core_claim`、`visible_copy`、`speaker_notes`、`source_refs` 按前端语义呈现，`page_task` 不得冒充 `core_claim`；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-024",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "文字范围标记只在同一可审核字段内真实选中文字后出现，字段评论入口与文字范围草稿均进入独立合同标记集合。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
       "requirement_id": "SDD-ACC-REGRESSION-001",
       "source_file": "02-系统详细设计-v1.0.md",
       "source_section": "回归测试",
@@ -975,6 +1215,70 @@
       "source_section": "回归测试",
       "status": "unproven",
       "text": "不把旧 framework/expansion 恢复为新前置门。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-REGRESSION-011",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "回归测试",
+      "status": "unproven",
+      "text": "实际成稿标题、段落、要点、材料/页面画面、四类 PageDecision 和页内意见完整保留；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-REGRESSION-012",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "回归测试",
+      "status": "unproven",
+      "text": "`contentReviewFrontendUiAcceptance = accepted` 绑定已验收前端文件、提交和哈希；活动路由接入必须用自动化和浏览器对照证明无偏差，但不另设第二个 UI 验收门。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-REGRESSION-013",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "回归测试",
+      "status": "unproven",
+      "text": "用户明确接受视觉合同生产前端前，`visualContractProductionUiAcceptance` 保持 `pending`。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-REGRESSION-014",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "回归测试",
+      "status": "unproven",
+      "text": "当前视觉生产前端的 `accepted` 必须绑定用户明确消息和前端对象提交，且不能把 Runtime、Review Bridge、MCP、真实宿主、AI 回执或 G3 自动标记为通过。"
     },
     {
       "missing_evidence": [
@@ -1262,7 +1566,7 @@
       "source_file": "03-UI设计与交互规范-v1.0.md",
       "source_section": "内容审核",
       "status": "unproven",
-      "text": "所有正文、证据、身份、备注和跨页关系存在；"
+      "text": "所有实际成稿标题、段落和要点完整存在，并与真实材料或页面画面处于同一审核上下文；"
     },
     {
       "missing_evidence": [
@@ -1280,7 +1584,7 @@
       "source_file": "03-UI设计与交互规范-v1.0.md",
       "source_section": "内容审核",
       "status": "unproven",
-      "text": "标题中立，不显示 desired judgment；"
+      "text": "页面标题保持中立；“希望客户形成的判断”作为独立审核上下文显示，不拼入标题，也不得表达无证结论；"
     },
     {
       "missing_evidence": [
@@ -1474,6 +1778,222 @@
         "runtime-evidence",
         "viewport-evidence"
       ],
+      "requirement_id": "UI-ACC-CONTENT-014",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "`1280 × 720 CSS px` 首屏看到第一章、第一页标题并进入第一页实际正文；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-015",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "项目头、审核进度和动作保持一个紧凑整体，不形成大型状态卡或仪表盘；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-016",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "章节定位在宽屏保持紧凑单行定位条，不扩展为多行卡片墙；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-017",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "deck intro 表达整套稿件阅读导语，不以解释审核页面自身的 hero 抢占首屏；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-018",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "selector/DOM 存在、浏览器几何、截图对照和用户 UI 验收分别记录，前三者不得自动把用户验收标记为通过。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-019",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "DOM 不出现“完整可见文字”字段卡、分析/建议、演讲备注、证据身份/来源入口、问题—方案映射、跨页关系或阅读质量模块；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-020",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "已删除信息不出现在折叠区、抽屉、tooltip、hover 或高级信息中；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-021",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "React 只消费前端专用 ViewModel；后台内部对象增加字段不会自动增加 UI；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-022",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "`contentReviewFrontendUiAcceptance = accepted` 绑定已验收前端文件、提交和哈希；活动路由接入不得另设第二个 UI 验收状态。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-023",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "每页同时显示“这一页的目标”“希望客户形成的判断”“页面实际文字”“文字与图片材料一起审核”；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-024",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "前两项显示真实内容，后两项分别标识实际成稿栏和材料/页面画面栏；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-025",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "恢复四项不带回其他已删除后台模块。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
       "requirement_id": "UI-ACC-VISUAL-001",
       "source_file": "03-UI设计与交互规范-v1.0.md",
       "source_section": "视觉与交付",
@@ -1641,6 +2161,150 @@
       "source_section": "视觉与交付",
       "status": "unproven",
       "text": "对话准确说明当前必需目标、deferred 边界、ChatDeliveryReceipt、G4 和项目经验复盘状态。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-011",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "锚点页无项目徽标和常驻右侧辅助区；空状态无批次面板，第一条有效反馈后才在画布下方显示内联批次；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-012",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "完整合同桌面端只有一条约 64px 顶栏，无第二条 sticky 操作栏和可见 G1/G2/revision 技术账本；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-013",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "目录从左侧覆盖并包含分组/定位编号，标记从右侧覆盖，两者不压缩正文；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-014",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "色彩系统显示真实色板，字体和密度等对象显示为可阅读文字；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-015",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "锚点证据显示 `slide_id / 锚点内容标题 / 验证目的`；逐页冻结内容显示 `核心主张 / 页面可见文案 / 讲解备注 / 来源引用`，且 `page_task` 不冒充 `core_claim`；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-016",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "字段标记入口为轻量评论图标，文字范围标记只在有效正文选择后上下文出现；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-017",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "React 只消费 `VisualReviewPageViewModel`；后台字段增加不自动增加 UI；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-VISUAL-018",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "视觉与交付",
+      "status": "unproven",
+      "text": "用户明确接受前，`visualContractProductionUiAcceptance` 保持 `pending`。"
     },
     {
       "missing_evidence": [
