@@ -28,7 +28,7 @@ export interface ContentReviewMaterialVisualViewModel {
 export interface ContentReviewLocalDraftStateViewModel {
   readonly decision: ContentDecisionChoice | "";
   readonly comment: string;
-  readonly dirty: false;
+  readonly dirty: boolean;
 }
 
 export interface ContentReviewSlideViewModel {
