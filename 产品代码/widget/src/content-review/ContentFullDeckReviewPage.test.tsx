@@ -5,8 +5,8 @@ import { ContentFullDeckReviewPage } from "./ContentFullDeckReviewPage";
 import type {
   ContentDecisionChoice,
   ContentPageDecision,
-  ContentReviewProjection,
-  ContentReviewSurfaceData,
+  LegacyContentReviewProjection,
+  LegacyContentReviewSurfaceData,
 } from "../types/content-review";
 import type { HostBridge } from "../types/host";
 import {
@@ -68,7 +68,7 @@ function installIntersectionObserver() {
   };
 }
 
-function projection(count = 2): ContentReviewProjection {
+function projection(count = 2): LegacyContentReviewProjection {
   return {
     project_id: "p1",
     review_type: "content-full-deck",
@@ -149,7 +149,7 @@ function projection(count = 2): ContentReviewProjection {
   };
 }
 
-function surface(count = 2): ContentReviewSurfaceData {
+function surface(count = 2): LegacyContentReviewSurfaceData {
   return {
     surface: "review",
     selectedProjectRoot: "/managed/project",
@@ -503,7 +503,7 @@ const batchResultAttacks: Array<[string, StrictResultAttack]> = [
   }],
 ];
 
-function seedContentDraft(data: ContentReviewSurfaceData, ui: ContentReviewDraftUi) {
+function seedContentDraft(data: LegacyContentReviewSurfaceData, ui: ContentReviewDraftUi) {
   const context = createReviewDraftContext(data);
   const key = reviewDraftStorageKey(context);
   window.sessionStorage.setItem(key, JSON.stringify(
@@ -1626,14 +1626,14 @@ describe("ContentFullDeckReviewPage", () => {
 
 describe("content review draft persistence", () => {
   it.each([
-    ["project", (data: ContentReviewSurfaceData) => { data.review.project_id = "p2"; }],
-    ["session", (data: ContentReviewSurfaceData) => {
+    ["project", (data: LegacyContentReviewSurfaceData) => { data.review.project_id = "p2"; }],
+    ["session", (data: LegacyContentReviewSurfaceData) => {
       data.review.review_session_id = "content-session-2";
       data.review.review_session.review_session_id = "content-session-2";
     }],
-    ["source version", (data: ContentReviewSurfaceData) => { data.review.source_version = "content-v2"; }],
-    ["source revision", (data: ContentReviewSurfaceData) => { data.review.revision = 8; }],
-    ["reading blueprint lineage", (data: ContentReviewSurfaceData) => {
+    ["source version", (data: LegacyContentReviewSurfaceData) => { data.review.source_version = "content-v2"; }],
+    ["source revision", (data: LegacyContentReviewSurfaceData) => { data.review.revision = 8; }],
+    ["reading blueprint lineage", (data: LegacyContentReviewSurfaceData) => {
       data.review.reading_blueprint_ref = `artifact://reading-deck-blueprint/${"9".repeat(64)}`;
     }],
   ])("does not restore a draft from a different %s", (_label, mutateIdentity) => {

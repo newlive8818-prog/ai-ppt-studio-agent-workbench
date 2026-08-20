@@ -4,8 +4,8 @@ import type { HostBridge } from "../types/host";
 import type {
   ContentDecisionChoice,
   ContentPageDecision,
-  ContentReviewSlide,
-  ContentReviewSurfaceData,
+  LegacyContentReviewSlide,
+  LegacyContentReviewSurfaceData,
 } from "../types/content-review";
 import { ContentMaterialView } from "./ContentMaterialView";
 import { contentDecisionChoices, PageDecisionControl } from "./PageDecisionControl";
@@ -23,7 +23,7 @@ import "../styles/content-review.css";
 import "../styles/evidence.css";
 
 interface Props {
-  initialData: ContentReviewSurfaceData;
+  initialData: LegacyContentReviewSurfaceData;
   bridge: HostBridge;
 }
 
@@ -40,7 +40,7 @@ interface ContentReviewChapter {
   sectionId: string;
   title: string;
   task: string;
-  slides: ContentReviewSlide[];
+  slides: LegacyContentReviewSlide[];
 }
 
 interface ValidatedContentReviewBatch {
@@ -109,8 +109,8 @@ function scrollToContentLogicalPosition(
 
 function validatedDecision(
   value: unknown,
-  review: ContentReviewSurfaceData["review"],
-  slide: ContentReviewSlide,
+  review: LegacyContentReviewSurfaceData["review"],
+  slide: LegacyContentReviewSlide,
 ): ContentPageDecision | null {
   const cloned = clonePlainData(value);
   if (!hasExactDataFields(cloned, pageDecisionFields)) return null;
@@ -159,7 +159,7 @@ function validatedDecision(
 
 function validatedBatch(
   value: unknown,
-  review: ContentReviewSurfaceData["review"],
+  review: LegacyContentReviewSurfaceData["review"],
 ): ValidatedContentReviewBatch | null {
   const cloned = clonePlainData(value);
   if (!hasExactDataFields(cloned, batchFields)) return null;
@@ -221,7 +221,7 @@ function validatedBatch(
 }
 
 function validatedInitialDecisions(
-  review: ContentReviewSurfaceData["review"],
+  review: LegacyContentReviewSurfaceData["review"],
 ): ContentPageDecision[] | null {
   const cloned = clonePlainData(review.decisions);
   if (!Array.isArray(cloned)) return null;
@@ -244,7 +244,7 @@ function validatedInitialDecisions(
 
 function contentReviewChapters(
   sectionFlow: string[],
-  slides: ContentReviewSlide[],
+  slides: LegacyContentReviewSlide[],
 ): ContentReviewChapter[] {
   const chapters: ContentReviewChapter[] = [];
   for (const slide of slides) {
@@ -264,7 +264,7 @@ function contentReviewChapters(
 }
 
 function initialDrafts(
-  data: ContentReviewSurfaceData,
+  data: LegacyContentReviewSurfaceData,
   validatedDecisions: ContentPageDecision[],
   restoredDrafts: ContentReviewDraftUi["page_drafts"],
 ): Record<string, Draft> {
@@ -286,7 +286,7 @@ function initialDrafts(
 
 function reconcileAuthoritativeDrafts(
   current: Record<string, Draft>,
-  slides: ContentReviewSlide[],
+  slides: LegacyContentReviewSlide[],
   decisions: ContentPageDecision[],
 ): Record<string, Draft> {
   const authoritative = new Map(decisions.map((decision) => [decision.slide_id, decision]));
@@ -343,7 +343,7 @@ export function ContentFullDeckReviewPage({ initialData, bridge }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [activeSaveSlideId, setActiveSaveSlideId] = useState<string | null>(null);
   const [pageMessage, setPageMessage] = useState("");
-  const [evidenceSlide, setEvidenceSlide] = useState<ContentReviewSlide | null>(null);
+  const [evidenceSlide, setEvidenceSlide] = useState<LegacyContentReviewSlide | null>(null);
   const mountedRef = useRef(true);
   const generationRef = useRef(0);
   const restoredLogicalPositionRef = useRef(false);
@@ -458,7 +458,7 @@ export function ContentFullDeckReviewPage({ initialData, bridge }: Props) {
     }));
   };
 
-  const saveDecision = async (slide: ContentReviewSlide): Promise<boolean> => {
+  const saveDecision = async (slide: LegacyContentReviewSlide): Promise<boolean> => {
     if (projectionInvalid || mutationRef.current || submittedBatch) return false;
     const draft = drafts[slide.slide_id];
     if (!draft.decision || (draft.decision !== "approved" && !draft.comment.trim())) return false;

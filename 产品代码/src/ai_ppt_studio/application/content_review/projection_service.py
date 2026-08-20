@@ -23,10 +23,33 @@ class ContentReviewProjectionService:
         context = review_context(self.kernel, review_session_id)
         slides = []
         for source_slide in context.blueprint["slides"]:
-            projected_slide = copy.deepcopy(source_slide)
-            customer_decision_item = projected_slide.pop("customer_decision_item")
-            projected_slide["customerJudgment"] = customer_decision_item["text"]
-            slides.append(projected_slide)
+            slides.append(
+                {
+                    "slide_id": source_slide["slide_id"],
+                    "order": source_slide["order"],
+                    "section_id": source_slide["section_id"],
+                    "page_task": source_slide["page_task"],
+                    "reading_question": source_slide["reading_question"],
+                    "neutral_title": source_slide["neutral_title"],
+                    "customerJudgment": source_slide["customer_decision_item"][
+                        "text"
+                    ],
+                    "visible_copy_blocks": [
+                        {
+                            "block_id": block["block_id"],
+                            "text": block["text"],
+                        }
+                        for block in source_slide["visible_copy_blocks"]
+                    ],
+                    "material_views": [
+                        {
+                            "material_view_id": material["material_view_id"],
+                            "asset_ref": material["asset_ref"],
+                        }
+                        for material in source_slide["material_views"]
+                    ],
+                }
+            )
         decisions = self._decisions(context.blueprint_ref)
         completed = len(decisions)
         total = len(slides)

@@ -27,6 +27,47 @@ from ai_ppt_studio.kernel.transactions import ProjectKernel
 from tests.test_v22_content_repair_loop import build_content
 
 
+CONTENT_REVIEW_SLIDE_FIELDS = {
+    "slide_id",
+    "order",
+    "section_id",
+    "page_task",
+    "reading_question",
+    "neutral_title",
+    "customerJudgment",
+    "visible_copy_blocks",
+    "material_views",
+}
+CONTENT_REVIEW_BLOCK_FIELDS = {"block_id", "text"}
+CONTENT_REVIEW_MATERIAL_FIELDS = {"material_view_id", "asset_ref"}
+CONTENT_REVIEW_FORBIDDEN_FIELDS = {
+    "identity",
+    "identity_labels",
+    "evidence_bindings",
+    "analysis_or_proposal_blocks",
+    "solution_mapping_refs",
+    "previous_relation",
+    "next_relation",
+    "speaker_notes",
+    "reading_quality",
+    "source_ref",
+    "source_file_name",
+    "page_number",
+    "region_label",
+    "purpose",
+    "treatment",
+    "evidence_identity",
+}
+
+
+def nested_keys(value) -> set[str]:
+    if isinstance(value, list):
+        return set().union(*(nested_keys(item) for item in value), set())
+    if not isinstance(value, dict):
+        return set()
+    return set(value) | set().union(*(nested_keys(item) for item in value.values()), set())
+
+
 def accepted_review(kernel: ProjectKernel, slide_count: int = 1):
     blueprint_ref = build_content(kernel, slide_count=slide_count)
     gates = ContentHardGateService(kernel)
@@ -71,20 +112,49 @@ class ContentReviewProjectionTests(unittest.TestCase):
                 projection["slides"][0]["customerJudgment"],
                 "客户确认现状边界后，再判断是否进入联合方案验证。",
             )
+            self.assertEqual(
+                set(projection["slides"][0]), CONTENT_REVIEW_SLIDE_FIELDS
+            )
+            self.assertEqual(
+                set(projection["slides"][0]["visible_copy_blocks"][0]),
+                CONTENT_REVIEW_BLOCK_FIELDS,
+            )
             self.assertNotIn("customer_decision_item", projection["slides"][0])
             self.assertEqual(
                 projection["slides"][0]["material_views"],
                 [{
                     "material_view_id": "S01-M01",
-                    "source_ref": "artifact://material-finding/" + "a" * 64,
                     "asset_ref": "review-assets/content/S01-M01.png",
-                    "source_file_name": "客户现状材料.pptx",
-                    "page_number": 3,
-                    "region_label": "整页",
-                    "purpose": "证明当前流程断点",
-                    "treatment": "原页只读呈现",
-                    "evidence_identity": "来源事实",
                 }],
+            )
+            self.assertEqual(
+                set(projection["slides"][0]["material_views"][0]),
+                CONTENT_REVIEW_MATERIAL_FIELDS,
+            )
+            self.assertTrue(
+                CONTENT_REVIEW_FORBIDDEN_FIELDS.isdisjoint(nested_keys(projection))
+            )
+
+            internal_blueprint = kernel.artifacts.resolve(
+                ArtifactReference.parse(blueprint_ref)
+            )["payload"]
+            self.assertTrue(
+                {
+                    "identity_labels",
+                    "evidence_bindings",
+                    "analysis_or_proposal_blocks",
+                    "speaker_notes",
+                    "reading_quality",
+                }.issubset(internal_blueprint["slides"][0])
+            )
+            self.assertTrue(
+                {
+                    "source_ref",
+                    "source_file_name",
+                    "page_number",
+                    "purpose",
+                    "evidence_identity",
+                }.issubset(internal_blueprint["slides"][0]["material_views"][0])
             )
             self.assertNotIn("desired_customer_judgment", projection["slides"][0])
             self.assertNotIn("desiredCustomerJudgment", projection["slides"][0])

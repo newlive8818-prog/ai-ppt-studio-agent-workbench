@@ -134,22 +134,8 @@ function contentSlide(slideId: string, order: number, sectionId: string) {
     visible_copy_blocks: [{
       block_id: `copy-${order}`,
       text: `第 ${order} 页页面实际文字。`,
-      identity: "后台身份字段",
     }],
-    identity_labels: ["方案建议"],
-    evidence_bindings: [],
     material_views: [],
-    analysis_or_proposal_blocks: [],
-    solution_mapping_refs: [],
-    previous_relation: "",
-    next_relation: "",
-    speaker_notes: "",
-    reading_quality: {
-      independently_readable: true,
-      information_density: "medium",
-      review_note: "",
-    },
-    material_mode: "proposal-led" as const,
   };
 }
 
@@ -283,6 +269,62 @@ describe("on-demand professional-review routing", () => {
     expect(
       screen.queryByRole("navigation", { name: "五空间导航" }),
     ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    "identity_labels",
+    "evidence_bindings",
+    "analysis_or_proposal_blocks",
+    "solution_mapping_refs",
+    "previous_relation",
+    "next_relation",
+    "speaker_notes",
+    "reading_quality",
+    "material_mode",
+  ])("rejects content projection slide governance field %s", (field) => {
+    const content = contentReviewSurface();
+    (content.review.slides[0] as unknown as Record<string, unknown>)[field] =
+      field === "previous_relation" || field === "next_relation" || field === "speaker_notes"
+        ? "internal"
+        : [];
+
+    render(<ReviewSurfaceRouter data={content} bridge={bridge} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/审核数据无效.*重新打开/);
+  });
+
+  it("rejects content projection block identity metadata", () => {
+    const content = contentReviewSurface();
+    (content.review.slides[0].visible_copy_blocks[0] as Record<string, unknown>).identity =
+      "来源事实";
+
+    render(<ReviewSurfaceRouter data={content} bridge={bridge} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/审核数据无效.*重新打开/);
+  });
+
+  it.each([
+    "source_ref",
+    "source_file_name",
+    "page_number",
+    "region_label",
+    "purpose",
+    "treatment",
+    "evidence_identity",
+  ])("rejects content projection material metadata field %s", (field) => {
+    const content = contentReviewSurface();
+    const slide = content.review.slides[0] as unknown as {
+      material_views: Array<Record<string, unknown>>;
+    };
+    slide.material_views = [{
+      material_view_id: "S01-M01",
+      asset_ref: "review-assets/content/S01-M01.png",
+    }];
+    slide.material_views[0][field] = field === "page_number" ? 1 : "internal";
+
+    render(<ReviewSurfaceRouter data={content} bridge={bridge} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/审核数据无效.*重新打开/);
   });
 
   it("routes visual-professional to the confirmed dual-view surface", () => {

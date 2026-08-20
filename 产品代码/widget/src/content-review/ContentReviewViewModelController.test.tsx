@@ -44,26 +44,8 @@ function projection(count = 2): ContentReviewProjection {
       visible_copy_blocks: [{
         block_id: `copy-${order}`,
         text: `第 ${order} 页页面实际文字。`,
-        identity: "后台身份字段",
       }],
-      identity_labels: ["后台身份标签"],
-      evidence_bindings: [{ hidden: `后台证据 ${order}` }],
       material_views: [],
-      analysis_or_proposal_blocks: [{
-        block_id: `analysis-${order}`,
-        text: `后台分析 ${order}`,
-        identity: "方案建议",
-      }],
-      solution_mapping_refs: [`后台映射 ${order}`],
-      previous_relation: "后台前序关系",
-      next_relation: "后台后序关系",
-      speaker_notes: `后台演讲备注 ${order}`,
-      reading_quality: {
-        independently_readable: true,
-        information_density: "moderate",
-        review_note: `后台质量记录 ${order}`,
-      },
-      material_mode: "mixed-evidence" as const,
     };
     return slide;
   });

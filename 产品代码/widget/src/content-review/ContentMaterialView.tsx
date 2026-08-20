@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 
 import { ProjectAssetImage } from "../components/ProjectAssetImage";
-import type { ContentReviewSlide } from "../types/content-review";
+import type { LegacyContentReviewSlide } from "../types/content-review";
 import type { HostBridge } from "../types/host";
 
 interface Props {
   bridge: HostBridge;
   projectRoot: string;
-  slide: ContentReviewSlide;
+  slide: LegacyContentReviewSlide;
   readsDisabled?: boolean;
 }
 

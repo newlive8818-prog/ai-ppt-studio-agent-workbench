@@ -20,7 +20,14 @@ const review = {
   revision: 7,
   slides: [{
     slide_id: "S01",
+    order: 1,
+    section_id: "problem",
+    page_task: "确认现状边界",
+    reading_question: "现有材料能否支持当前判断？",
+    neutral_title: "当前流程断点与证据边界",
     customerJudgment: "客户确认现状边界后，再判断是否进入联合方案验证。",
+    visible_copy_blocks: [{ block_id: "copy-1", text: "当前流程存在待核实断点。" }],
+    material_views: [{ material_view_id: "S01-M01", asset_ref: "review-assets/content/S01-M01.png" }],
   }],
   sections: [],
   outline: [],
@@ -235,6 +242,25 @@ test("Review Bridge reads the fixed projection with Bearer and security headers"
     assert.equal(
       payload.review.slides[0].customerJudgment,
       "客户确认现状边界后，再判断是否进入联合方案验证。",
+    );
+    assert.deepEqual(Object.keys(payload.review.slides[0]), [
+      "slide_id",
+      "order",
+      "section_id",
+      "page_task",
+      "reading_question",
+      "neutral_title",
+      "customerJudgment",
+      "visible_copy_blocks",
+      "material_views",
+    ]);
+    assert.deepEqual(
+      Object.keys(payload.review.slides[0].visible_copy_blocks[0]),
+      ["block_id", "text"],
+    );
+    assert.deepEqual(
+      Object.keys(payload.review.slides[0].material_views[0]),
+      ["material_view_id", "asset_ref"],
     );
     assert.equal(calls.at(-1).operation, "get-content-review-projection");
     assert.equal(calls.at(-1).review_session_id, "content-session-1");

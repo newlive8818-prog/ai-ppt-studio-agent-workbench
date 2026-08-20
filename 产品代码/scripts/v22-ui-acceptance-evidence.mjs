@@ -15,25 +15,22 @@ function freezeRequirements(requirements) {
 
 export const PROTOTYPE_FIDELITY_REQUIREMENTS = Object.freeze({
   "content-review": freezeRequirements([
-    { key: "head", selector: ".content-review-head", exact: 1, min: 1 },
-    { key: "progress", selector: ".content-review-progress", exact: 1, min: 1 },
-    { key: "chapterNav", selector: ".content-review-chapter-nav", exact: 1, min: 1 },
-    { key: "deckIntro", selector: ".content-review-deck-intro", exact: 1, min: 1 },
-    { key: "chapters", selector: "[data-content-chapter]", min: 1 },
-    { key: "slides", selector: "[data-content-slide]", min: 1 },
-    { key: "reviewSummary", selector: ".content-review-summary", exact: 1, min: 1 },
+    { key: "head", selector: ".content-review-vm-header", exact: 1, min: 1 },
+    { key: "progress", selector: ".content-review-vm-progress", exact: 1, min: 1 },
+    { key: "chapterNav", selector: ".content-review-vm-chapter-nav", exact: 1, min: 1 },
+    { key: "deckIntro", selector: ".content-review-vm-deck-intro", exact: 1, min: 1 },
+    { key: "chapters", selector: ".content-review-vm-chapter", min: 1 },
+    { key: "slides", selector: "[data-content-review-vm-slide]", min: 1 },
+    { key: "reviewSummary", selector: ".content-review-vm-summary", exact: 1, min: 1 },
   ]),
   "visual-anchor": freezeRequirements([
     { key: "topbar", selector: ".visual-review-topbar", exact: 1, min: 1 },
     { key: "projectIdentity", selector: ".visual-professional-project-identity", exact: 1, min: 1 },
     { key: "aiMark", selector: ".visual-professional-ai-mark", exact: 1, min: 1 },
     { key: "viewSwitch", selector: ".visual-professional-review-view-switch", exact: 1, min: 1 },
-    { key: "compactStatus", selector: ".visual-professional-compact-status", exact: 1, min: 1 },
     { key: "workbench", selector: ".anchor-review-layout", exact: 1, min: 1 },
     { key: "main", selector: ".anchor-review-main", exact: 1, min: 1 },
-    { key: "assistant", selector: ".anchor-review-assistant", exact: 1, min: 1 },
     { key: "feedbackComposer", selector: ".anchor-feedback-composer", exact: 1, min: 1 },
-    { key: "statusRecord", selector: ".anchor-review-assistant .anchor-batch-panel", exact: 1, min: 1 },
   ]),
   "visual-contract": freezeRequirements([
     { key: "titlePage", selector: ".visual-contract-title-page", exact: 1, min: 1 },

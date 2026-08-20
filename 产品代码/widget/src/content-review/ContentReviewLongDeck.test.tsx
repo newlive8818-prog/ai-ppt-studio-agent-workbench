@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { ContentFullDeckReviewPage } from "./ContentFullDeckReviewPage";
 import type { HostBridge } from "../types/host";
-import type { ContentReviewSurfaceData } from "../types/content-review";
+import type { LegacyContentReviewSurfaceData } from "../types/content-review";
 
 afterEach(cleanup);
 
@@ -34,7 +34,7 @@ it("keeps all 60 slides in the continuous document", () => {
       progress: { completed: 0, total: 60, remaining: 60, unsaved: 0 }, batch: null,
       revision_plan: null, content_acceptance_ref: "artifact://content-acceptance/" + "b".repeat(64),
     },
-  } as ContentReviewSurfaceData;
+  } as LegacyContentReviewSurfaceData;
   const bridge = {
     callTool: vi.fn(), connect: vi.fn(), updateModelContext: vi.fn(), sendFollowUp: vi.fn(),
     confirmMission: vi.fn(), getHostEnvironment: vi.fn(), notifySize: vi.fn(),

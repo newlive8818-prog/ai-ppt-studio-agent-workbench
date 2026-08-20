@@ -36,14 +36,9 @@ const visualFields = [
 ] as const;
 const contentSlideFields = [
   "slide_id", "order", "section_id", "page_task", "reading_question", "neutral_title",
-  "customerJudgment", "visible_copy_blocks", "identity_labels", "evidence_bindings", "material_views",
-  "analysis_or_proposal_blocks", "solution_mapping_refs", "previous_relation", "next_relation",
-  "speaker_notes", "reading_quality", "material_mode",
+  "customerJudgment", "visible_copy_blocks", "material_views",
 ] as const;
-const materialViewFields = [
-  "material_view_id", "source_ref", "asset_ref", "source_file_name", "page_number", "region_label",
-  "purpose", "treatment", "evidence_identity",
-] as const;
+const materialViewFields = ["material_view_id", "asset_ref"] as const;
 const decisionFields = [
   "page_decision_id", "project_id", "review_session_id", "source_version", "reading_blueprint_ref",
   "slide_id", "slide_order", "slide_title_snapshot", "decision", "comment", "status", "saved_at",
@@ -239,31 +234,17 @@ function validateContentSlide(value: unknown): boolean {
     !isText(value.slide_id) || !isRevision(value.order) || value.order < 1
     || !isText(value.section_id) || !isText(value.page_task) || !isText(value.reading_question)
     || !isText(value.neutral_title) || !isText(value.customerJudgment)
-    || !isStringArray(value.identity_labels)
-    || !isStringArray(value.solution_mapping_refs, false)
-    || !isText(value.previous_relation, true) || !isText(value.next_relation, true)
-    || !isText(value.speaker_notes, true)
-    || !["material-backed", "mixed-evidence", "proposal-led"].includes(String(value.material_mode))
     || !Array.isArray(value.visible_copy_blocks)
-    || !Array.isArray(value.analysis_or_proposal_blocks)
-    || !Array.isArray(value.evidence_bindings)
     || !Array.isArray(value.material_views)
   ) return false;
-  for (const block of [...value.visible_copy_blocks, ...value.analysis_or_proposal_blocks]) {
-    if (!hasExactDataFields(block, ["block_id", "text", "identity"]) || !isText(block.block_id) || !isText(block.text) || !isText(block.identity)) return false;
+  for (const block of value.visible_copy_blocks) {
+    if (!hasExactDataFields(block, ["block_id", "text"]) || !isText(block.block_id) || !isText(block.text)) return false;
   }
-  for (const binding of value.evidence_bindings) if (!isPlainRecord(binding)) return false;
   for (const material of value.material_views) {
     if (!hasExactDataFields(material, materialViewFields)
-      || !isText(material.material_view_id) || !isText(material.source_ref) || !isText(material.asset_ref)
-      || !isText(material.source_file_name) || !isRevision(material.page_number) || material.page_number < 1
-      || !isText(material.region_label) || !isText(material.purpose) || !isText(material.treatment)
-      || !isText(material.evidence_identity)) return false;
+      || !isText(material.material_view_id) || !isText(material.asset_ref)) return false;
   }
-  return hasExactDataFields(value.reading_quality, ["independently_readable", "information_density", "review_note"])
-    && typeof value.reading_quality.independently_readable === "boolean"
-    && isText(value.reading_quality.information_density)
-    && isText(value.reading_quality.review_note, true);
+  return true;
 }
 
 function validateContentDecision(value: unknown, review: PlainRecord): boolean {

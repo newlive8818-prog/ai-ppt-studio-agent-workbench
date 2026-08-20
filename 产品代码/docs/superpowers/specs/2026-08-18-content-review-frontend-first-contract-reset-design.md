@@ -6,9 +6,10 @@
 - 决策状态：`用户已确认方案 B`
 - 验收修正：`用户在 08 原型复核中确认必须恢复四个前端标题及对应内容；本修正不恢复其他后台模块`
 - 内容审核前端 UI 验收：`accepted；绑定提交 2607bed 与 08 HTML 哈希 18e680304a7218e86e0e553067123aa24f42b7d12da3e64fe3d94ca9989b7692`
-- 活动生产路由接入：`pending；属于工程迁移，不形成第二个 UI 验收门`
+- 活动生产路由接入：`implemented-local；提交 78866ec；属于工程实现，不形成第二个 UI 验收门`
+- 内容审核外部投影收窄：`implemented-local；按 ContentReviewPageViewModel 真实消费字段形成关闭式 Runtime/MCP 投影`
 - 验收记录：[内容审核前端 UI 验收口径澄清记录](../../validation/2026-08-19-content-review-frontend-ui-acceptance-clarification.md)
-- 当前阶段：`只冻结前端合同；尚未授权本文件直接修改 Runtime、MCP 或持久化合同`
+- 当前阶段：`前端合同冻结、ViewModel/adapter、活动路由接入和独立外部投影收窄均已完成本地工程实现；真实客户 ReviewSession、写入恢复、宿主/AI 回执和 Gate 仍待独立验证`
 - 适用表面：内容全稿审核页
 - 参考原型：`产品代码/prototypes/08-content-full-deck-review-v7-inline-feedback.html`
 - 实现分支：`codex/review-surface-v22`
@@ -140,7 +141,7 @@ ContentReviewPageViewModel
 
 ### 5.2 过渡 adapter
 
-当前阶段保留现有 `ContentReviewProjection` 输入和校验边界，在 Widget 内新增纯函数 adapter：
+当前实现保留纯函数 adapter，但其输入已经是按前端真实消费字段收窄的正式 `ContentReviewProjection`：
 
 ```text
 ContentReviewProjection
@@ -169,7 +170,7 @@ adapter 的规则：
 
 ## 6. 后端字段反向拆解
 
-后端收窄必须在前端 UI 通过用户验收后作为独立阶段进行：
+后端收窄已经在前端 UI 通过用户验收、ViewModel/adapter 与活动路由接入完成后，以独立计划和提交边界实施；其持续约束为：
 
 1. 以前端 `ContentReviewPageViewModel` 的真实消费字段为依据；
 2. 区分内部 `ReadingDeckBlueprint` 与外部内容审核页投影；
@@ -192,7 +193,7 @@ adapter 的规则：
 
 ## 8. 实施边界
 
-### 8.1 当前合同冻结阶段
+### 8.1 已完成的合同冻结阶段
 
 允许修改：
 
@@ -209,15 +210,18 @@ adapter 的规则：
 - 视觉专业审核页；
 - PPT 运行数据。
 
-### 8.2 下一实施阶段
+### 8.2 已完成的工程接入与投影收窄阶段
 
-已验收前端进入正式工程接入阶段，用独立实现计划约束：
+已验收前端已经按独立实现计划进入正式工程接入，并在再后续独立切片收窄外部投影：
 
 - 前端 ViewModel 与 adapter；
 - 当前活动内容审核组件和 CSS 对已验收前端的忠实接入；
 - 前端校验边界；
 - DOM、交互、响应式和浏览器验收；
-- 一个可独立 `git revert` 的实现提交。
+- 一个可独立 `git revert` 的活动路由实现提交；
+- Runtime 显式构造关闭式内容审核 slide，Review Bridge/MCP 原样传递；
+- 正式 TypeScript 类型和 validator 只接受窄投影，旧完整字段页使用显式 legacy 类型；
+- 内部 `ReadingDeckBlueprint` 与持久化业务合同不因前端删除字段而删除治理数据。
 
 ## 9. 测试与验收合同
 
@@ -238,10 +242,10 @@ adapter 的规则：
 - 单元测试：只证明 ViewModel、adapter 和交互行为；
 - 浏览器几何与截图：只证明当前本地页面结构和空间；
 - 已验收前端对照：决定活动路由是否出现偏差；偏差按缺陷处理，不重开第二个 UI 验收门；
-- Runtime/MCP 验收：留在后续投影收窄阶段；
+- Runtime/MCP 契约测试：只证明本地窄投影、原样传递和关闭式校验，不证明真实客户宿主链路；
 - 真实宿主与 AI 回执：继续保持 `待验证`。
 
-`contentReviewFrontendUiAcceptance = accepted` 已绑定文件、提交和哈希；Runtime/MCP、真实宿主与 AI 回执继续使用独立状态。
+`contentReviewFrontendUiAcceptance = accepted` 已绑定文件、提交和哈希；活动路由和投影收窄使用独立本地工程状态，真实宿主与 AI 回执继续使用独立待验证状态。
 
 ## 10. 版本与回退
 

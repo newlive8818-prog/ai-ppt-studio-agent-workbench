@@ -81,8 +81,7 @@ function longProjectionHtml(sourceHtml, reviewType, count) {
         slide_id: `S${String(index + 1).padStart(3, "0")}`,
         order: index + 1,
         neutral_title: `第 ${index + 1} 页完整内容验收`,
-        visible_copy_blocks: [{ block_id: `copy-${index + 1}`, identity: "方案建议", text: `第 ${index + 1} 页完整正文` }],
-        speaker_notes: `第 ${index + 1} 页完整演讲备注`,
+        visible_copy_blocks: [{ block_id: `copy-${index + 1}`, text: `第 ${index + 1} 页完整正文` }],
       }));
       data.review.decisions = [];
       data.review.progress = { completed: 0, total: count, remaining: count, unsaved: 0 };
@@ -284,7 +283,7 @@ async function assertVisualContractTextReadable(page, identity) {
 
 async function revealDeferredContentForScreenshot(page) {
   await page.addStyleTag({
-    content: ".content-review-slide,.visual-slide-contract{content-visibility:visible!important}",
+    content: ".content-review-vm-slide,.visual-slide-contract{content-visibility:visible!important}",
   });
   await settleLayout(page);
 }
@@ -293,7 +292,7 @@ async function checkReview(reviewType, width, height = 900) {
   const identity = height === 900 ? `${reviewType}-review@${width}` : `${reviewType}-review@${width}x${height}`;
   const { context, page, consoleErrors } = await openPage(`ai-ppt-${reviewType}-review-preview.html`, width, height);
   try {
-    await page.waitForSelector(reviewType === "content" ? ".content-review-page" : ".visual-professional-page");
+    await page.waitForSelector(reviewType === "content" ? ".content-review-vm-page" : ".visual-professional-page");
     const layout = await metrics(page);
     assertNoOverflow(layout, identity);
     let objectCount;
@@ -316,12 +315,12 @@ async function checkReview(reviewType, width, height = 900) {
           };
           return {
             viewport: { width: window.innerWidth, height: window.innerHeight },
-            header: readRect("[data-content-review-header]"),
-            chapterNav: readRect("[data-content-review-chapter-nav]"),
-            deckIntro: readRect("[data-content-review-deck-intro]"),
-            firstChapterHeading: readRect("[data-content-chapter] .content-review-chapter-heading"),
-            firstSlideHeading: readRect("[data-content-slide] .content-slide-heading"),
-            firstReadingGrid: readRect("[data-content-review-first-reading-grid]"),
+            header: readRect(".content-review-vm-header-main"),
+            chapterNav: readRect(".content-review-vm-chapter-nav"),
+            deckIntro: readRect(".content-review-vm-deck-intro"),
+            firstChapterHeading: readRect(".content-review-vm-chapter .content-review-vm-chapter-heading"),
+            firstSlideHeading: readRect("[data-content-review-vm-slide] .content-review-vm-slide-heading"),
+            firstReadingGrid: readRect("[data-content-review-vm-slide] .content-review-vm-reading-grid"),
             scrollWidth: document.documentElement.scrollWidth,
             clientWidth: document.documentElement.clientWidth,
           };
@@ -330,17 +329,17 @@ async function checkReview(reviewType, width, height = 900) {
         firstViewportScreenshot = previewPath(`${identity}-first-viewport.png`);
         await page.screenshot({ path: firstViewportScreenshot, fullPage: false });
       }
-      objectCount = await page.locator("[data-content-slide]").count();
+      objectCount = await page.locator("[data-content-review-vm-slide]").count();
       assert(objectCount === 3, `${identity}: expected 3 content pages, received ${objectCount}`);
-      const materialCards = page.locator(".content-material-card");
+      const materialCards = page.locator(".content-review-vm-image-slot");
       assert(await materialCards.count() >= objectCount, `${identity}: every content page needs a material image`);
       for (let index = 0; index < await materialCards.count(); index += 1) {
         const card = materialCards.nth(index);
         await card.scrollIntoViewIfNeeded();
-        await card.locator("img.content-material-image").waitFor();
+        await card.locator("img.content-review-vm-image").waitFor();
       }
-      await assertLoadedImages(page.locator("img.content-material-image"), `${identity} material`);
-      const materialSources = await page.locator("img.content-material-image").evaluateAll(
+      await assertLoadedImages(page.locator("img.content-review-vm-image"), `${identity} material`);
+      const materialSources = await page.locator("img.content-review-vm-image").evaluateAll(
         (images) => images.map((image) => image.currentSrc || image.src),
       );
       materialSourceCount = new Set(materialSources).size;
@@ -349,7 +348,7 @@ async function checkReview(reviewType, width, height = 900) {
         `${identity}: content pages reuse the same rendered material ${JSON.stringify(materialSources)}`,
       );
       assert(
-        await page.locator(".content-material-image-slot .asset-placeholder").count() === 0,
+        await page.locator(".content-review-vm-image-slot .asset-placeholder").count() === 0,
         `${identity}: material placeholder remained after loading`,
       );
 
@@ -360,7 +359,7 @@ async function checkReview(reviewType, width, height = 900) {
         assert(height >= 42, `${identity}: PageDecision target is ${height}px high`);
       }
       if (width === 360) {
-        const positions = await page.locator("[data-content-slide]").first().locator(".page-decision-option").evaluateAll(
+        const positions = await page.locator("[data-content-review-vm-slide]").first().locator(".page-decision-option").evaluateAll(
           (elements) => elements.map((element) => {
             const rect = element.getBoundingClientRect();
             return { top: Math.round(rect.top), left: rect.left, right: rect.right };
@@ -373,7 +372,7 @@ async function checkReview(reviewType, width, height = 900) {
       }
 
       assert(/^S\d+$/.test(seed.content_review_draft.slide_id), `${identity}: unsafe draft slide identity`);
-      const draftPage = page.locator(`#content-${seed.content_review_draft.slide_id}`);
+      const draftPage = page.locator(`#content-vm-${seed.content_review_draft.slide_id}`);
       if (width === 1000) {
         await captureInteractionEvidence(
           draftPage,
@@ -397,14 +396,18 @@ async function checkReview(reviewType, width, height = 900) {
         );
       }
 
-      const evidenceButton = page.getByRole("button", { name: /来源证据$/ }).first();
-      assert(await evidenceButton.count(), `${identity}: read-only evidence entry missing`);
-      await evidenceButton.click();
-      const dialog = page.getByRole("dialog", { name: /来源证据$/ });
-      await dialog.waitFor();
-      assert((await dialog.textContent()).includes("只读辅助层"), `${identity}: evidence layer is not read-only`);
-      await dialog.getByRole("button", { name: "关闭证据" }).click();
-      evidenceLayer = true;
+      for (const forbidden of [
+        "完整可见文字",
+        "分析、假设与建议",
+        "完整演讲备注",
+        "证据与身份",
+        "查看来源证据",
+        "问题—方案映射",
+        "跨页关系",
+        "阅读质量",
+      ]) {
+        assert(!(await page.locator("body").innerText()).includes(forbidden), `${identity}: forbidden module ${forbidden} returned`);
+      }
     } else {
       if (width === 760) {
         await page.setViewportSize({ width, height: 480 });
@@ -414,21 +417,19 @@ async function checkReview(reviewType, width, height = 900) {
       objectCount = await anchorTabs.count();
       assert(objectCount === 3, `${identity}: expected 3 anchor pages, received ${objectCount}`);
       const layoutGeometry = await page.locator(".anchor-review-layout").evaluate((layout) => {
-        const main = layout.querySelector(".anchor-review-main").getBoundingClientRect();
-        const assistant = layout.querySelector(".anchor-review-assistant").getBoundingClientRect();
-        return { main: { top: main.top, left: main.left, right: main.right }, assistant: { top: assistant.top, left: assistant.left } };
+        const layoutRect = layout.getBoundingClientRect();
+        const main = layout.querySelector(".anchor-review-main")?.getBoundingClientRect();
+        if (!main) throw new Error("Missing accepted anchor review main surface");
+        return {
+          layout: { top: layoutRect.top, left: layoutRect.left, right: layoutRect.right },
+          main: { top: main.top, left: main.left, right: main.right },
+        };
       });
-      if (width >= 760) {
-        assert(
-          layoutGeometry.main.right <= layoutGeometry.assistant.left + 1,
-          `${identity}: wide anchor review is not two columns ${JSON.stringify(layoutGeometry)}`,
-        );
-      } else {
-        assert(
-          layoutGeometry.main.top < layoutGeometry.assistant.top,
-          `${identity}: narrow anchor main content must precede the assistant ${JSON.stringify(layoutGeometry)}`,
-        );
-      }
+      assert(
+        layoutGeometry.main.left >= layoutGeometry.layout.left - 1
+        && layoutGeometry.main.right <= layoutGeometry.layout.right + 1,
+        `${identity}: anchor main surface escaped the accepted single-column workbench ${JSON.stringify(layoutGeometry)}`,
+      );
 
       for (let index = 0; index < objectCount; index += 1) {
         await anchorTabs.nth(index).click();
@@ -487,52 +488,7 @@ async function checkReview(reviewType, width, height = 900) {
           );
         }
         await settleLayout(page);
-        if (width === 760) {
-          const stickyContract = await page.evaluate(() => {
-            const header = document.querySelector(".visual-professional-header");
-            const assistant = document.querySelector(".anchor-review-assistant");
-            const headerRect = header.getBoundingClientRect();
-            const assistantRect = assistant.getBoundingClientRect();
-            const computed = getComputedStyle(assistant);
-            return {
-              position: computed.position,
-              topInset: Number.parseFloat(computed.top),
-              headerHeight: headerRect.height,
-              assistantDocumentTop: assistantRect.top + window.scrollY,
-              maxScrollY: document.documentElement.scrollHeight - window.innerHeight,
-            };
-          });
-          assert(stickyContract.position === "sticky", `${identity}: assistant is not sticky ${JSON.stringify(stickyContract)}`);
-          assert(
-            stickyContract.topInset >= stickyContract.headerHeight,
-            `${identity}: sticky inset is smaller than the responsive header ${JSON.stringify(stickyContract)}`,
-          );
-          const targetScrollY = stickyContract.assistantDocumentTop - stickyContract.topInset + 32;
-          assert(
-            targetScrollY <= stickyContract.maxScrollY,
-            `${identity}: page cannot reach the assistant sticky state ${JSON.stringify({ ...stickyContract, targetScrollY })}`,
-          );
-          await page.evaluate((scrollY) => window.scrollTo(0, scrollY), targetScrollY);
-          await settleLayout(page);
-          const sticky = await page.evaluate(() => {
-            const header = document.querySelector(".visual-professional-header").getBoundingClientRect();
-            const assistantElement = document.querySelector(".anchor-review-assistant");
-            const assistant = assistantElement.getBoundingClientRect();
-            return {
-              scrollY: window.scrollY,
-              headerBottom: header.bottom,
-              assistantTop: assistant.top,
-              topInset: Number.parseFloat(getComputedStyle(assistantElement).top),
-            };
-          });
-          assert(
-            sticky.scrollY >= targetScrollY - 1
-            && Math.abs(sticky.assistantTop - sticky.topInset) <= 1
-            && sticky.assistantTop >= sticky.headerBottom - 1,
-            `${identity}: assistant did not reach an uncovered sticky state ${JSON.stringify({ ...sticky, targetScrollY })}`,
-          );
-          stickyProof = { ...sticky, targetScrollY, annotationComposer: true, candidateRegion };
-        }
+        if (width === 760) stickyProof = { annotationComposer: true, candidateRegion };
         await page.evaluate(() => window.scrollTo(0, 0));
         await settleLayout(page);
       }
@@ -579,7 +535,7 @@ async function checkReview(reviewType, width, height = 900) {
           "contract-mark-drawer",
           "overlay-contract-mark-record",
         );
-        await page.getByRole("dialog", { name: "合同标记记录" }).getByRole("button", { name: "关闭" }).click();
+        await page.getByRole("dialog", { name: "合同标记" }).getByRole("button", { name: "关闭" }).click();
         await page.getByRole("tab", { name: "3 页锚点成果" }).click();
         const restoredComposer = page.getByRole("textbox", { name: "当前框选区域反馈" });
         assert(
@@ -590,26 +546,40 @@ async function checkReview(reviewType, width, height = 900) {
       }
       await assertVisualContractTextReadable(page, identity);
     }
-    const deferredSelector = reviewType === "content" ? ".content-review-slide" : ".visual-slide-contract";
+    const deferredSelector = reviewType === "content" ? ".content-review-vm-slide" : ".visual-slide-contract";
     const rawScreenshot = previewPath(`${identity}-raw.png`);
     const expandedEvidenceScreenshot = previewPath(`${identity}-expanded-evidence.png`);
-    const evidence = await captureEvidencePair({
-      rawPath: rawScreenshot,
-      expandedPath: expandedEvidenceScreenshot,
-      readProductionVisibility: () => page.locator(deferredSelector).last().evaluate(
-        (element) => getComputedStyle(element).contentVisibility,
-      ),
-      captureRaw: async (screenshotPath) => {
-        assertNoOverflow(await metrics(page), `${identity}-raw`);
-        assert(consoleErrors.length === 0, `${identity}: ${consoleErrors.join(" | ")}`);
-        await page.screenshot({ path: screenshotPath, fullPage: true });
-      },
-      revealAcceptanceOnly: () => revealDeferredContentForScreenshot(page),
-      captureExpanded: async (screenshotPath) => {
-        assertNoOverflow(await metrics(page), `${identity}-expanded-evidence`);
-        await page.screenshot({ path: screenshotPath, fullPage: true });
-      },
-    });
+    const evidence = reviewType === "content"
+      ? await (async () => {
+          const visibility = await page.locator(deferredSelector).last().evaluate(
+            (element) => getComputedStyle(element).contentVisibility,
+          );
+          assert(visibility === "visible", `${identity}: accepted ViewModel surface visibility changed to ${visibility}`);
+          assertNoOverflow(await metrics(page), `${identity}-raw`);
+          assert(consoleErrors.length === 0, `${identity}: ${consoleErrors.join(" | ")}`);
+          await page.screenshot({ path: rawScreenshot, fullPage: true });
+          return {
+            rawScreenshot,
+            rawScreenshotMode: "production-content-visibility-visible",
+          };
+        })()
+      : await captureEvidencePair({
+          rawPath: rawScreenshot,
+          expandedPath: expandedEvidenceScreenshot,
+          readProductionVisibility: () => page.locator(deferredSelector).last().evaluate(
+            (element) => getComputedStyle(element).contentVisibility,
+          ),
+          captureRaw: async (screenshotPath) => {
+            assertNoOverflow(await metrics(page), `${identity}-raw`);
+            assert(consoleErrors.length === 0, `${identity}: ${consoleErrors.join(" | ")}`);
+            await page.screenshot({ path: screenshotPath, fullPage: true });
+          },
+          revealAcceptanceOnly: () => revealDeferredContentForScreenshot(page),
+          captureExpanded: async (screenshotPath) => {
+            assertNoOverflow(await metrics(page), `${identity}-expanded-evidence`);
+            await page.screenshot({ path: screenshotPath, fullPage: true });
+          },
+        });
     results.push({
       reviewType,
       width,
@@ -656,7 +626,7 @@ async function checkLongReview(reviewType, count) {
   const { context, page, consoleErrors } = await openPage(`ai-ppt-${reviewType}-review-long-${count}.html`, 1000);
   try {
     if (reviewType === "visual") await page.getByRole("tab", { name: "完整视觉合同" }).click();
-    const selector = reviewType === "content" ? "[data-content-slide]" : ".visual-slide-contract";
+    const selector = reviewType === "content" ? "[data-content-review-vm-slide]" : ".visual-slide-contract";
     await page.waitForSelector(selector);
     assert(await page.locator(selector).count() === count, `${reviewType}: incomplete long review`);
     assert((await page.locator("body").textContent()).includes(`第 ${count} 页`), `${reviewType}: final long-review page missing`);
@@ -693,7 +663,7 @@ await completeAcceptanceRun({
       ok: true,
       checkedAt: new Date().toISOString(),
       runDirectory,
-      surfaces: ["content-review", "visual-review", "read-only-evidence-layer"],
+      surfaces: ["content-review", "visual-review"],
       previewEvidence: { ...LOCAL_PREVIEW_EVIDENCE },
       disclaimer: LOCAL_PREVIEW_DISCLAIMER,
       seed,

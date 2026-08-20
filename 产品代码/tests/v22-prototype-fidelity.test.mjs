@@ -16,17 +16,17 @@ const runnerSource = readFileSync(new URL("../scripts/run-v22-ui-acceptance.mjs"
 
 const expectedSelectors = {
   "content-review": [
-    ".content-review-deck-intro",
-    ".content-review-chapter-nav",
-    "[data-content-chapter]",
-    ".content-review-summary",
+    ".content-review-vm-deck-intro",
+    ".content-review-vm-chapter-nav",
+    ".content-review-vm-chapter",
+    "[data-content-review-vm-slide]",
+    ".content-review-vm-summary",
   ],
   "visual-anchor": [
     ".visual-review-topbar",
     ".visual-professional-review-view-switch",
     ".anchor-review-layout",
     ".anchor-feedback-composer",
-    ".anchor-review-assistant .anchor-batch-panel",
   ],
   "visual-contract": [
     ".visual-contract-title-page",
@@ -138,7 +138,7 @@ test("browser runner consumes the fidelity contracts and scopes readability to e
   assert.match(runnerSource, /assertInteractionEvidenceCoverage/);
   assert.match(runnerSource, /PROTOTYPE_FIDELITY_REQUIREMENTS/);
   assert.match(runnerSource, /LOCAL_PREVIEW_EVIDENCE/);
-  assert.match(runnerSource, /data-content-review-first-reading-grid/);
+  assert.match(runnerSource, /data-content-review-vm-slide.*content-review-vm-reading-grid/);
   assert.match(runnerSource, /firstViewportScreenshot/);
   assert.doesNotMatch(runnerSource, /\.visual-contract-title-page code/);
   assert.match(runnerSource, /contract\.locator\(slideReadableSelector\)/);

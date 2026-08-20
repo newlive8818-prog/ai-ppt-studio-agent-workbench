@@ -147,12 +147,13 @@ class V16UiSeedTests(unittest.TestCase):
 
             material_ids: list[str] = []
             material_refs: list[str] = []
-            material_pages: list[int] = []
-            material_purposes: list[str] = []
             material_hashes: list[str] = []
             for slide in content["slides"]:
                 self.assertTrue(slide["material_views"], slide["slide_id"])
                 for material in slide["material_views"]:
+                    self.assertEqual(
+                        set(material), {"material_view_id", "asset_ref"}
+                    )
                     self.assertTrue(
                         material["material_view_id"].startswith(f"{slide['slide_id']}-"),
                         material,
@@ -167,13 +168,9 @@ class V16UiSeedTests(unittest.TestCase):
                     self.assertGreater(height, 0)
                     material_ids.append(material["material_view_id"])
                     material_refs.append(material["asset_ref"])
-                    material_pages.append(material["page_number"])
-                    material_purposes.append(material["purpose"])
                     material_hashes.append(hashlib.sha256(asset_path.read_bytes()).hexdigest())
             self.assertEqual(len(set(material_ids)), len(material_ids))
             self.assertEqual(len(set(material_refs)), len(material_refs))
-            self.assertEqual(len(set(material_pages)), len(content["slides"]))
-            self.assertEqual(len(set(material_purposes)), len(content["slides"]))
             self.assertGreaterEqual(len(set(material_hashes)), len(content["slides"]))
 
             self.assertEqual(visual["review_type"], "visual-professional")

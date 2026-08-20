@@ -18,14 +18,7 @@ export interface ContentPageDecision {
 
 export interface ContentMaterialView {
   readonly material_view_id: string;
-  readonly source_ref: string;
   readonly asset_ref: string;
-  readonly source_file_name: string;
-  readonly page_number: number;
-  readonly region_label: string;
-  readonly purpose: string;
-  readonly treatment: string;
-  readonly evidence_identity: string;
 }
 
 export interface ContentReviewSlide {
@@ -36,10 +29,28 @@ export interface ContentReviewSlide {
   reading_question: string;
   neutral_title: string;
   customerJudgment: string;
+  visible_copy_blocks: Array<{ block_id: string; text: string }>;
+  readonly material_views: readonly ContentMaterialView[];
+}
+
+export interface LegacyContentMaterialView extends ContentMaterialView {
+  readonly source_ref: string;
+  readonly source_file_name: string;
+  readonly page_number: number;
+  readonly region_label: string;
+  readonly purpose: string;
+  readonly treatment: string;
+  readonly evidence_identity: string;
+}
+
+export interface LegacyContentReviewSlide extends Omit<
+  ContentReviewSlide,
+  "visible_copy_blocks" | "material_views"
+> {
   visible_copy_blocks: Array<{ block_id: string; text: string; identity: string }>;
   identity_labels: string[];
   evidence_bindings: Array<Record<string, unknown>>;
-  readonly material_views: readonly ContentMaterialView[];
+  readonly material_views: readonly LegacyContentMaterialView[];
   analysis_or_proposal_blocks: Array<{ block_id: string; text: string; identity: string }>;
   solution_mapping_refs: string[];
   previous_relation: string;
@@ -78,3 +89,11 @@ export interface ContentReviewSurfaceData {
   snapshotRevision: number;
   review: ContentReviewProjection;
 }
+
+export type LegacyContentReviewProjection = Omit<ContentReviewProjection, "slides"> & {
+  slides: LegacyContentReviewSlide[];
+};
+
+export type LegacyContentReviewSurfaceData = Omit<ContentReviewSurfaceData, "review"> & {
+  review: LegacyContentReviewProjection;
+};
