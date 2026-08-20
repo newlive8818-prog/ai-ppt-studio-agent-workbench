@@ -131,7 +131,11 @@ function contentSlide(slideId: string, order: number, sectionId: string) {
     reading_question: `阅读问题 ${order}`,
     neutral_title: `中立标题 ${order}`,
     customerJudgment: `客户形成第 ${order} 页的明确判断。`,
-    visible_copy_blocks: [],
+    visible_copy_blocks: [{
+      block_id: `copy-${order}`,
+      text: `第 ${order} 页页面实际文字。`,
+      identity: "后台身份字段",
+    }],
     identity_labels: ["方案建议"],
     evidence_bindings: [],
     material_views: [],
@@ -150,7 +154,7 @@ function contentSlide(slideId: string, order: number, sectionId: string) {
 }
 
 function contentReviewSurface(
-  slides: ReturnType<typeof contentSlide>[] = [],
+  slides: ReturnType<typeof contentSlide>[] = [contentSlide("S01", 1, "opening")],
 ): ContentReviewSurfaceData {
   const sectionFlow = [...new Set(slides.map((slide) => slide.section_id))];
   return {
@@ -239,14 +243,43 @@ const visualLineageMutations: Array<[string, VisualLineageMutation]> = [
 ];
 
 describe("on-demand professional-review routing", () => {
-  it("routes content-full-deck without product navigation", () => {
+  it("routes content-full-deck through the accepted ViewModel surface without legacy backend modules", () => {
     const content = contentReviewSurface();
 
-    render(<ReviewSurfaceRouter data={content} bridge={bridge} />);
+    const { container } = render(<ReviewSurfaceRouter data={content} bridge={bridge} />);
 
+    expect(screen.getByRole("heading", { name: "p1" })).toBeInTheDocument();
+    expect(screen.getByText("这一页的目标")).toBeInTheDocument();
+    expect(screen.getByText("页面任务 1")).toBeInTheDocument();
+    expect(screen.getByText("希望客户形成的判断")).toBeInTheDocument();
+    expect(screen.getByText("客户形成第 1 页的明确判断。")).toBeInTheDocument();
+    expect(screen.getByText("页面实际文字")).toBeInTheDocument();
+    expect(screen.getByText("第 1 页页面实际文字。")).toBeInTheDocument();
+    expect(screen.getByText("文字与图片材料一起审核")).toBeInTheDocument();
+    expect(screen.getByText("本页阅读判断：")).toBeInTheDocument();
+    expect(screen.getByText("阅读问题 1")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "认可本页" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "需要修改" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "证据不足" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "考虑删页/合页" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存本页判断" })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "完整售前阅读稿" }),
+      screen.getByRole("button", { name: "完成本轮审核，交给 Codex 集中处理" }),
     ).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-content-review-vm-slide]")).toHaveLength(1);
+    expect(container.querySelector("[data-content-slide]")).not.toBeInTheDocument();
+    for (const legacyTitle of [
+      "完整可见文字",
+      "分析、假设与建议",
+      "完整演讲备注",
+      "证据与身份",
+      "查看来源证据",
+      "问题—方案映射",
+      "跨页关系",
+      "阅读质量",
+    ]) {
+      expect(screen.queryByText(legacyTitle)).not.toBeInTheDocument();
+    }
     expect(
       screen.queryByRole("navigation", { name: "五空间导航" }),
     ).not.toBeInTheDocument();
@@ -304,9 +337,10 @@ describe("on-demand professional-review routing", () => {
     ]);
     content.review.section_flow = ["客户业务事项", "问题与验证方案"];
 
-    render(<ReviewSurfaceRouter data={content} bridge={bridge} />);
+    const { container } = render(<ReviewSurfaceRouter data={content} bridge={bridge} />);
 
-    expect(screen.getByRole("heading", { name: "完整售前阅读稿" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "p1" })).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-content-review-vm-slide]")).toHaveLength(2);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
