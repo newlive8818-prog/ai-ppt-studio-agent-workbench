@@ -137,7 +137,8 @@ it("renders the accepted continuous review contract from ViewModel fields only",
   expect(screen.getAllByText("这一页的目标")).toHaveLength(2);
   expect(screen.getAllByText("希望客户形成的判断")).toHaveLength(2);
   expect(screen.getAllByText("页面实际文字")).toHaveLength(2);
-  expect(screen.getAllByText("文字与图片材料一起审核")).toHaveLength(2);
+  expect(screen.getAllByText("文字与图片材料一起审核")).toHaveLength(1);
+  expect(screen.queryByText("本页暂无可审核的页面画面。")).not.toBeInTheDocument();
   expect(screen.getByText("当前流程存在三个待核实断点。")).toBeInTheDocument();
   expect(screen.getByText("经营口径需要统一。")).toBeInTheDocument();
   expect(screen.getByText("跨系统协同需要验证。")).toBeInTheDocument();
@@ -148,6 +149,24 @@ it("renders the accepted continuous review contract from ViewModel fields only",
     "content-vm-S02",
   ]);
   expect(within(screen.getByLabelText("S01 页面实际文字")).getAllByRole("listitem")).toHaveLength(2);
+
+  const firstPage = screen.getByLabelText("S01 内容审核");
+  const secondPage = screen.getByLabelText("S02 内容审核");
+  expect(within(firstPage).getByRole("region", {
+    name: "S01 文字与图片材料一起审核",
+  })).toBeInTheDocument();
+  expect(within(secondPage).queryByRole("region", {
+    name: "S02 文字与图片材料一起审核",
+  })).not.toBeInTheDocument();
+  expect(within(secondPage).getByRole("region", {
+    name: "S02 页面实际文字",
+  })).toBeInTheDocument();
+  expect(within(secondPage).getByText("本页阅读判断：")).toBeInTheDocument();
+  expect(within(secondPage).getAllByRole("radio")).toHaveLength(4);
+
+  const grids = container.querySelectorAll(".content-review-vm-reading-grid");
+  expect(grids[0]).toHaveClass("content-review-vm-reading-grid--with-visuals");
+  expect(grids[1]).toHaveClass("content-review-vm-reading-grid--text-only");
 
   for (const rejected of [
     "完整可见文字",
@@ -251,4 +270,42 @@ it("reads only the ViewModel asset after viewport activation and renders its alt
   })).toBeInTheDocument();
   expect(screen.getByLabelText("S01 文字与图片材料一起审核")).not.toHaveTextContent("客户材料");
   expect(screen.getByLabelText("S01 文字与图片材料一起审核")).not.toHaveTextContent("第 3 页");
+  expect(callTool).toHaveBeenCalledTimes(1);
+  expect(screen.queryByLabelText("S02 文字与图片材料一起审核")).not.toBeInTheDocument();
+});
+
+it("keeps PageDecision unchanged when an existing material image fails", async () => {
+  const intersections = installIntersectionObserver();
+  const initial = pageViewModel();
+  const viewModel = {
+    ...initial,
+    slides: initial.slides.map((slide, index) => index === 0 ? {
+      ...slide,
+      localDraftState: {
+        decision: "modify" as const,
+        comment: "保留当前修改判断。",
+        dirty: true,
+      },
+    } : slide),
+  } satisfies ContentReviewPageViewModel;
+  const callTool = vi.fn(async () => {
+    throw new Error("material image unavailable");
+  });
+  render(
+    <ContentReviewViewModelSurface
+      viewModel={viewModel}
+      bridge={bridge(callTool)}
+      projectRoot="/managed/project"
+      {...actionProps()}
+    />,
+  );
+
+  act(() => intersections.intersectAll());
+
+  const firstPage = screen.getByLabelText("S01 内容审核");
+  expect(await within(firstPage).findByRole("button", {
+    name: /预览暂不可读，点击重试/,
+  })).toBeInTheDocument();
+  expect(within(firstPage).getByRole("radio", { name: "需要修改" })).toBeChecked();
+  expect(within(firstPage).getByRole("radio", { name: "证据不足" })).not.toBeChecked();
 });

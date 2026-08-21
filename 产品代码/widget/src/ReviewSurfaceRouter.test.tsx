@@ -241,7 +241,11 @@ describe("on-demand professional-review routing", () => {
     expect(screen.getByText("客户形成第 1 页的明确判断。")).toBeInTheDocument();
     expect(screen.getByText("页面实际文字")).toBeInTheDocument();
     expect(screen.getByText("第 1 页页面实际文字。")).toBeInTheDocument();
-    expect(screen.getByText("文字与图片材料一起审核")).toBeInTheDocument();
+    expect(screen.queryByText("文字与图片材料一起审核")).not.toBeInTheDocument();
+    expect(screen.queryByText("本页暂无可审核的页面画面。")).not.toBeInTheDocument();
+    expect(
+      container.querySelector(".content-review-vm-reading-grid--text-only"),
+    ).toBeInTheDocument();
     expect(screen.getByText("本页阅读判断：")).toBeInTheDocument();
     expect(screen.getByText("阅读问题 1")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "认可本页" })).toBeInTheDocument();

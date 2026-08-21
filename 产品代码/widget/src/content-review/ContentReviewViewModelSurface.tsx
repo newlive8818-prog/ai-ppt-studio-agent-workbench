@@ -167,6 +167,10 @@ export function ContentReviewViewModelSurface({
                   {slides.map((slide) => {
                     const saving = savingSlideId === slide.slideId;
                     const controlsDisabled = pageWritesDisabled || Boolean(savingSlideId && !saving);
+                    const hasMaterialVisuals = slide.materialVisuals.length > 0;
+                    const readingLayoutClass = hasMaterialVisuals
+                      ? "content-review-vm-reading-grid--with-visuals"
+                      : "content-review-vm-reading-grid--text-only";
                     return (
                       <article
                         className="content-review-vm-slide"
@@ -187,7 +191,7 @@ export function ContentReviewViewModelSurface({
                           />
                         </header>
 
-                        <div className="content-review-vm-reading-grid">
+                        <div className={`content-review-vm-reading-grid ${readingLayoutClass}`}>
                           <div className="content-review-vm-text">
                             <section className="content-review-vm-purpose" aria-label={`${slide.slideId} 页面审核目标`}>
                               <div>
@@ -208,13 +212,15 @@ export function ContentReviewViewModelSurface({
                               <DraftContentBlocks blocks={slide.draftContent.blocks} />
                             </section>
                           </div>
-                          <ContentReviewMaterialVisuals
-                            bridge={bridge}
-                            projectRoot={projectRoot}
-                            slideId={slide.slideId}
-                            visuals={slide.materialVisuals}
-                            readsDisabled={readsDisabled}
-                          />
+                          {hasMaterialVisuals ? (
+                            <ContentReviewMaterialVisuals
+                              bridge={bridge}
+                              projectRoot={projectRoot}
+                              slideId={slide.slideId}
+                              visuals={slide.materialVisuals}
+                              readsDisabled={readsDisabled}
+                            />
+                          ) : null}
                         </div>
 
                         <p className="content-review-vm-reading-question">

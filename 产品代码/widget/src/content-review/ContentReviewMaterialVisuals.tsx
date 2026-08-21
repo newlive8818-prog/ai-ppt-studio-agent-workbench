@@ -85,27 +85,25 @@ export function ContentReviewMaterialVisuals({
   visuals,
   readsDisabled = false,
 }: ContentReviewMaterialVisualsProps) {
+  if (visuals.length === 0) return null;
+
   return (
     <section
       className="content-review-vm-visuals"
       aria-label={`${slideId} 文字与图片材料一起审核`}
     >
       <span className="content-review-vm-label">文字与图片材料一起审核</span>
-      {visuals.length ? (
-        <div className="content-review-vm-visual-list">
-          {visuals.map((visual) => (
-            <LazyMaterialVisual
-              key={visual.visualId}
-              bridge={bridge}
-              projectRoot={projectRoot}
-              visual={visual}
-              readsDisabled={readsDisabled}
-            />
-          ))}
-        </div>
-      ) : (
-        <p className="content-review-vm-visual-empty">本页暂无可审核的页面画面。</p>
-      )}
+      <div className="content-review-vm-visual-list">
+        {visuals.map((visual) => (
+          <LazyMaterialVisual
+            key={visual.visualId}
+            bridge={bridge}
+            projectRoot={projectRoot}
+            visual={visual}
+            readsDisabled={readsDisabled}
+          />
+        ))}
+      </div>
     </section>
   );
 }
