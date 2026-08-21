@@ -1,23 +1,27 @@
 # Professional review and feedback
 
-## One shared professional review resource
+## Source-bound review
 
-Content and visual review use one application and save contract. Content review shows the complete argument structure and every page's full copy, speaker notes, fact identity, sources, materials, state, and stable field anchors. Visual review adds the Deck framework, Deck Design System, native anchor identity, four-target evidence identities, and every page implementation/acceptance field.
+Content and visual review share infrastructure but keep separate ReviewSessions, source versions, revisions, drafts, writes, and receipts.
 
-The source projection is authoritative. React never summarizes away contract fields, invents a passed status, or stores business state locally. Saving an exact mark records `field_anchor`, `exact_text`, `prefix`, `suffix`, `comment`, and `source_version`; it never confirms G0 or G3.
+- Content review shows the complete `ReadingDeckBlueprint`, every page's visible copy and notes, evidence bindings, identities, relations, and one current `PageDecision`.
+- The content evidence layer opens source material read-only and writes no review decision.
+- Visual review has two views. Anchor results accept multiple rectangle-region comments in one immutable `AnchorFeedbackBatch`; the complete contract accepts field or selected-text marks in one `VisualContractReviewMarkSet`.
+
+React must project every current contract field, never invent a passed status, and never store business state locally. A write reports persistence only. Host open, host notification, and AI receipt require their own trusted receipts. None confirms G0 or G3.
 
 ## Change scope and recovery
 
-Interpret feedback as whole deck, chapter/page family, page, or element. Preserve raw wording separately from diagnosis and recommended action. Store target refs, preserve refs, previous/current versions, scope, evidence, decision, and result.
+Classify feedback as whole deck, chapter/page family, page, or element. Preserve raw wording separately from diagnosis and recommended action. Bind target refs, preserve refs, previous/current versions, source version, scope, evidence, decision, and result.
 
-- Mission, audience, fact, narrative, or material change reopens G0.
-- Full visual contract change reopens G1.
-- Native/editability/target defect reopens G2.
-- User visual decision change reopens G3.
-- Full-deck/local delivery defect reopens G4 unless its root cause belongs earlier.
+- Mission, audience, material, fact, narrative, or content-identity change reopens G0.
+- Full visual-contract change reopens G1.
+- Native/editability/required-target defect reopens G2.
+- User visual judgment change reopens G3.
+- Full-deck or delivery defect reopens G4 unless its root cause belongs earlier.
 
-Do not reopen unrelated accepted work. Revision/source conflicts preserve drafts; network/save failure does not display a saved state.
+Reopen only the earliest affected Gate, lock its downstream chain, preserve unrelated accepted work, and retain immutable history. Revision or source conflicts preserve drafts; a network or save failure cannot display a saved state.
 
 ## Learning boundary
 
-Govern feedback before creating a change set or experience candidate. A project reaction is not a stable rule. Promote only sanitized, scoped mechanisms or anti-patterns with independent evidence, counterexamples, later-project evaluation, and rollback support.
+Govern feedback before creating a change set or reusable experience. One project reaction is not universal. Reuse only a sanitized, scoped `same-type` or `global` mechanism with evidence, counterexamples, evaluation, and rollback.

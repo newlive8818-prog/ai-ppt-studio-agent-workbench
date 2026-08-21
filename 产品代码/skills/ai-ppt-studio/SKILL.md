@@ -1,99 +1,72 @@
 ---
 name: ai-ppt-studio
-description: Create, resume, review, revise, render, validate, and deliver isolated high-design editable reading-first presales PPT/PPTX projects through the AI PPT Studio Codex-native workbench.
+description: Create, resume, govern, review, revise, render, validate, and deliver isolated reading-first presales PPT/PPTX projects with AI PPT Studio v2.2. Use for evidence-bound content architecture, on-demand content or visual professional review, native editable PowerPoint production, release-target validation, delivery, and project experience retrospective.
 ---
 
-# AI PPT Studio v1.6
+# AI PPT Studio v2.2
 
-AI is the principal strategist and maker. The user supplies goals, sources, consequential choices, feedback, and final acceptance. Runtime services own revision, immutable artifacts, evidence, recovery, and G0–G4; UI and chat never infer a passed Gate.
+Act as the principal strategist and maker. Let the user supply goals, sources, consequential choices, feedback, and final acceptance. Let the Runtime own revision, immutable artifacts, evidence, recovery, and G0–G4. Never infer a passed Gate from chat, UI, fixtures, or local rendering.
 
-## Required startup
+## Start safely
 
-1. Read `references/isolation-policy.md` before any write.
-2. Read `references/runtime-workflow.md` before creating or resuming a project.
-3. Read `references/native-workbench.md` before using the real sidebar, Codex built-in Browser, professional review, or MCP writes.
-4. Read `references/four-target-acceptance.md` before any anchor or final PPTX acceptance.
-5. Run `python3 scripts/ai_ppt_runtime.py preflight` and use the configured managed runtime root.
-6. Create or resume a schema 3 project below the managed runtime root. Never write into the current working directory unless it is that managed project.
-7. Treat user-provided originals as read-only. Copy inside the project before OCR, conversion, crop, annotation, or transformation.
-8. Use only sources supplied by the user. Do not search the internet for customer-project material.
-9. After mission context is known, run `experience-recommend --input CONTEXT.json`; if a recommendation materially affects work, bind its exact version with `experience-apply` and later evaluate it with `experience-evaluate`.
+1. Read `references/isolation-policy.md` before any write and `references/runtime-workflow.md` before project operations.
+2. Read `references/native-workbench.md` before reporting status or opening a professional review.
+3. Read the stage reference needed now: `content-workflow.md`, `visual-workflow.md`, `presentations-handoff.md`, `review-and-feedback.md`, `release-target-policy.md`, or `experience-evolution.md`.
+4. Run `python3 scripts/ai_ppt_runtime.py preflight` and use the configured managed runtime root.
+5. Create or resume one schema 3 project below that root. Never write into the current working directory unless it is that managed project. Treat every user original as read-only; copy it into the project before transformation.
+6. Use only user-supplied customer material. Do not search the internet for customer-project facts.
 
-## Authoritative contracts
+## Preserve authority
 
-- Formal artifacts use `artifact://<kind>/<sha256>`. A reference must resolve inside the current project and match kind, project, and hash.
-- Python schema 3 runtime is the only business writer. Node MCP is a thin validated adapter. React consumes formal projections only.
-- All writes use `expectedRevision` and an idempotent command identity. Refresh after success or `REVISION_CONFLICT`.
+- Use `artifact://<kind>/<sha256>` references that resolve in the current project and match the required kind and current head.
+- Treat Python schema 3 as the only business writer, Node MCP as a validated adapter, and React as a projection consumer.
+- Send `expectedRevision` and one idempotent command identity with every write. Refresh after success, `REVISION_CONFLICT`, or `REVIEW_SOURCE_STALE`.
 - Formal Agent tasks bind one approved role, exact input refs, bounded instructions, output contract, exclusions, and isolation rules.
-- Producer, reviewer, and sibling-review contexts remain isolated. No score, average, or majority vote can override one failed applicable hard check.
+- Keep producer and reviewer contexts isolated. Applicable hard checks are binary; scores or votes cannot compensate for a failure.
 
-## Capability routing
+## Route capabilities honestly
 
-- GPT performs audience understanding, strategy, content, visual reasoning, critique, and scoped revision.
-- Codex Presentations is the sole route for every PPTX read, create, edit, render, and inspection. Do not build or use a second PPTX editor. Never use `python-pptx`.
-- Image 2 is optional and only follows a frozen native-first structure. It may create replaceable non-semantic background, texture, illustration, or light-effect layers; never factual text, numbers, business relationships, real evidence, or a whole-slide final bitmap.
+- Use GPT for audience understanding, evidence reasoning, presales strategy, content, visual reasoning, critique, and scoped revision.
+- Use Codex Presentations for every PPTX read, create, edit, render, and inspection. Do not build or use a second PPTX editor. Never use `python-pptx`.
+- Use Image 2 only after native-first structure is frozen, and only for replaceable non-semantic backgrounds, textures, illustrations, or light effects. Never rasterize factual text, numbers, evidence, or business relationships.
 - No separate Image 2 privacy gate exists. Project materials may be used only inside the approved project task and media boundary.
 
-## Approved production order
+## Execute the governed loop
 
-### 1. Mission confirmation and materials
+### 1. Confirm Mission and material identity
 
-The mandatory order is:
+Save an AI-authored `MissionDraft`, show the task, audience, desired judgment/action, materials or explicit no-material choice, background, constraints, red lines, and unknowns, then obtain a real host-verified `MissionConfirmation`. After the current complete `confirmable` card is shown and confirmation is the sole pending high-impact action, `OK / 确认 / 采纳 / 继续` may express confirmation intent. An ordinary conversation does not. Intent words are never persisted as evidence.
 
-1. Save an AI-authored `MissionDraft` with `save_ai_ppt_mission_draft`.
-2. Show the user the audience, topic, desired judgment/action, current material inventory or explicit no-material choice, background, constraints, red lines, and unknowns. Complete required fields make the draft only `confirmable`.
-3. Obtain a real host-verified confirmation from an explicit sidebar action or explicit user message. After the current complete `confirmable` card has been shown and mission confirmation is the only pending high-impact action, `OK / 确认 / 采纳 / 继续` and clear equivalents are confirmation intent. Ordinary conversation or adoption of another suggestion is not mission confirmation.
-4. Call `confirm_ai_ppt_mission` with the current card summary. A verified sidebar/message adapter preserves its real reference; otherwise the MCP host performs host-native confirmation. Intent words are never persisted as evidence. Only host acceptance creates an immutable `MissionConfirmation` bound to the current draft, project revision, and current material identity.
-5. Pass the Python content precondition gate before requesting or committing any formal content work. Node, UI, prompts, and fixtures cannot bypass it.
-6. Route `materials-provided` to `material-backed`, or route `no-materials-confirmed` to `proposal-only`.
+Call `confirm_ai_ppt_mission`; use host-native confirmation when no verified message adapter exists. On `HOST_CONFIRMATION_DECLINED` or `HOST_CONFIRMATION_UNAVAILABLE`, make no business write, preserve the task, and retry; never ask for more material, and never bypass AI PPT Studio merely because host confirmation is unavailable.
 
-Register only user-provided documents, text, images, screenshots, data, and links. In `proposal-only`, carry the identities `诊断假设`, `方案建议`, and `待联合验证` through strategy, claims, narrative, slide copy, speaker notes, review, and G0. Never invent customer facts, numbers, cases, capabilities, results, or commitments.
+Classify the current content work as `material-backed`, `mixed-evidence`, or `proposal-led`. Preserve source fact, source-derived inference, `诊断假设`, `方案建议`, `待联合验证`, conflict, gap, and prohibited extrapolation as distinct identities. Never invent customer facts, numbers, cases, capabilities, results, or commitments.
 
-On `HOST_CONFIRMATION_DECLINED`, preserve the card and wait for revision or retry. On `HOST_CONFIRMATION_UNAVAILABLE`, preserve the task and retry when the host can confirm; never ask for more material and never bypass AI PPT Studio merely because host confirmation is unavailable.
+### 2. Build and review content before visual work
 
-### 2. Content governance and G0
+Read `references/content-workflow.md`. Let the presales chief produce, in order, `PresalesEvidenceBook`, `CustomerDecisionContext`, `ProblemSolutionFitMap`, and `ReadingDeckBlueprint`. Invoke specialists only for a concrete uncertainty or high-impact `RevisionProposal`; do not require a fixed content Agent roster.
 
-Read `references/content-workflow.md`. Only after current `MissionConfirmation` and material identity pass the Python content precondition gate, produce, in order, `PresalesContentStrategy`, `ClaimEvidenceMap`, `DeckArgumentMap`, and a complete `SlideDraftSet` with every page's visible copy, speaker notes, source refs, material refs, and required identity. Run five isolated content reviews and aggregate them into one passing acceptance record or a repair plan. Publish only an internally passing content blueprint to Browser professional review. Saving marks never confirms G0; G0 requires an explicit user confirmation with a real host-verified message reference.
+Pass both the evidence hard gate and presales-reading hard gate. Open one `content-full-deck` ReviewSession only after the current blueprint passes. Collect one `PageDecision` per slide, submit one immutable review Batch, and when changes are requested confirm a Batch revision plan, create the change set, publish a new source version, and reopen review. Saving review data never confirms G0. Confirm G0 only from an explicit current user judgment with a real host-verified reference. Do not discuss visual style before G0 passes.
 
-Do not discuss visual style before G0 passes.
+### 3. Build the visual contract and anchors
 
-### 3. Full visual contract and G1
+Read `references/visual-workflow.md`. Create the complete `DeckDesignSystem` and every `SlideVisualContract`; pass internal G1 checks. Use Codex Presentations for native editable anchors, then validate every target required by the current immutable `ReleaseTargetPolicy` before G2.
 
-Read `references/visual-workflow.md`. Create one complete `DeckDesignSystem` and every `SlideVisualContract` before native anchor production. The user does not select G1/G2 directions. G1 passes only through the authorized internal contract checks. Image 2 remains optional and only post-native; when a project explicitly skips it, record `not used` and continue without weakening any Gate.
+Open one `visual-professional` ReviewSession with two views: anchor results and the complete visual contract. In the anchor view, collect multiple rectangle-region comments and submit one immutable `AnchorFeedbackBatch`. In the contract view, save field or selected-text marks as one `VisualContractReviewMarkSet`. Keep persistence, host notification, and AI receipt as three independent facts. Neither feedback write confirms G3; only an explicit current user judgment does.
 
-### 4. Strict route B anchors and four-target G2
+### 4. Build, validate, deliver, and close
 
-Read `references/presentations-handoff.md`. Codex Presentations creates native editable anchor slides from the full visual contract. Only after native-first freeze may Image 2 add approved non-semantic layers. Validate one identical anchor PPTX in:
+After G3, use Codex Presentations to build the full native editable deck. Preserve semantic text, data, charts, tables, diagrams, connectors, relationships, logos, and page markers as native objects. Keep photos and complex illustration replaceable. Add `[Sources]` notes, render and inspect every page, repair defects, and validate every current `ReleaseTargetPolicy.required_target_ids` row against the same PPTX hash.
 
-- `macos-powerpoint`
-- `macos-wps`
-- `windows-powerpoint`
-- `windows-wps`
+Register the delivery package, send the exact PPTX through Codex chat, retain the verified host delivery receipt, and confirm G4 only against the current package, target evidence, sent file, and explicit user judgment. Then close or abort through the formal lifecycle and run the queued `ProjectExperienceRetrospective`.
 
-G2 requires semantic, aesthetic, engineering, and target-render checks to pass on all four rows with the same PPTX SHA-256. One missing, failed, stale, or different-hash row blocks G2.
+## Use only the approved user surfaces
 
-### 5. Professional visual review and G3
+Treat the Codex current project conversation as the unique entry and orchestration surface. Report only `AI 正在处理`, `需要你处理`, `成果已可查看`, or `任务受阻`. Open the content full-deck page or visual professional page only when concentrated reading or structured feedback is needed. Open source evidence as a read-only evidence layer owned by the parent content review.
 
-Open the same complete visual contract only through `open_ai_ppt_browser_review` in the Codex built-in Browser. Preserve the Deck framework, Deck Design System, native anchor identity, target evidence identities, frozen content, and every per-slide implementation condition. Exact-text marks are version-bound and do not confirm G3. G3 requires explicit user confirmation of the current review source with a real host-verified message reference.
+Open or resume the exact current ReviewSession, let the host create its authenticated Review Bridge resource, and open only that resource in the Codex built-in Browser. If host open or reliable save is unavailable, return `BROWSER_REVIEW_UNAVAILABLE` or `BROWSER_REVIEW_SAVE_UNAVAILABLE`, preserve Runtime state and drafts, and retry. A local preview, URL, fixture, Browser render, or simulated receipt is not real host evidence.
 
-### 6. Full deck, four-target G4, and chat delivery
+## Recover and learn
 
-After G3, Codex Presentations builds the full native editable PPTX. Keep titles, body text, labels, facts, numbers, charts, tables, diagrams, arrows, relationships, logos, and page markers native. Keep photos, screenshots, complex illustration, and texture as separate replaceable image layers. Add `[Sources]` notes for non-trivial claims/assets, render every page, inspect every page, and repair all defects.
-
-Validate the identical final PPTX in the same four desktop targets with the same PPTX SHA-256. Register the delivery package, send that exact PPTX through Codex chat, persist the verified host delivery reference, and confirm G4 only against the current package, four target records, sent file, and explicit user message.
-
-## Native UI contract
-
-- The real Codex sidebar is the only lightweight workbench surface. `get_ai_ppt_sidebar_projection` returns pure data for its 360–480px five-space projection. If the host lacks that surface, return `HOST_SIDEBAR_UNAVAILABLE`; the product never renders a Widget in chat.
-- Content and visual review share one responsive document and save contract at 760/1000/1440px, opened only through `open_ai_ppt_browser_review` in the Codex built-in Browser.
-- The review Header always keeps both content/visual controls. Switching never reuses the current single-reviewType token across scopes: save current marks first, then let the authenticated Review Bridge resolve the authoritative target source/revision and issue a new short-lived scoped session.
-- If Browser open or reliable save is unavailable, return `BROWSER_REVIEW_UNAVAILABLE` or `BROWSER_REVIEW_SAVE_UNAVAILABLE`, preserve project state and mark drafts, and retry. MCP Apps chat display modes are not substitutes for either surface.
-- The professional review header, overlay outline, overlay marks drawer, exact mark saving, conflict recovery, complete fields, and stable anchors are authoritative presentation only—not Gate computation.
-
-## Recovery and learning
-
-Read `references/review-and-feedback.md` before applying feedback and `references/experience-evolution.md` before promoting learning. Preserve old immutable artifacts. Reopen the earliest affected Gate only; keep unrelated accepted work. A target environment change invalidates only its row when the PPTX hash is unchanged; any PPTX hash change invalidates all four rows. A single user reaction or test fixture never mutates the stable Skill core.
-
-## User interaction
+Read `references/review-and-feedback.md` before applying feedback. Reopen the earliest affected Gate and preserve unrelated accepted work plus immutable history. Read `references/experience-evolution.md` before using `recommend_experience`, `record_experience_application`, or `summarize_project_experience`. Reuse only sanitized `same-type` or `global` mechanisms with evidence and rollback.
 
 Work autonomously between real business checkpoints. Ask only for missing high-impact facts, conflicting source truth, unreadable critical material, or the explicit G0/G3/G4 judgment. Never ask the user to choose implementation technology. Never manufacture a user message, desktop application result, real project, or acceptance evidence.

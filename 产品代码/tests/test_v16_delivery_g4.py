@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ai_ppt_studio.domains.presentation.targets import REQUIRED_TARGET_IDS
+from ai_ppt_studio.application.release_policy_service import ReleaseTargetPolicyService
 from ai_ppt_studio.errors import ContractValidationError, GateBlockedError
 from tests.v16_delivery_fixtures import (
     package_artifacts,
@@ -26,14 +26,17 @@ from tests.v16_delivery_fixtures import (
 class V16DeliveryG4Tests(unittest.TestCase):
     def test_slide_and_deck_qa_are_binary_complete_and_current(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            delivery, revision, refs = prepared_build(Path(temp), slide_count=2)
-            scored = valid_slide_qa(delivery, refs, "s1")
+            delivery, revision, refs = prepared_build(Path(temp), slide_count=3)
+            first_slide_id = refs["slide_ids"][0]
+            scored = valid_slide_qa(delivery, refs, first_slide_id)
             scored["score"] = 96
             with self.assertRaises(ContractValidationError):
                 delivery.register_slide_qa("scored-slide", revision, scored)
             self.assertEqual(delivery.kernel.load().revision, revision)
 
-            failed = valid_slide_qa(delivery, refs, "s1", result="failed")
+            failed = valid_slide_qa(
+                delivery, refs, first_slide_id, result="failed"
+            )
             failed_ref = delivery.register_slide_qa(
                 "failed-slide", revision, failed
             )
@@ -79,7 +82,7 @@ class V16DeliveryG4Tests(unittest.TestCase):
 
     def test_delivery_ready_requires_four_full_deck_targets_for_one_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            delivery, revision, refs = prepared_qa(Path(temp), slide_count=2)
+            delivery, revision, refs = prepared_qa(Path(temp), slide_count=3)
             with self.assertRaises(GateBlockedError):
                 delivery.finalize_delivery("early-finalize", revision)
             invalid = rich_g4_target_payload(
@@ -99,19 +102,13 @@ class V16DeliveryG4Tests(unittest.TestCase):
                     "anchor-stage-target", revision, wrong_stage
                 )
             current_revision = revision
-            for target_id in REQUIRED_TARGET_IDS[:-1]:
-                delivery.register_target_render_evidence(
-                    f"g4-target-{target_id}",
-                    current_revision,
-                    rich_g4_target_payload(delivery, target_id, refs),
-                )
-                current_revision += 1
             with self.assertRaises(GateBlockedError):
                 delivery.finalize_delivery(
                     "missing-one-target", current_revision
                 )
             self.assertEqual(delivery.kernel.load().revision, current_revision)
-            last_target = REQUIRED_TARGET_IDS[-1]
+            _policy_ref, policy = ReleaseTargetPolicyService(delivery.kernel).current()
+            last_target = policy.required_target_ids[0]
             delivery.register_target_render_evidence(
                 f"g4-target-{last_target}",
                 current_revision,
@@ -125,7 +122,7 @@ class V16DeliveryG4Tests(unittest.TestCase):
     def test_package_chat_send_and_explicit_user_message_are_separate_g4_steps(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             delivery, revision, refs = prepared_delivery_ready(
-                Path(temp), slide_count=2
+                Path(temp), slide_count=3
             )
             artifacts = package_artifacts(delivery, refs)
             invalid_package = valid_package_payload(refs, artifacts)

@@ -5,9 +5,9 @@ Read this policy before any file write.
 ## Four zones
 
 1. The upstream Web product design directory is read-only to the Skill App.
-2. The Skill source repository may contain code, tests, specifications, and release assets only. Never store customer materials, project outputs, or personal memory there.
+2. The Skill source repository may contain code, tests, specifications, and release assets only. Never store customer materials, project outputs, or reusable Runtime memory there.
 3. The Codex installation directory contains only a replaceable installed Skill. Never store project state or rendered artifacts there.
-4. All project state, generated HTML, images, PPTX files, renders, evaluation data, and personal experience belong under the configured managed runtime root.
+4. All project state, generated HTML, images, PPTX files, renders, evaluation data, and reusable experience belong under the configured managed Runtime root.
 
 ## Protected paths
 

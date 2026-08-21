@@ -4,7 +4,7 @@ Codex Presentations is mandatory for all PPTX reads, creates, edits, renders, an
 
 ## Authorized handoff
 
-The task must include current content blueprint, Deck Design System, full slide contract set, real local assets, output PPTX/render paths inside the managed project, source-note policy, exact change scope, expected revision, and authorizing Gate. Before G1, no anchor PPTX is authorized; before G3, no full-deck build is authorized.
+The task must include the current `ReadingDeckBlueprint`, `DeckDesignSystem`, every `SlideVisualContract`, real local assets, output PPTX/render paths inside the managed project, source-note policy, exact change scope, expected revision, current `ReleaseTargetPolicy`, and authorizing Gate. Before G1, no anchor PPTX is authorized; before G3, no full-deck build is authorized.
 
 ## Native semantic editability
 
@@ -14,8 +14,8 @@ Add `[Sources]` blocks to speaker notes for non-trivial claims and external asse
 
 ## Anchor build and G2
 
-Build difficult and content-complex native anchors from the full accepted contract. Render and inspect every anchor, fix overlap, clipping, wrapping, crop, font, connector, source-note, object, and editability defects. Then validate the identical anchor PPTX in all four desktop targets defined in `four-target-acceptance.md`; G2 remains blocked until every row passes on the same PPTX SHA-256.
+Build difficult and content-complex native anchors from the full accepted contract. Render and inspect every anchor; fix overlap, clipping, wrapping, crop, font, connector, source-note, object, and editability defects. Validate the identical anchor PPTX in every `ReleaseTargetPolicy.required_target_ids` target defined in `release-target-policy.md`. G2 remains blocked until every current required row passes on the same PPTX SHA-256.
 
 ## Full deck and G4
 
-After G3, build the complete deck, render every page, inspect each page at full size, use a montage only for rhythm, run overflow/structure/source/editability checks, and repair all failures. Validate the identical final PPTX in all four targets again. Register the delivery package and send that exact file through Codex chat before G4 confirmation.
+After G3, build the complete deck, render every page, inspect each page at full size, use a montage only for rhythm, run overflow/structure/source/editability checks, and repair all failures. Validate the identical final PPTX against every current required target. Register the delivery package and send that exact file through Codex chat before G4 confirmation.

@@ -11,23 +11,28 @@ from ai_ppt_studio.kernel.transactions import ProjectKernel
 from ai_ppt_studio.role_registry import RoleRegistry
 from ai_ppt_studio.scenario_packs import ScenarioPackRegistry
 from ai_ppt_studio.application.mission_readiness import MissionReadinessPolicy
-from ai_ppt_studio.application.content_action_policy import (
-    BATCH_APPLY_ACTIONS,
-    BATCH_PLAN_ACTIONS,
-    CONTENT_ACTIONS,
-    FRAMEWORK_ACTIONS,
-    FULL_DECK_CONTENT_ACTIONS,
-    content_action_contract,
-    validate_content_action_targets,
+from ai_ppt_studio.application.release_policy_service import (
+    ReleaseTargetPolicyService,
 )
 
-
-FOUR_TARGETS = (
-    "macos-powerpoint",
-    "macos-wps",
-    "windows-powerpoint",
-    "windows-wps",
-)
+V22_CONTENT_TASK_ROLES = {
+    "build-presales-evidence-book": "presales-solution-chief",
+    "build-customer-decision-context": "presales-solution-chief",
+    "build-problem-solution-fit": "presales-solution-chief",
+    "build-reading-deck-blueprint": "presales-solution-chief",
+    "repair-reading-deck-blueprint": "presales-solution-chief",
+    "run-content-evidence-gate": "content-evidence-gate-reviewer",
+    "run-content-presales-reading-gate": "content-presales-reading-gate-reviewer",
+}
+V22_CONTENT_OUTPUT_KINDS = {
+    "build-presales-evidence-book": "presales-evidence-book",
+    "build-customer-decision-context": "customer-decision-context",
+    "build-problem-solution-fit": "problem-solution-fit-map",
+    "build-reading-deck-blueprint": "reading-deck-blueprint",
+    "repair-reading-deck-blueprint": "reading-deck-blueprint",
+    "run-content-evidence-gate": "content-hard-gate-record",
+    "run-content-presales-reading-gate": "content-hard-gate-record",
+}
 
 class ContextCompiler:
     """Build the minimum governed context required by one formal role task."""
@@ -47,6 +52,9 @@ class ContextCompiler:
         failure_conditions: list[str] | None = None,
         preserve_refs: list[str] | None = None,
         last_valid_result_refs: list[str] | None = None,
+        experience_type_signature: str = "",
+        experience_applicability: dict[str, Any] | None = None,
+        experience_limit: int = 8,
     ) -> dict[str, Any]:
         state = self.kernel.load()
         if state.revision != project_revision:
@@ -54,27 +62,18 @@ class ContextCompiler:
                 "Context Pack project_revision must equal the current revision"
             )
         role = RoleRegistry.default().get(role_id)
-        action_contract = content_action_contract(task_type)
-        if action_contract is not None:
-            if role_id != action_contract.role_id:
-                raise WorkbenchValidationError(
-                    "Context Pack role does not match content action policy"
-                )
-            validate_content_action_targets(
-                task_type, target_refs, state.artifact_heads
+        if task_type in V22_CONTENT_TASK_ROLES:
+            return self._compile_v22_content_task(
+                role=role,
+                role_id=role_id,
+                task_type=task_type,
+                project_revision=project_revision,
+                target_refs=target_refs,
+                instructions=instructions,
+                experience_type_signature=experience_type_signature,
+                experience_applicability=experience_applicability,
+                experience_limit=experience_limit,
             )
-        if task_type in FRAMEWORK_ACTIONS:
-            MissionReadinessPolicy(self.kernel).require_ready()
-        elif task_type in (
-            FULL_DECK_CONTENT_ACTIONS
-            | BATCH_PLAN_ACTIONS
-            | BATCH_APPLY_ACTIONS
-        ):
-            from ai_ppt_studio.application.content_service import (
-                require_full_deck_expansion_authorization,
-            )
-
-            require_full_deck_expansion_authorization(self.kernel)
         pack = ScenarioPackRegistry.default().resolve(
             scene="presales", task_type="reading-first"
         )
@@ -106,12 +105,17 @@ class ContextCompiler:
             "same_pptx_sha256_required": False,
         }
         if task_type in {"verify-target-render", "coordinate-delivery"}:
+            policy_ref, policy = ReleaseTargetPolicyService(self.kernel).current()
             target_contract = {
                 "required": True,
-                "targets": list(FOUR_TARGETS),
+                "release_target_policy_ref": policy_ref,
+                "required_target_ids": list(policy.required_target_ids),
+                "deferred_target_ids": list(policy.deferred_target_ids),
+                "targets": list(policy.required_target_ids),
                 "same_pptx_sha256_required": True,
                 "desktop_evidence_only": True,
                 "preflight_evidence_forbidden": True,
+                "deferred_compatibility_claims_forbidden": True,
             }
         repair = task_type in {"repair-content", "govern-feedback"}
         repair_contract = {
@@ -121,50 +125,17 @@ class ContextCompiler:
             "last_valid_result_refs": list(last_valid_result_refs or []),
             "whole_project_rewrite_forbidden": repair,
         }
-        content_workflow = {
-            "framework_ref": state.artifact_heads.get(
-                "content/framework-draft", ""
-            ),
-            "framework_confirmation_ref": state.artifact_heads.get(
-                "content/framework-confirmation", ""
-            ),
-            "full_deck_expansion_authorization_ref": state.artifact_heads.get(
-                "content/full-deck-expansion-authorization", ""
+        content_review = {
+            "reading_blueprint_ref": state.artifact_heads.get(
+                "content/reading-blueprint", ""
             ),
             "review_batch_ref": state.artifact_heads.get(
                 "content/review-batch", ""
             ),
-            "batch_revision_plan_ref": state.artifact_heads.get(
-                "content/batch-revision-plan", ""
-            ),
-            "batch_plan_confirmation_ref": state.artifact_heads.get(
-                "content/batch-plan-confirmation", ""
+            "revision_plan_ref": state.artifact_heads.get(
+                "content/revision-plan", ""
             ),
         }
-        if action_contract is not None:
-            workflow_keys_by_slot = {
-                "content/framework-draft": "framework_ref",
-                "content/framework-confirmation": "framework_confirmation_ref",
-                "content/full-deck-expansion-authorization": (
-                    "full_deck_expansion_authorization_ref"
-                ),
-                "content/review-batch": "review_batch_ref",
-                "content/batch-revision-plan": "batch_revision_plan_ref",
-                "content/batch-plan-confirmation": "batch_plan_confirmation_ref",
-            }
-            visible_workflow_keys = {
-                workflow_keys_by_slot[slot]
-                for slot in action_contract.workflow_slots
-            }
-            content_workflow = {
-                key: value if key in visible_workflow_keys else ""
-                for key, value in content_workflow.items()
-            }
-        active_head_slots = (
-            set(action_contract.active_head_slots)
-            if action_contract is not None
-            else None
-        )
         return {
             "schema_version": "3.0",
             "project_id": state.project_id,
@@ -173,7 +144,7 @@ class ContextCompiler:
             "compiled_at": datetime.now(timezone.utc).isoformat(),
             "layers": {
                 "governance": {
-                    "stable_governance_version": "ai-ppt-governance/v1.6",
+                    "stable_governance_version": "ai-ppt-governance/v2.2",
                     "production_route": production_route,
                     "content_before_visual": True,
                     "immutable_references_required": True,
@@ -181,9 +152,9 @@ class ContextCompiler:
                     "gates": {
                         "G0": "user-chat-confirmed",
                         "G1": "internal-binary",
-                        "G2": "internal-binary-four-target",
+                        "G2": "internal-binary-release-target",
                         "G3": "user-chat-confirmed",
-                        "G4": "user-chat-confirmed-four-target",
+                        "G4": "user-chat-confirmed-release-target",
                     },
                 },
                 "scenario_pack": {
@@ -216,19 +187,15 @@ class ContextCompiler:
                         key: value
                         for key, value in state.artifact_heads.items()
                         if (
-                            key in active_head_slots
-                            if active_head_slots is not None
-                            else (
-                                key in {
-                                    "mission/draft",
-                                    "mission/confirmation",
-                                    "materials",
-                                    "human/decision/latest",
-                                }
-                                or key.startswith("content/")
-                                or key.startswith("visual/")
-                                or key.startswith("delivery/")
-                            )
+                            key in {
+                                "mission/draft",
+                                "mission/confirmation",
+                                "materials",
+                                "human/decision/latest",
+                            }
+                            or key.startswith("content/")
+                            or key.startswith("visual/")
+                            or key.startswith("delivery/")
                         )
                     },
                 },
@@ -261,7 +228,7 @@ class ContextCompiler:
                         ],
                     },
                 },
-                "content_workflow": content_workflow,
+                "content_review": content_review,
                 "experience_slice": experience_slice,
                 "repair_contract": repair_contract,
                 "target_render_contract": target_contract,
@@ -293,6 +260,110 @@ class ContextCompiler:
         if reference.kind != kind:
             raise ArtifactReferenceError(f"Unexpected artifact kind for {slot}")
         return dict(self.kernel.artifacts.resolve(reference)["payload"])
+
+    def _compile_v22_content_task(
+        self,
+        *,
+        role: Any,
+        role_id: str,
+        task_type: str,
+        project_revision: int,
+        target_refs: list[str],
+        instructions: str,
+        experience_type_signature: str,
+        experience_applicability: dict[str, Any] | None,
+        experience_limit: int,
+    ) -> dict[str, Any]:
+        expected_role = V22_CONTENT_TASK_ROLES[task_type]
+        if role_id != expected_role:
+            raise WorkbenchValidationError(
+                "Context Pack role does not match the v2.2 content task"
+            )
+        state = self.kernel.load()
+        current_refs = set(state.artifact_heads.values())
+        if any(reference not in current_refs for reference in target_refs):
+            raise ArtifactReferenceError(
+                "v2.2 content context accepts current artifact references only"
+            )
+        reviewer = role.authority == "reviewer"
+        if not isinstance(experience_limit, int) or isinstance(
+            experience_limit, bool
+        ) or not 1 <= experience_limit <= 50:
+            raise WorkbenchValidationError(
+                "experience_limit must be an integer from 1 to 50"
+            )
+        recommendations: list[dict[str, Any]] = []
+        if experience_type_signature.strip():
+            from ai_ppt_studio.application.experience_service import (
+                ExperienceService,
+            )
+
+            recommendations = ExperienceService(self.kernel).recommend(
+                domain="content",
+                type_signature=experience_type_signature.strip(),
+                applicability=dict(experience_applicability or {}),
+                top_n=experience_limit,
+            )
+        experience_slice = {
+            "status": "available" if recommendations else "not-available",
+            "layers": ["same-type", "global"],
+            "domain": "content",
+            "type_signature": experience_type_signature.strip(),
+            "limit": experience_limit,
+            "items": recommendations,
+        }
+        return {
+            "schema_version": "3.0",
+            "project_id": state.project_id,
+            "project_revision": project_revision,
+            "artifact_version_refs": list(target_refs),
+            "compiled_at": datetime.now(timezone.utc).isoformat(),
+            "layers": {
+                "governance": {
+                    "stable_governance_version": "ai-ppt-governance/v2.2",
+                    "production_route": "content-first",
+                    "content_before_visual": True,
+                    "immutable_references_required": True,
+                    "hidden_reasoning_persistence_forbidden": True,
+                },
+                "scenario_pack": {
+                    "scene": "presales",
+                    "task_type": "reading-first",
+                },
+                "project_facts": {
+                    "mission_confirmation_ref": state.artifact_heads.get(
+                        "mission/confirmation", ""
+                    ),
+                    "material_inventory_ref": state.artifact_heads.get(
+                        "materials", ""
+                    ),
+                },
+                "role_contract": {
+                    "role_id": role.role_id,
+                    "display_name": role.display_name,
+                    "authority": role.authority,
+                    "isolation_group": role.isolation_group,
+                },
+                "task_contract": {
+                    "task_type": task_type,
+                    "instructions": instructions.strip(),
+                    "reviewer_cannot_edit": reviewer,
+                },
+                "current_content_refs": list(target_refs),
+                "experience_slice": experience_slice,
+                "tool_contract": {
+                    "writeback": "authoritative-runtime-only",
+                    "pptx": "not-authorized-by-content-task",
+                },
+                "output_contract": {
+                    "format": "governed-artifact",
+                    "allowed_kind": V22_CONTENT_OUTPUT_KINDS[task_type],
+                    "must_be_immutable": True,
+                    "binary_gate_required": reviewer,
+                },
+                "exclusions": self._exclusions(role.authority, role.role_group),
+            },
+        }
 
     def _optional_payload(self, slot: str, kind: str) -> dict[str, Any]:
         value = self.kernel.load().artifact_heads.get(slot)

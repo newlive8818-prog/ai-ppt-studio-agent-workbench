@@ -1,4 +1,4 @@
-"""Build and validate the v1.6 acceptance requirement ledger."""
+"""Build and validate acceptance requirements from explicit baseline IDs."""
 
 from __future__ import annotations
 
@@ -8,9 +8,14 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
-MAJOR_HEADING = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
-HEADING = re.compile(r"^###\s+(\d+(?:\.\d+)*)\s+(.+?)\s*$")
-ITEM = re.compile(r"^(\d+)\.\s+(.+?)\s*$")
+MAJOR_HEADING = re.compile(r"^##\s+(?:\d+\.\s+)?(.+?)\s*$")
+HEADING = re.compile(r"^###\s+(?:\d+(?:\.\d+)*\s+)?(.+?)\s*$")
+ITEM = re.compile(r"^(?:\d+\.|-)\s+(.+?)\s*$")
+TAGGED_ITEM = re.compile(r"^\[([^]]+)\]\s*(.*?)\s*$")
+CURRENT_REQUIREMENT_ID = re.compile(
+    r"[A-Z][A-Z0-9]*-ACC(?:-[A-Z0-9]+)+-\d{3}"
+)
+LEGACY_REQUIREMENT_ID = re.compile(r"[A-Z]+-\d+(?:\.\d+)*-\d{2}")
 
 
 @dataclass(frozen=True)
@@ -18,6 +23,7 @@ class Requirement:
     """One numbered baseline requirement and its minimum proof contract."""
 
     requirement_id: str
+    source_file: str
     source_section: str
     text: str
     required_evidence: tuple[str, ...]
@@ -84,7 +90,10 @@ class EvidenceIndex:
                 or not requirement_ids
                 or len(requirement_ids) != len(set(requirement_ids))
                 or any(
-                    not re.fullmatch(r"[A-Z]+-\d+(?:\.\d+)*-\d{2}", value)
+                    not (
+                        CURRENT_REQUIREMENT_ID.fullmatch(value)
+                        or LEGACY_REQUIREMENT_ID.fullmatch(value)
+                    )
                     for value in requirement_ids
                 )
             ):
@@ -119,49 +128,74 @@ class EvidenceIndex:
         return cls.from_dict(payload, base_path=path.parent)
 
 
-def _proof_kinds(source_prefix: str, section: str) -> tuple[str, ...]:
+def _proof_kinds(requirement_id: str) -> tuple[str, ...]:
     proofs = ["automated-test", "runtime-evidence"]
-    if source_prefix == "PRD" and section == "17.3":
+    if requirement_id.startswith("PRD-ACC-VISUAL-"):
         proofs.extend(["target-evidence", "real-project"])
-    elif source_prefix == "SDD" and section == "21.3":
+    elif requirement_id.startswith("SDD-ACC-REAL-"):
         proofs.append("real-project")
-    elif source_prefix == "UI" and section.startswith("23"):
+    elif requirement_id.startswith("UI-ACC-"):
         proofs.append("viewport-evidence")
     return tuple(proofs)
 
 
 def extract_numbered_requirements(
-    markdown: str, *, source_prefix: str, section_prefix: str
+    markdown: str,
+    *,
+    source_prefix: str,
+    source_file: str,
+    section_title: str,
 ) -> tuple[Requirement, ...]:
-    """Extract numbered list items under the requested baseline section."""
+    """Extract explicitly identified items from one semantic baseline section."""
 
-    current_section = ""
+    current_section = section_title
+    in_acceptance_section = False
+    found_acceptance_section = False
     entries: list[Requirement] = []
     for line in markdown.splitlines():
         major = MAJOR_HEADING.match(line)
         if major:
-            current_section = major.group(1)
+            in_acceptance_section = major.group(1) == section_title
+            found_acceptance_section |= in_acceptance_section
+            current_section = section_title
+            continue
+        if not in_acceptance_section:
             continue
         heading = HEADING.match(line)
         if heading:
             current_section = heading.group(1)
             continue
-        if not current_section.startswith(f"{section_prefix}."):
-            continue
         item = ITEM.match(line)
         if not item:
             continue
-        number, text = item.groups()
+        tagged = TAGGED_ITEM.match(item.group(1))
+        if not tagged:
+            raise ValueError(
+                f"Acceptance item is missing explicit ID in {source_file}: {item.group(1)}"
+            )
+        requirement_id, text = (value.strip() for value in tagged.groups())
+        if (
+            not CURRENT_REQUIREMENT_ID.fullmatch(requirement_id)
+            or not requirement_id.startswith(f"{source_prefix}-ACC-")
+        ):
+            raise ValueError(f"Invalid acceptance requirement ID: {requirement_id}")
+        if not text:
+            raise ValueError(f"Acceptance requirement is missing text: {requirement_id}")
         entries.append(
             Requirement(
-                requirement_id=(
-                    f"{source_prefix}-{current_section}-{int(number):02d}"
-                ),
+                requirement_id=requirement_id,
+                source_file=source_file,
                 source_section=current_section,
                 text=text,
-                required_evidence=_proof_kinds(source_prefix, current_section),
+                required_evidence=_proof_kinds(requirement_id),
             )
         )
+    if not found_acceptance_section:
+        raise ValueError(
+            f"Acceptance section not found in {source_file}: {section_title}"
+        )
+    if not entries:
+        raise ValueError(f"Acceptance section is empty in {source_file}: {section_title}")
     return tuple(entries)
 
 
@@ -176,12 +210,21 @@ class AcceptanceLedger:
         ids = self.ids
         if len(ids) != len(set(ids)):
             raise ValueError("Acceptance requirement IDs must be unique")
+        if any(
+            not item.source_file or not item.source_section or not item.text
+            for item in self.requirements
+        ):
+            raise ValueError("Every requirement needs source and text")
         if any(not item.required_evidence for item in self.requirements):
             raise ValueError("Every requirement needs an evidence contract")
 
     @property
     def ids(self) -> tuple[str, ...]:
         return tuple(item.requirement_id for item in self.requirements)
+
+    @property
+    def requirement_ids(self) -> tuple[str, ...]:
+        return self.ids
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -229,6 +272,7 @@ class AcceptanceLedger:
             requirements=tuple(
                 Requirement(
                     requirement_id=str(item["requirement_id"]),
+                    source_file=str(item["source_file"]),
                     source_section=str(item["source_section"]),
                     text=str(item["text"]),
                     required_evidence=tuple(item["required_evidence"]),

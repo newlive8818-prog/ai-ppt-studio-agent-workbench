@@ -14,7 +14,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ai_ppt_studio.application.content_service import ContentService
+from ai_ppt_studio.application.mission_material_service import MissionMaterialService
 from ai_ppt_studio.application.project_service import ProjectCommandService, ProjectService
 from ai_ppt_studio.config import RuntimeConfig
 from ai_ppt_studio.errors import ContractValidationError, ProjectNotFoundError
@@ -60,7 +60,7 @@ def prepare_real_project(
                 "Existing real-project MissionDraft differs from the requested draft"
             )
     else:
-        ContentService(kernel).save_mission_draft(
+        MissionMaterialService(kernel).save_mission_draft(
             "acceptance:mission", state.revision, mission
         )
 

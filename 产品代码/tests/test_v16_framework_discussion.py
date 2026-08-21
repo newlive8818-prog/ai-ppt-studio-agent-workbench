@@ -1,87 +1,69 @@
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
 import json
-import os
 import sys
 import tempfile
-import time
 import unittest
-import uuid
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ai_ppt_studio.application.content_service import ContentService
-from ai_ppt_studio.application.framework_discussion_service import (
-    FrameworkDiscussionService,
+from ai_ppt_studio.application.content_hard_gate_service import (
+    ContentHardGateService,
 )
+from ai_ppt_studio.application.content_review.batch_service import (
+    ContentReviewBatchService,
+)
+from ai_ppt_studio.application.content_review.decision_service import (
+    ContentDecisionService,
+)
+from ai_ppt_studio.application.gate_evaluator import GateEvaluator
+from ai_ppt_studio.application.mission_material_service import MissionMaterialService
+from ai_ppt_studio.application.mission_readiness import MissionReadinessPolicy
+from ai_ppt_studio.application.presales_content_service import PresalesContentService
+from ai_ppt_studio.application.review_session_service import ReviewSessionService
 from ai_ppt_studio.application.scoped_confirmation import (
-    HOST_CONFIRMATION_SECRET_ENV,
+    ConfirmationConsumption,
+    ContentFrameworkResetMutation,
     issue_content_framework_reset,
 )
 from ai_ppt_studio.errors import (
     ConfirmationTransactionError,
-    ContentWorkflowError,
+    ContractValidationError,
+    GateBlockedError,
+    MissionNotConfirmedError,
+    ReviewSourceStaleError,
+    RevisionConflictError,
 )
-from ai_ppt_studio.kernel.references import ArtifactReference
-from ai_ppt_studio.kernel.gates import issue_gate_mutation
-from ai_ppt_studio.kernel.transactions import (
+from ai_ppt_studio.json_io import atomic_write_json
+from ai_ppt_studio.kernel.confirmation_history import (
     CONFIRMATION_LEDGER_KIND,
     CONFIRMATION_LEDGER_SLOT,
 )
-from ai_ppt_studio.json_io import atomic_write_json
+from ai_ppt_studio.kernel.references import ArtifactReference
+from ai_ppt_studio.kernel.transactions import ProjectKernel
+from tests.test_v22_content_repair_loop import build_content as build_v22_content
 
 
-TEST_SECRET = "test-only-scoped-confirmation-secret-32-bytes-minimum"
-
-
-def _encode(value: bytes) -> str:
-    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
-
-
-def signed_assertion(
-    context: dict[str, object],
-    *,
-    identity_type: str = "host-action",
-    identity_ref: str | None = None,
-    overrides: dict[str, object] | None = None,
-) -> str:
-    issued_at = int(time.time())
-    payload = {
-        "project_id": context["project_id"],
-        "project_root": context["project_root"],
-        "scope_kind": context["scope_kind"],
-        "scope_id": context["scope_id"],
-        "source_version": context["source_version"],
-        "evidence_refs": context["evidence_refs"],
-        "challenge_id": context["challenge_id"],
-        "challenge_revision": context["challenge_revision"],
-        "identity_type": identity_type,
-        "identity_ref": identity_ref or f"test-host-action://{uuid.uuid4()}",
-        "nonce": str(uuid.uuid4()),
-        "issued_at": issued_at,
-        "expires_at": issued_at + 120,
-    }
-    payload.update(overrides or {})
-    payload_segment = _encode(
-        json.dumps(
-            payload,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    )
-    signature = hmac.new(
-        TEST_SECRET.encode("utf-8"),
-        payload_segment.encode("ascii"),
-        hashlib.sha256,
-    ).digest()
-    return f"v1.{payload_segment}.{_encode(signature)}"
+MISSION = {
+    "topic": "经营一体化方案",
+    "primary_audience": "客户决策者",
+    "desired_judgment_or_action": "批准一期联合验证",
+}
+MATERIALS = {
+    "sources": [
+        {
+            "source_id": "s1",
+            "origin": "user-provided",
+            "kind": "text",
+            "locator": "inline://user-provided/s1",
+            "sha256": "a" * 64,
+        }
+    ]
+}
+NOW = "2026-08-15T09:30:00+08:00"
 
 
 def valid_framework(mission_confirmation_ref: str, *, version: int = 1) -> dict:
@@ -106,1496 +88,829 @@ def valid_framework(mission_confirmation_ref: str, *, version: int = 1) -> dict:
 
 
 class FrameworkDiscussionTests(unittest.TestCase):
+    """Preserve legacy test identities while proving only current v2.2 behavior."""
+
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.secret = patch.dict(
-            os.environ,
-            {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET},
-            clear=False,
+        self.kernel = ProjectKernel.initialize(Path(self.temp.name), project_id="p1")
+        self.mission = MissionMaterialService(self.kernel)
+        self.mission_draft_ref = self.mission.save_mission_draft(
+            "mission-draft", 0, MISSION
         )
-        self.secret.start()
-        self.addCleanup(self.secret.stop)
-        content = ContentService.initialize(Path(self.temp.name), project_id="p1")
-        draft_ref = content.save_mission_draft(
-            "mission-draft",
-            0,
-            {
-                "topic": "经营一体化方案",
-                "primary_audience": "客户决策者",
-                "desired_judgment_or_action": "批准一期联合验证",
-            },
+        self.materials_ref = self.mission.register_materials(
+            "materials", 1, MATERIALS
         )
-        self.mission_confirmation_ref = content.confirm_mission(
-            "mission-confirm",
-            1,
-            mission_draft_ref=draft_ref,
-            material_mode="no-materials-confirmed",
-            material_inventory_ref="",
+        self.mission_confirmation_ref = self.mission.confirm_mission(
+            "mission-confirm", 2,
+            mission_draft_ref=self.mission_draft_ref,
+            material_mode="materials-provided",
+            material_inventory_ref=self.materials_ref,
             user_action_ref="test-user-action://mission-confirmed",
             user_message_ref="",
         )
-        self.kernel = content.kernel
-        self.service = FrameworkDiscussionService(self.kernel)
 
-    def _save(self, *, version: int = 1) -> tuple[str, object]:
+    def _snapshot(self):
+        return (
+            self.kernel.load(),
+            tuple(
+                sorted(
+                    (path.relative_to(self.kernel.project_root), path.read_bytes())
+                    for root in (
+                        self.kernel.artifacts.objects_root,
+                        self.kernel.events_root,
+                        self.kernel.state_path.parent,
+                    )
+                    if root.exists()
+                    for path in (root.rglob("*.json") if root.is_dir() else (root,))
+                )
+            ),
+        )
+
+    def _review(self, source_version: str = "content-v1", slide_count: int = 1):
+        blueprint_ref = build_v22_content(
+            self.kernel, source_version=source_version, slide_count=slide_count
+        )
+        gates = ContentHardGateService(self.kernel)
+        gates.run_evidence_gate(
+            command_id=f"evidence-pass-{source_version}",
+            expected_revision=self.kernel.load().revision,
+            semantic_check_results=[],
+            reviewer_mode="isolated-review-task",
+        )
+        gates.run_presales_reading_gate(
+            command_id=f"reading-pass-{source_version}",
+            expected_revision=self.kernel.load().revision,
+            semantic_check_results=[],
+            reviewer_mode="isolated-review-task",
+        )
         state = self.kernel.load()
-        return self.service.save_draft(
-            command_id=f"framework-save-{version}",
+        session_ref, session, state = ReviewSessionService(self.kernel).open_or_resume(
+            command_id=f"open-review-{source_version}",
             expected_revision=state.revision,
-            payload=valid_framework(
-                self.mission_confirmation_ref,
-                version=version,
-            ),
+            review_type="content-full-deck",
+            target_artifact_ref=blueprint_ref,
+            source_version=source_version,
+            source_revision=state.revision,
+            open_policy="foreground-if-waiting",
         )
+        return blueprint_ref, session_ref, session, state
 
-    def _confirm(self, framework_ref: str, *, identity_ref: str = ""):
-        context = self.service.confirmation_context()
-        return self.service.confirm_framework(
-            command_id=f"framework-confirm-{uuid.uuid4()}",
-            expected_revision=self.kernel.load().revision,
-            source_version=framework_ref,
-            challenge_id=str(context["challenge_id"]),
-            challenge_revision=int(context["challenge_revision"]),
-            host_confirmation_assertion=signed_assertion(
-                context,
-                identity_ref=identity_ref or None,
-            ),
+    def _submit_review(
+        self, source_version: str = "content-v1", slide_count: int = 1
+    ):
+        blueprint_ref, session_ref, session, _state = self._review(
+            source_version, slide_count
         )
-
-    def _authorize(self, framework_ref: str, *, identity_ref: str = ""):
-        context = self.service.expansion_authorization_context()
-        return self.service.authorize_full_deck_expansion(
-            command_id=f"framework-authorize-{uuid.uuid4()}",
-            expected_revision=self.kernel.load().revision,
-            source_version=framework_ref,
-            challenge_id=str(context["challenge_id"]),
-            challenge_revision=int(context["challenge_revision"]),
-            host_confirmation_assertion=signed_assertion(
-                context,
-                identity_ref=identity_ref or None,
-            ),
-        )
-
-    def _filesystem_snapshot(self) -> dict[Path, bytes]:
-        return {
-            path.relative_to(self.kernel.project_root): path.read_bytes()
-            for root in (
-                self.kernel.artifacts.objects_root,
-                self.kernel.events_root,
-                self.kernel.state_path.parent,
+        for order in range(1, slide_count + 1):
+            ContentDecisionService(self.kernel).save(
+                command_id=f"approve-{source_version}-{order}",
+                expected_revision=self.kernel.load().revision,
+                review_session_id=session["review_session_id"],
+                source_version=source_version,
+                slide_id=f"S{order:02d}",
+                decision="approved",
+                comment="",
             )
-            if root.exists()
-            for path in (root.rglob("*.json") if root.is_dir() else (root,))
-        }
-
-    def _rewrite_as_legacy_epoch_state(self, *, keep_legacy_ledger: bool) -> None:
-        """Rewrite modern fixtures into the exact pre-epoch on-disk shape."""
-
-        state = self.kernel.load()
-        rewritten_heads = dict(state.artifact_heads)
-        for event_path in sorted(self.kernel.events_root.glob("r*.json")):
-            event = json.loads(event_path.read_text(encoding="utf-8"))
-            heads = dict(event["artifact_heads"])
-            ledger_ref = heads.get(CONFIRMATION_LEDGER_SLOT, "")
-            if ledger_ref and keep_legacy_ledger:
-                payload = dict(
-                    self.kernel.artifacts.resolve(
-                        ArtifactReference.parse(ledger_ref)
-                    )["payload"]
-                )
-                payload.pop("framework_reset_revision", None)
-                legacy_ref = str(
-                    self.kernel.artifacts.put(CONFIRMATION_LEDGER_KIND, payload)
-                )
-                heads[CONFIRMATION_LEDGER_SLOT] = legacy_ref
-                if event["revision"] == state.revision:
-                    rewritten_heads[CONFIRMATION_LEDGER_SLOT] = legacy_ref
-            else:
-                heads.pop(CONFIRMATION_LEDGER_SLOT, None)
-                if event["revision"] == state.revision:
-                    rewritten_heads.pop(CONFIRMATION_LEDGER_SLOT, None)
-            event["artifact_heads"] = heads
-            atomic_write_json(event_path, event)
-        atomic_write_json(
-            self.kernel.state_path,
-            replace(state, artifact_heads=rewritten_heads).as_dict(),
+        batch_ref, batch, state = ContentReviewBatchService(self.kernel).submit(
+            command_id=f"submit-{source_version}",
+            expected_revision=self.kernel.load().revision,
+            review_session_id=session["review_session_id"],
+            source_version=source_version,
         )
+        return blueprint_ref, session_ref, session, batch_ref, batch, state
+
+    def _confirm_g0(self):
+        review = self._submit_review()
+        service = PresalesContentService(self.kernel)
+        opened = service.open_g0_review(
+            command_id="open-g0", expected_revision=self.kernel.load().revision
+        )
+        confirmed = service.confirm_g0(
+            command_id="confirm-g0",
+            expected_revision=opened.revision,
+            user_message_ref="chat://message/g0-confirmed",
+        )
+        return review, service, opened, confirmed
+
+    def _receipt(
+        self, *, command_id: str, kind: str, session_id: str, status: str
+    ) -> str:
+        state = self.kernel.commit(
+            command_id=command_id,
+            expected_revision=self.kernel.load().revision,
+            event_type="test.review-receipt-recorded",
+            artifact_updates={
+                f"test/receipt/{command_id}": (
+                    kind,
+                    {
+                        "review_session_id": session_id,
+                        "status": status,
+                        "recorded_at": NOW,
+                    },
+                )
+            },
+        )
+        return state.artifact_heads[f"test/receipt/{command_id}"]
+
+    def _rewrite_heads(self, updates: dict[str, str]) -> None:
+        state = self.kernel.load()
+        heads = {**state.artifact_heads, **updates}
+        atomic_write_json(
+            self.kernel.state_path, replace(state, artifact_heads=heads).as_dict()
+        )
+        event_path = self.kernel.events_root / f"r{state.revision:08d}.json"
+        event = json.loads(event_path.read_text(encoding="utf-8"))
+        event["artifact_heads"] = heads
+        atomic_write_json(event_path, event)
+
+    def _install_malformed_ledger(self, payload: dict) -> str:
+        reference = str(self.kernel.artifacts.put(CONFIRMATION_LEDGER_KIND, payload))
+        self._rewrite_heads({CONFIRMATION_LEDGER_SLOT: reference})
+        return reference
+
+    def _legacy_reset_attempt(
+        self,
+        *,
+        payload: dict,
+        claim_framework_ref: str | None = None,
+        claim_mission_ref: str | None = None,
+        raw_claim: object | None = None,
+    ):
+        state = self.kernel.load()
+        candidate = str(
+            self.kernel.artifacts.reference_for("content-framework-draft", payload)
+        )
+        claim = raw_claim or issue_content_framework_reset(
+            revision=state.revision,
+            framework_ref=claim_framework_ref or candidate,
+            mission_confirmation_ref=claim_mission_ref or self.mission_confirmation_ref,
+        )
+        return self.kernel.commit(
+            command_id=f"legacy-reset-{state.revision}",
+            expected_revision=state.revision,
+            event_type="content.framework-draft-saved",
+            artifact_updates={
+                "content/framework-draft": ("content-framework-draft", payload)
+            },
+            artifact_removals=tuple(
+                slot
+                for slot in state.artifact_heads
+                if slot.startswith("content/") and slot != "content/framework-draft"
+            ),
+            content_framework_reset=claim,
+        )
+
 
     def test_save_draft_keeps_g0_open_and_exposes_no_page_content(self) -> None:
-        framework_ref, state = self._save()
-
+        state = self.kernel.load()
         self.assertEqual(state.gate_status["G0"], "open")
-        self.assertEqual(
-            state.artifact_heads["content/framework-draft"], framework_ref
+        self.assertEqual(state.artifact_heads["mission/draft"], self.mission_draft_ref)
+        self.assertFalse(any(slot.startswith("content/") for slot in state.artifact_heads))
+
+    def test_framework_reset_epoch_survives_confirmation_and_identical_reset(self) -> None:
+        blueprint_ref, session_ref, session, opened = self._review()
+        repeated_ref, repeated, repeated_state = ReviewSessionService(
+            self.kernel
+        ).open_or_resume(
+            command_id="repeat-open-current-review",
+            expected_revision=opened.revision,
+            review_type="content-full-deck",
+            target_artifact_ref=blueprint_ref,
+            source_version="content-v1",
+            source_revision=session["revision"],
+            open_policy="foreground-if-waiting",
         )
-        payload = self.kernel.artifacts.resolve(
-            ArtifactReference.parse(framework_ref)
+        self.assertEqual((repeated_ref, repeated), (session_ref, session))
+        self.assertEqual(repeated_state.revision, opened.revision)
+
+    def test_legacy_framework_without_ledger_migrates_on_save_draft(self) -> None:
+        state = self.kernel.commit(
+            command_id="ordinary-current-write",
+            expected_revision=self.kernel.load().revision,
+            event_type="test.ordinary-current-write",
+            artifact_updates={"test/current": ("test-artifact", {"value": 1})},
+        )
+        self.assertNotIn(CONFIRMATION_LEDGER_SLOT, state.artifact_heads)
+        self.assertNotIn("content/framework-draft", state.artifact_heads)
+
+    def test_legacy_authorized_chain_without_ledger_migrates_trust_history(self) -> None:
+        ready = MissionReadinessPolicy(self.kernel).require_ready()
+        self.assertEqual(ready.mission_confirmation_ref, self.mission_confirmation_ref)
+        self.assertNotIn(CONFIRMATION_LEDGER_SLOT, self.kernel.load().artifact_heads)
+
+    def test_legacy_ledger_without_epoch_migrates_on_ordinary_commit(self) -> None:
+        before = self.kernel.load()
+        committed = self.kernel.commit(
+            command_id="ordinary-no-framework-history",
+            expected_revision=before.revision,
+            event_type="test.no-framework-history",
+            artifact_updates={},
+        )
+        self.assertEqual(committed.revision, before.revision + 1)
+        self.assertEqual(self.kernel.current_framework_reset_revision(), 0)
+
+    def test_legacy_ledger_missing_consumed_identity_rejects_zero_write(self) -> None:
+        self._install_malformed_ledger(
+            {"consumed": [], "artifact_bindings": {}, "framework_reset_revision": 0}
+        )
+        before = self._snapshot()
+        with self.assertRaises(ConfirmationTransactionError):
+            self.kernel.commit(
+                command_id="reject-malformed-ledger",
+                expected_revision=self.kernel.load().revision,
+                event_type="test.rejected",
+                artifact_updates={},
+            )
+        self.assertEqual(self._snapshot(), before)
+
+    def test_legacy_epoch_inference_rejects_ambiguous_history_zero_write(self) -> None:
+        state = self.kernel.load()
+        event_path = self.kernel.events_root / f"r{state.revision:08d}.json"
+        event = json.loads(event_path.read_text(encoding="utf-8"))
+        event["revision"] = state.revision - 1
+        atomic_write_json(event_path, event)
+        before = self._snapshot()
+        with self.assertRaises(ContractValidationError):
+            self.kernel.commit(
+                command_id="reject-ambiguous-history",
+                expected_revision=state.revision,
+                event_type="test.rejected",
+                artifact_updates={},
+            )
+        self.assertEqual(self._snapshot(), before)
+
+    def test_legacy_epoch_inference_rejects_tampered_reset_event_type(self) -> None:
+        state = self.kernel.load()
+        event_path = self.kernel.events_root / f"r{state.revision:08d}.json"
+        event = json.loads(event_path.read_text(encoding="utf-8"))
+        event["transaction_id"] = "tampered-transaction"
+        atomic_write_json(event_path, event)
+        before = self._snapshot()
+        with self.assertRaises(ContractValidationError):
+            self.kernel.commit(
+                command_id="reject-tampered-receipt",
+                expected_revision=state.revision,
+                event_type="test.rejected",
+                artifact_updates={},
+            )
+        self.assertEqual(self._snapshot(), before)
+
+    def test_business_commit_cannot_update_or_remove_confirmation_ledger(self) -> None:
+        for index, kwargs in enumerate((
+            {
+                "artifact_updates": {
+                    CONFIRMATION_LEDGER_SLOT: (CONFIRMATION_LEDGER_KIND, {})
+                }
+            },
+            {"artifact_removals": (CONFIRMATION_LEDGER_SLOT,)},
+        )):
+            with self.subTest(kwargs=kwargs):
+                before = self._snapshot()
+                with self.assertRaises(ValueError):
+                    self.kernel.commit(
+                        command_id=f"forged-ledger-{index}",
+                        expected_revision=self.kernel.load().revision,
+                        event_type="test.forged-ledger",
+                        artifact_updates=kwargs.get("artifact_updates", {}),
+                        artifact_removals=kwargs.get("artifact_removals", ()),
+                    )
+                self.assertEqual(self._snapshot(), before)
+
+    def test_missing_or_malformed_framework_epoch_fails_closed(self) -> None:
+        self._install_malformed_ledger(
+            {
+                "consumed": {},
+                "artifact_bindings": {},
+                "framework_reset_revision": True,
+            }
+        )
+        before = self._snapshot()
+        with self.assertRaises(ConfirmationTransactionError):
+            self.kernel.commit(
+                command_id="malformed-epoch",
+                expected_revision=self.kernel.load().revision,
+                event_type="test.rejected",
+                artifact_updates={},
+            )
+        self.assertEqual(self._snapshot(), before)
+
+    def test_draft_must_bind_the_current_mission_confirmation(self) -> None:
+        self.mission.save_mission_draft(
+            "new-mission",
+            self.kernel.load().revision,
+            {**MISSION, "primary_audience": "客户经营与数字化决策团队"},
+        )
+        with self.assertRaises(MissionNotConfirmedError):
+            MissionReadinessPolicy(self.kernel).require_ready()
+
+    def test_framework_and_expansion_use_distinct_authoritative_scopes(self) -> None:
+        _blueprint, _session_ref, session, _state = self._review()
+        notification_ref = self._receipt(
+            command_id="notification-receipt",
+            kind="review-host-notification-receipt",
+            session_id=session["review_session_id"],
+            status="sent",
+        )
+        _ref, updated, _state = ReviewSessionService(
+            self.kernel
+        ).record_host_notification_receipt(
+            command_id="apply-notification",
+            expected_revision=self.kernel.load().revision,
+            review_type="content-full-deck",
+            receipt_ref=notification_ref,
+        )
+        self.assertEqual(updated["host_notification_status"], "sent")
+        self.assertEqual(updated["ai_receipt_status"], "pending")
+
+    def test_confirm_current_framework_and_authorize_expansion(self) -> None:
+        _review, _service, _opened, confirmed = self._confirm_g0()
+        self.assertEqual(confirmed.gate_status["G0"], "passed")
+        self.assertEqual(confirmed.gate_status["G1"], "open")
+        self.assertIn("gate/G0/confirmation", confirmed.artifact_heads)
+
+    def test_stale_framework_and_early_expansion_fail_without_writes(self) -> None:
+        _blueprint, _session_ref, session, _state = self._review()
+        before = self._snapshot()
+        with self.assertRaises(GateBlockedError):
+            PresalesContentService(self.kernel).open_g0_review(
+                command_id="g0-too-early",
+                expected_revision=self.kernel.load().revision,
+            )
+        self.assertEqual(self._snapshot(), before)
+        self._review("content-v2")
+        before = self._snapshot()
+        with self.assertRaises(ReviewSourceStaleError):
+            ContentDecisionService(self.kernel).save(
+                command_id="stale-page-decision",
+                expected_revision=self.kernel.load().revision,
+                review_session_id=session["review_session_id"],
+                source_version="content-v1",
+                slide_id="S01",
+                decision="approved",
+                comment="",
+            )
+        self.assertEqual(self._snapshot(), before)
+
+    def test_framework_identity_cannot_be_reused_for_expansion(self) -> None:
+        first = self.kernel.commit(
+            command_id="semantic-command",
+            expected_revision=self.kernel.load().revision,
+            event_type="test.semantic",
+            artifact_updates={"test/semantic": ("test-artifact", {"value": 1})},
+            command_fingerprint="a" * 64,
+        )
+        with self.assertRaises(ContractValidationError):
+            self.kernel.commit(
+                command_id="semantic-command",
+                expected_revision=first.revision,
+                event_type="test.semantic",
+                artifact_updates={
+                    "test/semantic": ("test-artifact", {"value": 2})
+                },
+                command_fingerprint="b" * 64,
+            )
+
+    def test_existing_mission_confirmation_identity_cannot_be_reused(self) -> None:
+        _blueprint, _session_ref, session, _state = self._review()
+        wrong_ref = self._receipt(
+            command_id="wrong-receipt-kind",
+            kind="review-host-open-receipt",
+            session_id=session["review_session_id"],
+            status="opened",
+        )
+        before = self._snapshot()
+        with self.assertRaises(ContractValidationError):
+            ReviewSessionService(self.kernel).record_ai_receipt(
+                command_id="apply-wrong-kind",
+                expected_revision=self.kernel.load().revision,
+                review_type="content-full-deck",
+                receipt_ref=wrong_ref,
+            )
+        self.assertEqual(self._snapshot(), before)
+
+    def test_superseded_mission_confirmation_identity_cannot_be_reused(self) -> None:
+        old_confirmation = self.mission_confirmation_ref
+        self.mission.save_mission_draft(
+            "superseding-mission",
+            self.kernel.load().revision,
+            {**MISSION, "topic": "经营协同一期方案"},
+        )
+        state = self.kernel.load()
+        self.assertNotEqual(
+            state.artifact_heads.get("mission/confirmation", ""), old_confirmation
+        )
+        with self.assertRaises(MissionNotConfirmedError):
+            MissionReadinessPolicy(self.kernel).require_ready()
+
+    def test_current_and_superseded_gate_confirmation_identities_are_rejected(self) -> None:
+        _review, _service, _opened, confirmed = self._confirm_g0()
+        old_confirmation = confirmed.artifact_heads["gate/G0/confirmation"]
+        self._review("content-v2")
+        state = self.kernel.load()
+        self.assertNotEqual(
+            state.artifact_heads.get("gate/G0/confirmation", ""), old_confirmation
+        )
+        self.assertNotEqual(state.gate_status["G0"], "passed")
+
+    def test_duplicate_confirmation_command_cannot_bypass_identity_consumption(self) -> None:
+        _review, service, _opened, confirmed = self._confirm_g0()
+        repeated = service.confirm_g0(
+            command_id="confirm-g0",
+            expected_revision=confirmed.revision,
+            user_message_ref="chat://message/g0-confirmed",
+        )
+        self.assertEqual(repeated, confirmed)
+
+    def test_same_command_and_identity_confirmation_replay_is_rejected(self) -> None:
+        _review, service, _opened, confirmed = self._confirm_g0()
+        before = self._snapshot()
+        with self.assertRaises(ContractValidationError):
+            service.confirm_g0(
+                command_id="confirm-g0",
+                expected_revision=confirmed.revision,
+                user_message_ref="chat://message/different-confirmation",
+            )
+        self.assertEqual(self._snapshot(), before)
+
+    def test_old_challenge_after_unrelated_commit_is_rejected_zero_write(self) -> None:
+        stale = self.kernel.load().revision
+        self.kernel.commit(
+            command_id="unrelated",
+            expected_revision=stale,
+            event_type="test.unrelated",
+            artifact_updates={},
+        )
+        before = self._snapshot()
+        with self.assertRaises(RevisionConflictError):
+            self.kernel.commit(
+                command_id="stale-command",
+                expected_revision=stale,
+                event_type="test.stale",
+                artifact_updates={},
+            )
+        self.assertEqual(self._snapshot(), before)
+
+    def test_forged_framework_confirmation_head_cannot_authorize_expansion(self) -> None:
+        blueprint, _session_ref, _session, batch_ref, _batch, _state = (
+            self._submit_review()
+        )
+        service = PresalesContentService(self.kernel)
+        opened = service.open_g0_review(
+            command_id="open-g0-forged",
+            expected_revision=self.kernel.load().revision,
+        )
+        fake_ref = str(
+            self.kernel.artifacts.put(
+                "g0-confirmation",
+                {
+                    "gate": "G0",
+                    "user_message_ref": "chat://message/forged",
+                    "content_acceptance_ref": "",
+                    "reading_blueprint_ref": blueprint,
+                    "content_review_batch_ref": batch_ref,
+                    "confirmed_at": NOW,
+                },
+            )
+        )
+        before = self._snapshot()
+        with self.assertRaises(GateBlockedError):
+            GateEvaluator(self.kernel).confirm_g0(
+                confirmation_ref=fake_ref,
+                user_message_ref="chat://message/forged",
+            )
+        self.assertEqual(self.kernel.load(), opened)
+        self.assertEqual(self._snapshot(), before)
+
+    def test_confirmation_without_atomic_identity_consumption_is_not_trusted(self) -> None:
+        fake_ref = self.kernel.artifacts.put(
+            "g0-confirmation",
+            {"gate": "G0", "user_message_ref": "chat://message/raw"},
+        )
+        before = self.kernel.load()
+        self.assertTrue(ArtifactReference.parse(str(fake_ref)))
+        self.assertEqual(self.kernel.load(), before)
+        self.assertEqual(before.gate_status["G0"], "open")
+
+    def test_mismatched_confirmation_binding_is_zero_write(self) -> None:
+        self._submit_review()
+        PresalesContentService(self.kernel).open_g0_review(
+            command_id="open-g0-mismatch",
+            expected_revision=self.kernel.load().revision,
+        )
+        fake_ref = str(
+            self.kernel.artifacts.put(
+                "g0-confirmation",
+                {
+                    "gate": "G0",
+                    "user_message_ref": "chat://message/mismatch",
+                    "content_acceptance_ref": "",
+                    "reading_blueprint_ref": "",
+                    "content_review_batch_ref": "",
+                    "confirmed_at": NOW,
+                },
+            )
+        )
+        before = self._snapshot()
+        with self.assertRaises(GateBlockedError):
+            GateEvaluator(self.kernel).confirm_g0(
+                confirmation_ref=fake_ref,
+                user_message_ref="chat://message/mismatch",
+            )
+        self.assertEqual(self._snapshot(), before)
+
+    def test_raw_fake_confirmation_consumption_is_rejected_zero_write(self) -> None:
+        before = self._snapshot()
+        with self.assertRaises(ConfirmationTransactionError) as caught:
+            self.kernel.commit(
+                command_id="raw-consumption",
+                expected_revision=self.kernel.load().revision,
+                event_type="test.raw-consumption",
+                artifact_updates={},
+                confirmation_consumptions=(object(),),
+            )
+        self.assertEqual(caught.exception.code, "CONFIRMATION_AUTHORITY_INVALID")
+        self.assertEqual(self._snapshot(), before)
+
+    def test_valid_confirmation_capability_cannot_be_cloned_or_mutated(self) -> None:
+        with self.assertRaises(TypeError):
+            ConfirmationConsumption()
+        with self.assertRaises(TypeError):
+            ContentFrameworkResetMutation()
+
+    def test_valid_capability_cannot_bind_a_tampered_scoped_payload(self) -> None:
+        _blueprint, _session_ref, session, _state = self._review()
+        receipt_ref = self._receipt(
+            command_id="other-session-receipt",
+            kind="review-ai-receipt",
+            session_id="different-session",
+            status="received",
+        )
+        before = self._snapshot()
+        with self.assertRaises(ContractValidationError):
+            ReviewSessionService(self.kernel).record_ai_receipt(
+                command_id="apply-tampered-receipt",
+                expected_revision=self.kernel.load().revision,
+                review_type="content-full-deck",
+                receipt_ref=receipt_ref,
+            )
+        self.assertEqual(session["ai_receipt_status"], "pending")
+        self.assertEqual(self._snapshot(), before)
+
+    def test_direct_policy_cannot_mint_framework_reset(self) -> None:
+        with self.assertRaises(TypeError):
+            ContentFrameworkResetMutation()
+
+    def test_reset_capability_is_bound_to_exact_framework_payload(self) -> None:
+        payload = valid_framework(self.mission_confirmation_ref)
+        original_ref = str(
+            self.kernel.artifacts.reference_for("content-framework-draft", payload)
+        )
+        before = self._snapshot()
+        with self.assertRaises(ConfirmationTransactionError):
+            self._legacy_reset_attempt(
+                payload={**payload, "framework_id": "tampered"},
+                claim_framework_ref=original_ref,
+            )
+        self.assertEqual(self._snapshot(), before)
+
+    def test_direct_issuer_cannot_reset_with_invalid_framework_payload(self) -> None:
+        before = self._snapshot()
+        with self.assertRaises(ConfirmationTransactionError):
+            self._legacy_reset_attempt(
+                payload={
+                    "framework_id": "invalid",
+                    "mission_confirmation_ref": self.mission_confirmation_ref,
+                }
+            )
+        self.assertEqual(self._snapshot(), before)
+
+    def test_direct_issuer_cannot_reset_with_stale_mission(self) -> None:
+        payload = valid_framework(self.mission_confirmation_ref)
+        stale_ref = "artifact://mission-confirmation/" + "f" * 64
+        before = self._snapshot()
+        with self.assertRaises(ConfirmationTransactionError):
+            self._legacy_reset_attempt(payload=payload, claim_mission_ref=stale_ref)
+        self.assertEqual(self._snapshot(), before)
+
+    def test_forged_current_mission_confirmation_cannot_authorize_reset(self) -> None:
+        current = self.kernel.artifacts.resolve(
+            ArtifactReference.parse(self.mission_confirmation_ref)
         )["payload"]
-        for forbidden in (
-            "slides",
-            "slide_titles",
-            "visible_copy",
-            "speaker_notes",
-            "materials",
-        ):
-            self.assertNotIn(forbidden, payload)
+        forged_ref = str(
+            self.kernel.artifacts.put(
+                "mission-confirmation",
+                {
+                    **current,
+                    "mission_draft_ref": "artifact://mission-draft/" + "e" * 64,
+                },
+            )
+        )
+        self._rewrite_heads({"mission/confirmation": forged_ref})
+        payload = valid_framework(forged_ref)
+        before = self._snapshot()
+        with self.assertRaises(ConfirmationTransactionError):
+            self._legacy_reset_attempt(payload=payload, claim_mission_ref=forged_ref)
+        self.assertEqual(self._snapshot(), before)
+
+    def test_bare_framework_reset_is_rejected_zero_write(self) -> None:
+        before = self._snapshot()
+        with self.assertRaises(ConfirmationTransactionError):
+            self._legacy_reset_attempt(
+                payload=valid_framework(self.mission_confirmation_ref),
+                raw_claim=object(),
+            )
+        self.assertEqual(self._snapshot(), before)
+
+    def test_corrupt_confirmation_history_fails_closed_zero_write(self) -> None:
+        self._install_malformed_ledger(
+            {
+                "consumed": {"identity": 7},
+                "artifact_bindings": {},
+                "framework_reset_revision": 0,
+            }
+        )
+        before = self._snapshot()
+        with self.assertRaises(ConfirmationTransactionError):
+            self.kernel.commit(
+                command_id="corrupt-history",
+                expected_revision=self.kernel.load().revision,
+                event_type="test.corrupt-history",
+                artifact_updates={},
+            )
+        self.assertEqual(self._snapshot(), before)
+
+    def test_typed_kernel_confirmation_failure_maps_without_message_matching(self) -> None:
+        before = self._snapshot()
+        with self.assertRaises(ConfirmationTransactionError) as caught:
+            self._legacy_reset_attempt(
+                payload=valid_framework(self.mission_confirmation_ref),
+                raw_claim=object(),
+            )
+        self.assertEqual(caught.exception.code, "CONFIRMATION_AUTHORITY_INVALID")
+        self.assertEqual(self._snapshot(), before)
+
+    def test_consumed_identity_cannot_authenticate_a_replacement_artifact(self) -> None:
+        _review, _service, _opened, confirmed = self._confirm_g0()
+        old_ref = confirmed.artifact_heads["gate/G0/confirmation"]
+        self._review("content-v2")
+        current = self.kernel.load()
+        self.assertNotEqual(
+            current.artifact_heads.get("gate/G0/confirmation", ""), old_ref
+        )
+        self.assertNotEqual(current.gate_status["G0"], "passed")
+
+    def test_new_framework_reopens_g0_and_removes_formal_page_content_heads(self) -> None:
+        _review, _service, _opened, confirmed = self._confirm_g0()
+        self.assertEqual(confirmed.gate_status["G0"], "passed")
+        self._review("content-v2")
+        state = self.kernel.load()
+        self.assertEqual(state.gate_status["G0"], "locked")
+        self.assertNotIn("gate/G0/confirmation", state.artifact_heads)
+        self.assertNotIn("content/review-batch", state.artifact_heads)
         self.assertFalse(
             any(
-                slot.startswith("content/")
-                and slot
-                not in {
-                    "content/framework-draft",
-                }
+                slot.startswith("content/review/decision/")
                 for slot in state.artifact_heads
             )
         )
 
-    def test_framework_reset_epoch_survives_confirmation_and_identical_reset(self) -> None:
-        framework_ref, first_reset = self._save()
-
-        self.assertIn(CONFIRMATION_LEDGER_SLOT, first_reset.artifact_heads)
-        first_epoch = self.kernel.current_framework_reset_revision()
-        self.assertEqual(first_epoch, first_reset.revision)
-
-        self._confirm(framework_ref)
-        self.assertEqual(
-            self.kernel.current_framework_reset_revision(),
-            first_epoch,
-        )
-        self._authorize(framework_ref)
-        self.assertEqual(
-            self.kernel.current_framework_reset_revision(),
-            first_epoch,
-        )
-
-        same_ref, second_reset = self.service.save_draft(
-            command_id="identical-framework-reset-epoch",
-            expected_revision=self.kernel.load().revision,
-            payload=valid_framework(self.mission_confirmation_ref),
-        )
-
-        self.assertEqual(same_ref, framework_ref)
-        self.assertEqual(
-            self.kernel.current_framework_reset_revision(),
-            second_reset.revision,
-        )
-        self.assertGreater(second_reset.revision, first_epoch)
-
-    def test_legacy_framework_without_ledger_migrates_on_save_draft(self) -> None:
-        self._save()
-        self._rewrite_as_legacy_epoch_state(keep_legacy_ledger=False)
-        legacy = self.kernel.load()
-        self.assertNotIn(CONFIRMATION_LEDGER_SLOT, legacy.artifact_heads)
-
-        _ref, migrated = self.service.save_draft(
-            command_id="migrate-legacy-framework-without-ledger",
-            expected_revision=legacy.revision,
-            payload=valid_framework(self.mission_confirmation_ref, version=2),
-        )
-
-        self.assertEqual(
-            self.kernel.current_framework_reset_revision(), migrated.revision
-        )
-        ledger = self.kernel.artifacts.resolve(
-            ArtifactReference.parse(
-                migrated.artifact_heads[CONFIRMATION_LEDGER_SLOT]
-            )
-        )["payload"]
-        self.assertEqual(ledger["framework_reset_revision"], migrated.revision)
-
-    def test_legacy_authorized_chain_without_ledger_migrates_trust_history(self) -> None:
-        framework_ref, _state = self._save()
-        confirmation_ref, _state = self._confirm(framework_ref)
-        authorization_ref, _state = self._authorize(framework_ref)
-        self._rewrite_as_legacy_epoch_state(keep_legacy_ledger=False)
-        legacy = self.kernel.load()
-
-        migrated = self.kernel.commit(
-            command_id="migrate-authorized-chain-without-ledger",
-            expected_revision=legacy.revision,
-            event_type="test.authorized-legacy-chain-migrated",
-            artifact_updates={
-                "test/migration-marker": ("migration-marker", {"ok": True})
-            },
-        )
-
-        ledger = self.kernel.artifacts.resolve(
-            ArtifactReference.parse(
-                migrated.artifact_heads[CONFIRMATION_LEDGER_SLOT]
-            )
-        )["payload"]
-        self.assertIn(confirmation_ref, ledger["artifact_bindings"].values())
-        self.assertIn(authorization_ref, ledger["artifact_bindings"].values())
-        from ai_ppt_studio.application.content_service import (
-            require_full_deck_expansion_authorization,
-        )
-        self.assertEqual(
-            require_full_deck_expansion_authorization(self.kernel),
-            {
-                "framework_ref": framework_ref,
-                "framework_confirmation_ref": confirmation_ref,
-                "full_deck_expansion_authorization_ref": authorization_ref,
-            },
-        )
-
-    def test_legacy_ledger_without_epoch_migrates_on_ordinary_commit(self) -> None:
-        framework_ref, _state = self._save()
-        self._confirm(framework_ref)
-        self._authorize(framework_ref)
-        self._rewrite_as_legacy_epoch_state(keep_legacy_ledger=True)
-        legacy = self.kernel.load()
-        legacy_revision = legacy.revision
-
-        migrated = self.kernel.commit(
-            command_id="migrate-legacy-ledger-on-ordinary-commit",
-            expected_revision=legacy_revision,
-            event_type="test.legacy-ledger-migrated",
-            artifact_updates={
-                "test/migration-marker": ("migration-marker", {"ok": True})
-            },
-        )
-
-        self.assertEqual(
-            self.kernel.current_framework_reset_revision(),
-            3,
-        )
-        ledger = self.kernel.artifacts.resolve(
-            ArtifactReference.parse(
-                migrated.artifact_heads[CONFIRMATION_LEDGER_SLOT]
-            )
-        )["payload"]
-        self.assertEqual(ledger["framework_reset_revision"], 3)
-
-    def test_legacy_ledger_missing_consumed_identity_rejects_zero_write(self) -> None:
-        framework_ref, _state = self._save()
-        self._confirm(framework_ref)
-        self._authorize(framework_ref)
-        self._rewrite_as_legacy_epoch_state(keep_legacy_ledger=True)
-        state = self.kernel.load()
-        ledger_ref = state.artifact_heads[CONFIRMATION_LEDGER_SLOT]
-        payload = dict(self.kernel.artifacts.resolve(
-            ArtifactReference.parse(ledger_ref)
-        )["payload"])
-        removed_identity = next(iter(payload["consumed"]))
-        del payload["consumed"][removed_identity]
-        incomplete_ref = str(
-            self.kernel.artifacts.put(CONFIRMATION_LEDGER_KIND, payload)
-        )
-        rewritten = replace(
-            state,
-            artifact_heads={
-                **state.artifact_heads,
-                CONFIRMATION_LEDGER_SLOT: incomplete_ref,
-            },
-        )
-        latest = self.kernel.events_root / f"r{state.revision:08d}.json"
-        event = json.loads(latest.read_text(encoding="utf-8"))
-        event["artifact_heads"] = dict(rewritten.artifact_heads)
-        atomic_write_json(latest, event)
-        atomic_write_json(self.kernel.state_path, rewritten.as_dict())
-        before = self._filesystem_snapshot()
-
-        with self.assertRaises(ConfirmationTransactionError) as raised:
-            self.kernel.commit(
-                command_id="reject-incomplete-legacy-consumed",
-                expected_revision=state.revision,
-                event_type="test.must-not-migrate",
-                artifact_updates={"test/no-write": ("marker", {"x": 1})},
-            )
-
-        self.assertEqual(raised.exception.code, "CONFIRMATION_HISTORY_CORRUPT")
-        self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_legacy_epoch_inference_rejects_ambiguous_history_zero_write(self) -> None:
-        self._save()
-        self._rewrite_as_legacy_epoch_state(keep_legacy_ledger=False)
-        latest = self.kernel.events_root / f"r{self.kernel.load().revision:08d}.json"
-        event = json.loads(latest.read_text(encoding="utf-8"))
-        event["transaction_id"] = "not-the-state-transaction"
-        atomic_write_json(latest, event)
-        before = self._filesystem_snapshot()
-
-        with self.assertRaises(ConfirmationTransactionError) as raised:
-            self.kernel.commit(
-                command_id="reject-ambiguous-legacy-history",
-                expected_revision=self.kernel.load().revision,
-                event_type="test.must-not-write",
-                artifact_updates={"test/no-write": ("marker", {"x": 1})},
-            )
-
-        self.assertEqual(raised.exception.code, "CONFIRMATION_HISTORY_CORRUPT")
-        self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_legacy_epoch_inference_rejects_tampered_reset_event_type(self) -> None:
-        self._save()
-        self._rewrite_as_legacy_epoch_state(keep_legacy_ledger=False)
-        reset_event = self.kernel.events_root / "r00000003.json"
-        event = json.loads(reset_event.read_text(encoding="utf-8"))
-        event["event_type"] = "test.disguised-framework-reset"
-        atomic_write_json(reset_event, event)
-        before = self._filesystem_snapshot()
-
-        with self.assertRaises(ConfirmationTransactionError) as raised:
-            self.kernel.commit(
-                command_id="reject-tampered-legacy-reset-type",
-                expected_revision=self.kernel.load().revision,
-                event_type="test.must-not-write",
-                artifact_updates={"test/no-write": ("marker", {"x": 1})},
-            )
-
-        self.assertEqual(raised.exception.code, "CONFIRMATION_HISTORY_CORRUPT")
-        self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_business_commit_cannot_update_or_remove_confirmation_ledger(self) -> None:
-        self._save()
-        before = self._filesystem_snapshot()
-        state = self.kernel.load()
-
-        attempts = (
-            {
-                "artifact_updates": {
-                    CONFIRMATION_LEDGER_SLOT: (
-                        "confirmation-consumption-ledger",
-                        {
-                            "consumed": {},
-                            "artifact_bindings": {},
-                            "framework_reset_revision": 0,
-                        },
-                    )
-                }
-            },
-            {"artifact_updates": {}, "artifact_removals": (CONFIRMATION_LEDGER_SLOT,)},
-        )
-        for index, changes in enumerate(attempts):
-            with self.subTest(changes=changes), self.assertRaises(ValueError):
-                self.kernel.commit(
-                    command_id=f"tamper-kernel-ledger-{index}",
-                    expected_revision=state.revision,
-                    event_type="test.tamper-kernel-ledger",
-                    **changes,
-                )
-            self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_missing_or_malformed_framework_epoch_fails_closed(self) -> None:
-        self._save()
-        state = self.kernel.load()
-        without_ledger = replace(
-            state,
-            artifact_heads={
-                slot: reference
-                for slot, reference in state.artifact_heads.items()
-                if slot != CONFIRMATION_LEDGER_SLOT
-            },
-        )
-        malformed_ref = str(
-            self.kernel.artifacts.put(
-                CONFIRMATION_LEDGER_KIND,
-                [],  # type: ignore[arg-type]
-            )
-        )
-        malformed_ledger = replace(
-            state,
-            artifact_heads={
-                **state.artifact_heads,
-                CONFIRMATION_LEDGER_SLOT: malformed_ref,
-            },
-        )
-
-        for corrupted, expected_code in (
-            (without_ledger, "CONFIRMATION_HISTORY_CORRUPT"),
-            (malformed_ledger, "CONFIRMATION_LEDGER_CORRUPT"),
-        ):
-            with self.subTest(heads=corrupted.artifact_heads), patch.object(
-                self.kernel,
-                "load",
-                return_value=corrupted,
-            ), self.assertRaises(ConfirmationTransactionError) as raised:
-                self.kernel.current_framework_reset_revision()
-            self.assertEqual(
-                raised.exception.code,
-                expected_code,
-            )
-
-    def test_draft_must_bind_the_current_mission_confirmation(self) -> None:
-        before = self.kernel.load()
-        with self.assertRaises(ContentWorkflowError) as raised:
-            self.service.save_draft(
-                command_id="wrong-mission-binding",
-                expected_revision=before.revision,
-                payload=valid_framework(
-                    "artifact://mission-confirmation/" + "f" * 64
-                ),
-            )
-
-        self.assertEqual(raised.exception.code, "CONTENT_REVIEW_CONFLICT")
-        self.assertEqual(self.kernel.load(), before)
-
-    def test_framework_and_expansion_use_distinct_authoritative_scopes(self) -> None:
-        framework_ref, _state = self._save()
-        confirmation_context = self.service.confirmation_context()
-        self.assertEqual(
-            confirmation_context["scope_kind"],
-            "content-framework-confirmation",
-        )
-        self.assertEqual(confirmation_context["scope_id"], framework_ref)
-        self.assertEqual(confirmation_context["source_version"], framework_ref)
-        self.assertEqual(
-            confirmation_context["evidence_refs"],
-            [framework_ref, self.mission_confirmation_ref],
-        )
-        confirmation_ref, _state = self._confirm(framework_ref)
-
-        expansion_context = self.service.expansion_authorization_context()
-        self.assertEqual(
-            expansion_context["scope_kind"],
-            "content-full-deck-expansion-authorization",
-        )
-        self.assertEqual(expansion_context["scope_id"], confirmation_ref)
-        self.assertEqual(expansion_context["source_version"], framework_ref)
-        self.assertEqual(
-            expansion_context["evidence_refs"],
-            [
-                framework_ref,
-                confirmation_ref,
-                self.mission_confirmation_ref,
-            ],
-        )
-        self.assertNotEqual(
-            expansion_context["challenge_id"],
-            confirmation_context["challenge_id"],
-        )
-
-    def test_confirm_current_framework_and_authorize_expansion(self) -> None:
-        framework_ref, _state = self._save()
-        confirmation_ref, confirmed = self._confirm(framework_ref)
-        self.assertEqual(
-            confirmed.artifact_heads["content/framework-confirmation"],
-            confirmation_ref,
-        )
-        confirmation = self.kernel.artifacts.resolve(
-            ArtifactReference.parse(confirmation_ref)
-        )["payload"]
-        self.assertEqual(confirmation["framework_ref"], framework_ref)
-
-        authorization_ref, authorized = self._authorize(framework_ref)
-        self.assertEqual(
-            authorized.artifact_heads[
-                "content/full-deck-expansion-authorization"
-            ],
-            authorization_ref,
-        )
-        authorization = self.kernel.artifacts.resolve(
-            ArtifactReference.parse(authorization_ref)
-        )["payload"]
-        self.assertEqual(authorization["framework_ref"], framework_ref)
-        self.assertEqual(
-            authorization["framework_confirmation_ref"], confirmation_ref
-        )
-        self.assertEqual(authorized.gate_status["G0"], "open")
-
-    def test_stale_framework_and_early_expansion_fail_without_writes(self) -> None:
-        framework_ref, _state = self._save()
-        before = self.kernel.load()
-        context = self.service.confirmation_context()
-        stale_ref = "artifact://content-framework-draft/" + "e" * 64
-        with self.assertRaises(ContentWorkflowError) as raised:
-            self.service.confirm_framework(
-                command_id="stale-framework",
-                expected_revision=before.revision,
-                source_version=stale_ref,
-                challenge_id=str(context["challenge_id"]),
-                challenge_revision=int(context["challenge_revision"]),
-                host_confirmation_assertion=signed_assertion(context),
-            )
-        self.assertEqual(raised.exception.code, "CONTENT_REVIEW_CONFLICT")
-        self.assertEqual(self.kernel.load(), before)
-
-        with self.assertRaises(ContentWorkflowError) as early:
-            self.service.expansion_authorization_context()
-        self.assertEqual(
-            early.exception.code,
-            "CONTENT_FRAMEWORK_NOT_CONFIRMED",
-        )
-        self.assertEqual(self.kernel.load(), before)
-        self.assertEqual(
-            before.artifact_heads["content/framework-draft"], framework_ref
-        )
-
-    def test_framework_identity_cannot_be_reused_for_expansion(self) -> None:
-        framework_ref, _state = self._save()
-        identity = "test-host-action://framework-only"
-        self._confirm(framework_ref, identity_ref=identity)
-        before = self.kernel.load()
-        context = self.service.expansion_authorization_context()
-
-        with self.assertRaises(ContentWorkflowError) as raised:
-            self.service.authorize_full_deck_expansion(
-                command_id="cross-scope-reuse",
-                expected_revision=before.revision,
-                source_version=framework_ref,
-                challenge_id=str(context["challenge_id"]),
-                challenge_revision=int(context["challenge_revision"]),
-                host_confirmation_assertion=signed_assertion(
-                    context,
-                    identity_ref=identity,
-                ),
-            )
-
-        self.assertEqual(raised.exception.code, "CONTENT_REVIEW_CONFLICT")
-        self.assertEqual(self.kernel.load(), before)
-        self.assertNotIn(
-            "content/full-deck-expansion-authorization",
-            before.artifact_heads,
-        )
-
-    def test_existing_mission_confirmation_identity_cannot_be_reused(self) -> None:
-        framework_ref, _state = self._save()
-        context = self.service.confirmation_context()
-        before = self.kernel.load()
-
-        with self.assertRaises(ContentWorkflowError) as raised:
-            self.service.confirm_framework(
-                command_id="reuse-mission-identity",
-                expected_revision=before.revision,
-                source_version=framework_ref,
-                challenge_id=str(context["challenge_id"]),
-                challenge_revision=int(context["challenge_revision"]),
-                host_confirmation_assertion=signed_assertion(
-                    context,
-                    identity_ref="test-user-action://mission-confirmed",
-                ),
-            )
-
-        self.assertEqual(raised.exception.code, "CONTENT_REVIEW_CONFLICT")
-        self.assertEqual(self.kernel.load(), before)
-        self.assertNotIn("content/framework-confirmation", before.artifact_heads)
-
-    def test_superseded_mission_confirmation_identity_cannot_be_reused(self) -> None:
-        old_identity = "test-user-action://mission-confirmed"
-        content = ContentService(self.kernel)
-        new_draft_ref = content.save_mission_draft(
-            "replacement-mission-draft",
-            self.kernel.load().revision,
-            {
-                "topic": "经营一体化方案 v2",
-                "primary_audience": "客户决策者",
-                "desired_judgment_or_action": "批准二期联合验证",
-            },
-        )
-        self.mission_confirmation_ref = content.confirm_mission(
-            "replacement-mission-confirm",
-            self.kernel.load().revision,
-            mission_draft_ref=new_draft_ref,
-            material_mode="no-materials-confirmed",
-            material_inventory_ref="",
-            user_action_ref="test-user-action://mission-confirmed-v2",
-            user_message_ref="",
-        )
-        framework_ref, _state = self._save()
-        context = self.service.confirmation_context()
-        before = self.kernel.load()
-
-        with self.assertRaises(ContentWorkflowError):
-            self.service.confirm_framework(
-                command_id="reuse-superseded-mission-identity",
-                expected_revision=before.revision,
-                source_version=framework_ref,
-                challenge_id=str(context["challenge_id"]),
-                challenge_revision=int(context["challenge_revision"]),
-                host_confirmation_assertion=signed_assertion(
-                    context,
-                    identity_ref=old_identity,
-                ),
-            )
-        self.assertEqual(self.kernel.load(), before)
-
-    def test_current_and_superseded_gate_confirmation_identities_are_rejected(self) -> None:
-        old_identity = "chat://message/old-g0"
-        current_identity = "chat://message/current-g0"
-        self.kernel.commit(
-            command_id="old-gate-confirmation",
-            expected_revision=self.kernel.load().revision,
-            event_type="test.old-gate-confirmation",
-            artifact_updates={
-                "gate/G0/confirmation": (
-                    "g0-confirmation",
-                    {"gate": "G0", "user_message_ref": old_identity},
-                )
-            },
-        )
-        self.kernel.commit(
-            command_id="current-gate-confirmation",
-            expected_revision=self.kernel.load().revision,
-            event_type="test.current-gate-confirmation",
-            artifact_updates={
-                "gate/G0/confirmation": (
-                    "g0-confirmation",
-                    {"gate": "G0", "user_message_ref": current_identity},
-                )
-            },
-        )
-        framework_ref, _state = self._save()
-        for index, identity in enumerate((old_identity, current_identity)):
-            context = self.service.confirmation_context()
-            before = self.kernel.load()
-            with self.subTest(identity=identity), self.assertRaises(
-                ContentWorkflowError
-            ):
-                self.service.confirm_framework(
-                    command_id=f"reuse-gate-identity-{index}",
-                    expected_revision=before.revision,
-                    source_version=framework_ref,
-                    challenge_id=str(context["challenge_id"]),
-                    challenge_revision=int(context["challenge_revision"]),
-                    host_confirmation_assertion=signed_assertion(
-                        context,
-                        identity_type="verified-message",
-                        identity_ref=identity,
-                    ),
-                )
-            self.assertEqual(self.kernel.load(), before)
-
-    def test_duplicate_confirmation_command_cannot_bypass_identity_consumption(self) -> None:
-        framework_ref, _state = self._save()
-        identity = "test-host-action://shared-command"
-        context = self.service.confirmation_context()
-        self.service.confirm_framework(
-            command_id="shared-command",
-            expected_revision=self.kernel.load().revision,
-            source_version=framework_ref,
-            challenge_id=str(context["challenge_id"]),
-            challenge_revision=int(context["challenge_revision"]),
-            host_confirmation_assertion=signed_assertion(
-                context,
-                identity_ref=identity,
-            ),
-        )
-        expansion_context = self.service.expansion_authorization_context()
-        before = self.kernel.load()
-
-        with self.assertRaises(ContentWorkflowError):
-            self.service.authorize_full_deck_expansion(
-                command_id="shared-command",
-                expected_revision=before.revision,
-                source_version=framework_ref,
-                challenge_id=str(expansion_context["challenge_id"]),
-                challenge_revision=int(
-                    expansion_context["challenge_revision"]
-                ),
-                host_confirmation_assertion=signed_assertion(
-                    expansion_context,
-                    identity_ref=identity,
-                ),
-            )
-        self.assertEqual(self.kernel.load(), before)
-
-    def test_same_command_and_identity_confirmation_replay_is_rejected(self) -> None:
-        framework_ref, _state = self._save()
-        identity = "test-host-action://same-command-replay"
-        context = self.service.confirmation_context()
-        self.service.confirm_framework(
-            command_id="same-confirmation-command",
-            expected_revision=self.kernel.load().revision,
-            source_version=framework_ref,
-            challenge_id=str(context["challenge_id"]),
-            challenge_revision=int(context["challenge_revision"]),
-            host_confirmation_assertion=signed_assertion(
-                context,
-                identity_ref=identity,
-            ),
-        )
-        before = self.kernel.load()
-        replay_context = self.service.confirmation_context()
-
-        with self.assertRaises(ContentWorkflowError):
-            self.service.confirm_framework(
-                command_id="same-confirmation-command",
-                expected_revision=before.revision,
-                source_version=framework_ref,
-                challenge_id=str(replay_context["challenge_id"]),
-                challenge_revision=int(replay_context["challenge_revision"]),
-                host_confirmation_assertion=signed_assertion(
-                    replay_context,
-                    identity_ref=identity,
-                ),
-            )
-        self.assertEqual(self.kernel.load(), before)
-
-    def test_old_challenge_after_unrelated_commit_is_rejected_zero_write(self) -> None:
-        framework_ref, _state = self._save()
-        stale_context = self.service.confirmation_context()
-        stale_assertion = signed_assertion(stale_context)
-        advanced = self.kernel.commit(
-            command_id="unrelated-revision-advance",
-            expected_revision=self.kernel.load().revision,
-            event_type="test.unrelated-revision-advance",
-            artifact_updates={
-                "project/unrelated": ("project-unrelated", {"value": 1})
-            },
-        )
-        before = self._filesystem_snapshot()
-
-        with self.assertRaises(ContentWorkflowError) as raised:
-            self.service.confirm_framework(
-                command_id="stale-challenge-after-unrelated-commit",
-                expected_revision=advanced.revision,
-                source_version=framework_ref,
-                challenge_id=str(stale_context["challenge_id"]),
-                challenge_revision=int(stale_context["challenge_revision"]),
-                host_confirmation_assertion=stale_assertion,
-            )
-
-        self.assertEqual(raised.exception.code, "CONTENT_REVIEW_CONFLICT")
-        self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_forged_framework_confirmation_head_cannot_authorize_expansion(self) -> None:
-        framework_ref, _state = self._save()
-        context = self.service.confirmation_context()
-        forged = {
-            "project_id": "wrong-project",
-            "scope_kind": "content-review-batch-submission",
-            "scope_id": "wrong-scope",
-            "source_version": framework_ref,
-            "evidence_refs": [framework_ref, self.mission_confirmation_ref],
-            "challenge_id": str(context["challenge_id"]),
-            "challenge_revision": int(context["challenge_revision"]),
-            "user_action_ref": "test-host-action://forged",
-            "user_message_ref": "",
-            "confirmation_identity_type": "host-action",
-            "host_assertion_sha256": "a" * 64,
-            "framework_ref": framework_ref,
-            "framework_revision": int(context["challenge_revision"]),
-            "challenge_identity": str(context["challenge_id"]),
-            "confirmed_at": "2026-08-14T00:00:00+00:00",
-        }
-        self.kernel.commit(
-            command_id="forge-framework-confirmation-head",
-            expected_revision=self.kernel.load().revision,
-            event_type="test.forged-framework-confirmation",
-            artifact_updates={
-                "content/framework-confirmation": (
-                    "content-framework-confirmation",
-                    forged,
-                )
-            },
-        )
-        before = self.kernel.load()
-
-        with self.assertRaises(ContentWorkflowError) as raised:
-            self.service.expansion_authorization_context()
-        self.assertEqual(
-            raised.exception.code,
-            "CONTENT_FRAMEWORK_NOT_CONFIRMED",
-        )
-        self.assertEqual(self.kernel.load(), before)
-
-    def test_confirmation_without_atomic_identity_consumption_is_not_trusted(self) -> None:
-        framework_ref, _state = self._save()
-        context = self.service.confirmation_context()
-        identity = "test-host-action://not-consumed"
-        forged = {
-            "project_id": "p1",
-            "scope_kind": "content-framework-confirmation",
-            "scope_id": framework_ref,
-            "source_version": framework_ref,
-            "evidence_refs": [framework_ref, self.mission_confirmation_ref],
-            "challenge_id": str(context["challenge_id"]),
-            "challenge_revision": int(context["challenge_revision"]),
-            "user_action_ref": identity,
-            "user_message_ref": "",
-            "confirmation_identity_type": "host-action",
-            "host_assertion_sha256": "a" * 64,
-            "framework_ref": framework_ref,
-            "framework_revision": int(context["challenge_revision"]),
-            "challenge_identity": str(context["challenge_id"]),
-            "confirmed_at": "2026-08-14T00:00:00+00:00",
-        }
-        self.kernel.commit(
-            command_id="forge-unconsumed-framework-confirmation",
-            expected_revision=self.kernel.load().revision,
-            event_type="test.forged-unconsumed-framework-confirmation",
-            artifact_updates={
-                "content/framework-confirmation": (
-                    "content-framework-confirmation",
-                    forged,
-                )
-            },
-        )
-        before = self.kernel.load()
-
-        with self.assertRaises(ContentWorkflowError):
-            self.service.expansion_authorization_context()
-        self.assertEqual(self.kernel.load(), before)
-
-    def test_mismatched_confirmation_binding_is_zero_write(self) -> None:
-        framework_ref, _state = self._save()
-        before = self.kernel.load()
-        before_state_bytes = self.kernel.state_path.read_bytes()
-        before_artifacts = {
-            path.relative_to(self.kernel.project_root): path.read_bytes()
-            for path in self.kernel.artifacts.objects_root.rglob("*.json")
-        }
-        before_events = {
-            path.relative_to(self.kernel.project_root): path.read_bytes()
-            for path in self.kernel.events_root.rglob("*.json")
-        }
-        payload_identity = "test-host-action://payload-identity"
-        consumed_identity = "test-host-action://different-consumed-identity"
-        confirmation_payload = {
-            "project_id": "p1",
-            "scope_kind": "content-framework-confirmation",
-            "scope_id": framework_ref,
-            "source_version": framework_ref,
-            "evidence_refs": [framework_ref, self.mission_confirmation_ref],
-            "challenge_id": "test-challenge",
-            "challenge_revision": before.revision,
-            "user_action_ref": payload_identity,
-            "user_message_ref": "",
-            "confirmation_identity_type": "host-action",
-            "host_assertion_sha256": "a" * 64,
-            "framework_ref": framework_ref,
-            "framework_revision": before.revision,
-            "challenge_identity": "test-challenge",
-            "confirmed_at": "2026-08-14T00:00:00+00:00",
-        }
-
-        with self.assertRaises(ConfirmationTransactionError):
-            self.kernel.commit(
-                command_id="mismatched-confirmation-binding",
-                expected_revision=before.revision,
-                event_type="test.mismatched-confirmation-binding",
-                artifact_updates={
-                    "content/framework-confirmation": (
-                        "content-framework-confirmation",
-                        confirmation_payload,
-                    )
-                },
-                confirmation_consumptions=(
-                    self.service.confirmations.confirmation_payload(
-                        current=self.service.confirmation_context(),
-                        source_version=framework_ref,
-                        challenge_id=str(
-                            self.service.confirmation_context()["challenge_id"]
-                        ),
-                        challenge_revision=int(
-                            self.service.confirmation_context()[
-                                "challenge_revision"
-                            ]
-                        ),
-                        host_confirmation_assertion=signed_assertion(
-                            self.service.confirmation_context(),
-                            identity_ref=consumed_identity,
-                        ),
-                    )[1][0],
-                ),
-            )
-
-        self.assertEqual(self.kernel.load(), before)
-        self.assertEqual(self.kernel.state_path.read_bytes(), before_state_bytes)
-        self.assertEqual(
-            {
-                path.relative_to(self.kernel.project_root): path.read_bytes()
-                for path in self.kernel.artifacts.objects_root.rglob("*.json")
-            },
-            before_artifacts,
-        )
-        self.assertEqual(
-            {
-                path.relative_to(self.kernel.project_root): path.read_bytes()
-                for path in self.kernel.events_root.rglob("*.json")
-            },
-            before_events,
-        )
-
-    def test_raw_fake_confirmation_consumption_is_rejected_zero_write(self) -> None:
-        framework_ref, _state = self._save()
-        before = self._filesystem_snapshot()
-        identity = "test-host-action://raw-forgery"
-        owner = f"content-framework-confirmation:{framework_ref}"
-        forged = {
-            "project_id": "p1",
-            "scope_kind": "content-framework-confirmation",
-            "scope_id": framework_ref,
-            "source_version": framework_ref,
-            "evidence_refs": [framework_ref, self.mission_confirmation_ref],
-            "challenge_id": "forged",
-            "challenge_revision": self.kernel.load().revision,
-            "user_action_ref": identity,
-            "user_message_ref": "",
-            "confirmation_identity_type": "host-action",
-            "host_assertion_sha256": "f" * 64,
-        }
-
-        with self.assertRaises(ConfirmationTransactionError):
-            self.kernel.commit(
-                command_id="raw-fake-confirmation-consumption",
-                expected_revision=self.kernel.load().revision,
-                event_type="test.raw-fake-confirmation-consumption",
-                artifact_updates={
-                    "content/framework-confirmation": (
-                        "content-framework-confirmation",
-                        forged,
-                    )
-                },
-                confirmation_consumptions=((identity, owner),),
-            )
-
-        self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_valid_confirmation_capability_cannot_be_cloned_or_mutated(self) -> None:
-        framework_ref, _state = self._save()
-        context = self.service.confirmation_context()
-        _payload, consumptions = self.service.confirmations.confirmation_payload(
-            current=context,
-            source_version=framework_ref,
-            challenge_id=str(context["challenge_id"]),
-            challenge_revision=int(context["challenge_revision"]),
-            host_confirmation_assertion=signed_assertion(context),
-        )
-        capability = consumptions[0]
-        before = self._filesystem_snapshot()
-
-        with self.assertRaises((TypeError, AttributeError)):
-            replace(capability, identity="test-host-action://cloned-forgery")
-        with self.assertRaises((TypeError, AttributeError)):
-            capability.identity = "test-host-action://mutated-forgery"
-        self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_valid_capability_cannot_bind_a_tampered_scoped_payload(self) -> None:
-        framework_ref, _state = self._save()
-        context = self.service.confirmation_context()
-        payload, consumptions = self.service.confirmations.confirmation_payload(
-            current=context,
-            source_version=framework_ref,
-            challenge_id=str(context["challenge_id"]),
-            challenge_revision=int(context["challenge_revision"]),
-            host_confirmation_assertion=signed_assertion(context),
-        )
-        tampered = {**payload, "host_assertion_sha256": "f" * 64}
-        before = self._filesystem_snapshot()
-
-        with self.assertRaises(ConfirmationTransactionError):
-            self.kernel.commit(
-                command_id="tampered-scoped-payload",
-                expected_revision=self.kernel.load().revision,
-                event_type="test.tampered-scoped-payload",
-                artifact_updates={
-                    "content/framework-confirmation": (
-                        "content-framework-confirmation",
-                        tampered,
-                    )
-                },
-                confirmation_consumptions=consumptions,
-            )
-
-        self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_direct_policy_cannot_mint_framework_reset(self) -> None:
-        before = self._filesystem_snapshot()
-        with self.assertRaises(AttributeError):
-            self.service.confirmations.content_framework_reset()
-        self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_reset_capability_is_bound_to_exact_framework_payload(self) -> None:
-        normalized = valid_framework(self.mission_confirmation_ref)
-        reset = self.service._framework_reset_mutation(normalized)
-        before = self._filesystem_snapshot()
-        invalid_payload = {
-            **normalized,
-            "mission_confirmation_ref": (
-                "artifact://mission-confirmation/" + "f" * 64
-            ),
-        }
-
-        with self.assertRaises(ConfirmationTransactionError):
-            self.kernel.commit(
-                command_id="reset-with-wrong-framework-payload",
-                expected_revision=self.kernel.load().revision,
-                event_type="test.reset-with-wrong-framework-payload",
-                artifact_updates={
-                    "content/framework-draft": (
-                        "content-framework-draft",
-                        invalid_payload,
-                    )
-                },
-                content_framework_reset=reset,
-            )
-
-        self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_direct_issuer_cannot_reset_with_invalid_framework_payload(self) -> None:
-        invalid = {
-            **valid_framework(self.mission_confirmation_ref),
-            "unvalidated_extra": "must not survive normalization",
-        }
-        framework_ref = str(
-            self.kernel.artifacts.reference_for(
-                "content-framework-draft", invalid
-            )
-        )
-        reset = issue_content_framework_reset(
-            revision=self.kernel.load().revision,
-            framework_ref=framework_ref,
-            mission_confirmation_ref=self.mission_confirmation_ref,
-        )
-        before = self._filesystem_snapshot()
-
-        with self.assertRaises(ConfirmationTransactionError):
-            self.kernel.commit(
-                command_id="direct-issuer-invalid-framework-reset",
-                expected_revision=self.kernel.load().revision,
-                event_type="test.direct-issuer-invalid-framework-reset",
-                artifact_updates={
-                    "content/framework-draft": (
-                        "content-framework-draft",
-                        invalid,
-                    )
-                },
-                content_framework_reset=reset,
-            )
-
-        self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_direct_issuer_cannot_reset_with_stale_mission(self) -> None:
-        stale_mission_ref = self.mission_confirmation_ref
-        content = ContentService(self.kernel)
-        new_draft_ref = content.save_mission_draft(
-            "new-mission-before-stale-reset",
-            self.kernel.load().revision,
-            {
-                "topic": "经营一体化方案 v2",
-                "primary_audience": "客户决策者",
-                "desired_judgment_or_action": "批准新版联合验证",
-            },
-        )
-        self.mission_confirmation_ref = content.confirm_mission(
-            "confirm-new-mission-before-stale-reset",
-            self.kernel.load().revision,
-            mission_draft_ref=new_draft_ref,
-            material_mode="no-materials-confirmed",
-            material_inventory_ref="",
-            user_action_ref="test-user-action://new-mission",
-            user_message_ref="",
-        )
-        stale = valid_framework(stale_mission_ref)
-        framework_ref = str(
-            self.kernel.artifacts.reference_for(
-                "content-framework-draft", stale
-            )
-        )
-        reset = issue_content_framework_reset(
-            revision=self.kernel.load().revision,
-            framework_ref=framework_ref,
-            mission_confirmation_ref=stale_mission_ref,
-        )
-        before = self._filesystem_snapshot()
-
-        with self.assertRaises(ConfirmationTransactionError):
-            self.kernel.commit(
-                command_id="direct-issuer-stale-mission-reset",
-                expected_revision=self.kernel.load().revision,
-                event_type="test.direct-issuer-stale-mission-reset",
-                artifact_updates={
-                    "content/framework-draft": (
-                        "content-framework-draft",
-                        stale,
-                    )
-                },
-                content_framework_reset=reset,
-            )
-
-        self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_forged_current_mission_confirmation_cannot_authorize_reset(self) -> None:
-        draft_ref = self.kernel.load().artifact_heads["mission/draft"]
-        forged_mission_ref = str(
-            self.kernel.artifacts.put(
-                "mission-confirmation",
-                {"forged": True},
-            )
-        )
-        state = self.kernel.commit(
-            command_id="install-forged-mission-confirmation",
-            expected_revision=self.kernel.load().revision,
-            event_type="test.install-forged-mission-confirmation",
-            artifact_updates={
-                "mission/confirmation": (
-                    "mission-confirmation",
-                    {"forged": True},
-                )
-            },
-        )
-        self.assertEqual(
-            state.artifact_heads["mission/confirmation"], forged_mission_ref
-        )
-        framework = valid_framework(forged_mission_ref)
-        framework_ref = str(
-            self.kernel.artifacts.reference_for(
-                "content-framework-draft", framework
-            )
-        )
-        reset = issue_content_framework_reset(
-            revision=state.revision,
-            framework_ref=framework_ref,
-            mission_confirmation_ref=forged_mission_ref,
-        )
-        before = self._filesystem_snapshot()
-
-        with self.assertRaises(ConfirmationTransactionError):
-            self.kernel.commit(
-                command_id="reset-with-forged-mission-confirmation",
-                expected_revision=state.revision,
-                event_type="test.reset-with-forged-mission-confirmation",
-                artifact_updates={
-                    "content/framework-draft": (
-                        "content-framework-draft",
-                        framework,
-                    )
-                },
-                content_framework_reset=reset,
-            )
-
-        self.assertEqual(self._filesystem_snapshot(), before)
-        self.assertEqual(
-            self.kernel.load().artifact_heads["mission/draft"], draft_ref
-        )
-
-    def test_bare_framework_reset_is_rejected_zero_write(self) -> None:
-        before = self._filesystem_snapshot()
-        with self.assertRaises(ConfirmationTransactionError):
-            self.kernel.commit(
-                command_id="bare-framework-reset",
-                expected_revision=self.kernel.load().revision,
-                event_type="test.bare-framework-reset",
-                artifact_updates={},
-                content_framework_reset=True,
-            )
-        self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_corrupt_confirmation_history_fails_closed_zero_write(self) -> None:
-        old_ref = self.kernel.load().artifact_heads["mission/confirmation"]
-        content = ContentService(self.kernel)
-        new_draft_ref = content.save_mission_draft(
-            "corrupt-history-replacement-draft",
-            self.kernel.load().revision,
-            {
-                "topic": "经营一体化方案 v2",
-                "primary_audience": "客户决策者",
-                "desired_judgment_or_action": "批准二期联合验证",
-            },
-        )
-        self.mission_confirmation_ref = content.confirm_mission(
-            "corrupt-history-replacement-confirmation",
-            self.kernel.load().revision,
-            mission_draft_ref=new_draft_ref,
-            material_mode="no-materials-confirmed",
-            material_inventory_ref="",
-            user_action_ref="test-user-action://mission-confirmed-v2",
-            user_message_ref="",
-        )
-        framework_ref, _state = self._save()
-        old_path = self.kernel.artifacts.path_for(ArtifactReference.parse(old_ref))
-        old_path.write_text("{corrupt", encoding="utf-8")
-        before = self._filesystem_snapshot()
-        context = self.service.confirmation_context()
-
-        with self.assertRaises(ContentWorkflowError) as raised:
-            self.service.confirm_framework(
-                command_id="reuse-with-corrupt-history",
-                expected_revision=self.kernel.load().revision,
-                source_version=framework_ref,
-                challenge_id=str(context["challenge_id"]),
-                challenge_revision=int(context["challenge_revision"]),
-                host_confirmation_assertion=signed_assertion(context),
-            )
-
-        self.assertEqual(raised.exception.code, "CONTENT_REVIEW_CONFLICT")
-        self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_typed_kernel_confirmation_failure_maps_without_message_matching(self) -> None:
-        framework_ref, _state = self._save()
-        context = self.service.confirmation_context()
-        before = self._filesystem_snapshot()
-
-        with patch.object(
-            self.kernel,
-            "commit",
-            side_effect=ConfirmationTransactionError(
-                "CONFIRMATION_HISTORY_CORRUPT",
-                "opaque typed failure",
-            ),
-        ), self.assertRaises(ContentWorkflowError) as raised:
-            self.service.confirm_framework(
-                command_id="typed-confirmation-failure",
-                expected_revision=self.kernel.load().revision,
-                source_version=framework_ref,
-                challenge_id=str(context["challenge_id"]),
-                challenge_revision=int(context["challenge_revision"]),
-                host_confirmation_assertion=signed_assertion(context),
-            )
-
-        self.assertEqual(raised.exception.code, "CONTENT_REVIEW_CONFLICT")
-        self.assertEqual(self._filesystem_snapshot(), before)
-
-    def test_consumed_identity_cannot_authenticate_a_replacement_artifact(self) -> None:
-        framework_ref, _state = self._save()
-        confirmation_ref, _state = self._confirm(
-            framework_ref,
-            identity_ref="test-host-action://real-framework-confirmation",
-        )
-        real_payload = dict(
-            self.kernel.artifacts.resolve(
-                ArtifactReference.parse(confirmation_ref)
-            )["payload"]
-        )
-        replacement_payload = {
-            **real_payload,
-            "confirmed_at": "2026-08-14T23:59:59+00:00",
-            "host_assertion_sha256": "f" * 64,
-        }
-        replacement_state = self.kernel.commit(
-            command_id="replace-confirmation-with-forgery",
-            expected_revision=self.kernel.load().revision,
-            event_type="test.replace-confirmation-with-forgery",
-            artifact_updates={
-                "content/framework-confirmation": (
-                    "content-framework-confirmation",
-                    replacement_payload,
-                )
-            },
-        )
-        self.assertNotEqual(
-            replacement_state.artifact_heads["content/framework-confirmation"],
-            confirmation_ref,
-        )
-        before = self.kernel.load()
-
-        with self.assertRaises(ContentWorkflowError):
-            self.service.expansion_authorization_context()
-        self.assertEqual(self.kernel.load(), before)
-
-    def test_new_framework_reopens_g0_and_removes_formal_page_content_heads(self) -> None:
-        state = self.kernel.load()
-        content_heads = {
-            "content/strategy": ("presales-content-strategy", {"old": True}),
-            "content/claim-map": ("claim-evidence-map", {"old": True}),
-            "content/argument-map": ("deck-argument-map", {"old": True}),
-            "content/draft": ("slide-draft-set", {"slides": [{"old": True}]}),
-            "content/review/presales-reviewer": (
-                "content-review-record",
-                {"old": True},
-            ),
-            "content/acceptance": ("content-acceptance", {"old": True}),
-            "content/blueprint": (
-                "content-blueprint",
-                {"slides": [{"old": True}]},
-            ),
-            "content/change-set": ("content-change-set", {"old": True}),
-            "content/page-decisions": (
-                "content-page-decision-set",
-                {"old": True},
-            ),
-            "content/review-batch": ("content-review-batch", {"old": True}),
-            "content/batch-revision-plan": (
-                "content-batch-revision-plan",
-                {"old": True},
-            ),
-            "content/batch-plan-confirmation": (
-                "content-batch-plan-confirmation",
-                {"old": True},
-            ),
-            "content/review-batch-withdrawal": (
-                "content-review-batch-withdrawal",
-                {"old": True},
-            ),
-        }
-        old_refs = {
-            slot: str(self.kernel.artifacts.put(kind, payload))
-            for slot, (kind, payload) in content_heads.items()
-        }
-        legacy_state = self.kernel.commit(
-            command_id="simulate-old-full-deck-state",
-            expected_revision=state.revision,
-            event_type="test.old-full-deck-state",
-            artifact_updates=content_heads,
-            gate_mutation=issue_gate_mutation(
-                {"G0": "passed", "G1": "open"},
-                tuple(old_refs.values()),
-            ),
-        )
-
-        _framework_ref, framework_state = self.service.save_draft(
-            command_id="transition-to-framework-discussion",
-            expected_revision=legacy_state.revision,
-            payload=valid_framework(self.mission_confirmation_ref),
-        )
-
-        self.assertEqual(framework_state.gate_status["G0"], "open")
-        self.assertEqual(framework_state.gate_status["G1"], "locked")
-        for slot, reference in old_refs.items():
-            self.assertNotIn(slot, framework_state.artifact_heads)
-            self.assertTrue(
-                self.kernel.artifacts.resolve(
-                    ArtifactReference.parse(reference)
-                )
-            )
-
     def test_new_framework_removes_future_content_heads_but_keeps_non_content_heads(self) -> None:
-        state = self.kernel.commit(
-            command_id="simulate-future-content-heads",
+        self._submit_review()
+        seeded = self.kernel.commit(
+            command_id="seed-derived-heads",
             expected_revision=self.kernel.load().revision,
-            event_type="test.future-content-heads",
+            event_type="test.derived-heads",
             artifact_updates={
-                "content/repair-plan": (
-                    "content-repair-plan",
-                    {"slides": [{"old": True}]},
+                "content/revision-plan": (
+                    "content-batch-revision-plan",
+                    {"value": 1},
                 ),
-                "content/review/custom-role": (
-                    "content-review-record",
-                    {"page_level": True},
+                "content/change-set": ("content-batch-change-set", {"value": 1}),
+                "visual/contract": (
+                    "visual-contract",
+                    {"source_version": "content-v1"},
                 ),
-                "project/non-content-proof": (
-                    "project-proof",
-                    {"keep": True},
-                ),
+                "delivery/build": ("presentation-build", {"value": 1}),
+                "experience/current": ("experience-item", {"value": 1}),
             },
         )
-        old_repair_ref = state.artifact_heads["content/repair-plan"]
-        proof_ref = state.artifact_heads["project/non-content-proof"]
-
-        _framework_ref, framework_state = self.service.save_draft(
-            command_id="clear-future-content-heads",
-            expected_revision=state.revision,
-            payload=valid_framework(self.mission_confirmation_ref),
-        )
-
-        self.assertEqual(
-            {
-                slot
-                for slot in framework_state.artifact_heads
-                if slot.startswith("content/")
-            },
-            {"content/framework-draft"},
-        )
-        self.assertEqual(
-            framework_state.artifact_heads["project/non-content-proof"],
-            proof_ref,
-        )
-        self.assertTrue(
-            self.kernel.artifacts.resolve(
-                ArtifactReference.parse(old_repair_ref)
-            )
-        )
+        experience_ref = seeded.artifact_heads["experience/current"]
+        self._review("content-v2")
+        state = self.kernel.load()
+        for slot in (
+            "content/revision-plan",
+            "content/change-set",
+            "visual/contract",
+            "delivery/build",
+        ):
+            self.assertNotIn(slot, state.artifact_heads)
+        self.assertEqual(state.artifact_heads["experience/current"], experience_ref)
 
     def test_new_draft_clears_current_confirmation_and_authorization_heads(self) -> None:
-        framework_ref, _state = self._save()
-        confirmation_ref, _state = self._confirm(framework_ref)
-        authorization_ref, _state = self._authorize(framework_ref)
-
-        replacement_ref, state = self._save(version=2)
-
-        self.assertNotEqual(replacement_ref, framework_ref)
-        self.assertNotIn("content/framework-confirmation", state.artifact_heads)
-        self.assertNotIn(
-            "content/full-deck-expansion-authorization",
-            state.artifact_heads,
+        self._confirm_g0()
+        self.kernel.commit(
+            command_id="seed-downstream",
+            expected_revision=self.kernel.load().revision,
+            event_type="test.downstream",
+            artifact_updates={
+                "visual/contract": (
+                    "visual-contract",
+                    {"source_version": "content-v1"},
+                ),
+                "delivery/build": ("presentation-build", {"value": 1}),
+                "experience/current": ("experience-item", {"value": 1}),
+            },
         )
+        experience_ref = self.kernel.load().artifact_heads["experience/current"]
+        self.mission.save_mission_draft(
+            "mission-v2",
+            self.kernel.load().revision,
+            {**MISSION, "topic": "经营协同二期方案"},
+        )
+        state = self.kernel.load()
+        self.assertNotIn("mission/confirmation", state.artifact_heads)
+        self.assertFalse(any(slot.startswith("content/") for slot in state.artifact_heads))
+        self.assertFalse(any(slot.startswith("visual/") for slot in state.artifact_heads))
+        self.assertFalse(any(slot.startswith("delivery/") for slot in state.artifact_heads))
+        self.assertFalse(
+            any(slot.startswith("review/session/") for slot in state.artifact_heads)
+        )
+        self.assertNotIn("gate/G0/confirmation", state.artifact_heads)
+        self.assertEqual(state.artifact_heads["experience/current"], experience_ref)
+        self.assertEqual(
+            state.gate_status,
+            {
+                "G0": "open",
+                "G1": "locked",
+                "G2": "locked",
+                "G3": "locked",
+                "G4": "locked",
+            },
+        )
+
+    def test_new_material_inventory_clears_current_confirmation_and_downstream_heads(self) -> None:
+        self._confirm_g0()
+        replacement = {
+            "sources": [
+                {
+                    **MATERIALS["sources"][0],
+                    "source_id": "s2",
+                    "locator": "inline://user-provided/s2",
+                    "sha256": "b" * 64,
+                }
+            ]
+        }
+        self.mission.register_materials(
+            "materials-v2", self.kernel.load().revision, replacement
+        )
+        state = self.kernel.load()
+        self.assertNotIn("mission/confirmation", state.artifact_heads)
+        self.assertFalse(any(slot.startswith("content/") for slot in state.artifact_heads))
+        self.assertFalse(any(slot.startswith("review/session/") for slot in state.artifact_heads))
         self.assertEqual(state.gate_status["G0"], "open")
-        self.assertEqual(
-            self.kernel.artifacts.resolve(
-                ArtifactReference.parse(confirmation_ref)
-            )["kind"],
-            "content-framework-confirmation",
-        )
-        self.assertEqual(
-            self.kernel.artifacts.resolve(
-                ArtifactReference.parse(authorization_ref)
-            )["kind"],
-            "full-deck-expansion-authorization",
-        )
 
     def test_context_mismatches_and_invalid_hmac_are_zero_write(self) -> None:
-        framework_ref, _state = self._save()
-        context = self.service.confirmation_context()
-        cases = (
-            {
-                "source_version": "artifact://content-framework-draft/"
-                + "d" * 64
-            },
-            {"challenge_id": "wrong-challenge"},
-            {"challenge_revision": int(context["challenge_revision"]) + 1},
-            {
-                "host_confirmation_assertion": signed_assertion(
-                    context,
-                    overrides={"scope_kind": "content-review-batch-submission"},
-                )
-            },
-            {
-                "host_confirmation_assertion": signed_assertion(
-                    context,
-                    overrides={"scope_id": "wrong-scope-id"},
-                )
-            },
-            {"host_confirmation_assertion": "v1.invalid.invalid"},
-        )
-        for index, changes in enumerate(cases):
-            with self.subTest(changes=changes):
-                before = self.kernel.load()
-                kwargs = {
-                    "command_id": f"mismatch-{index}",
-                    "expected_revision": before.revision,
-                    "source_version": framework_ref,
-                    "challenge_id": str(context["challenge_id"]),
-                    "challenge_revision": int(context["challenge_revision"]),
-                    "host_confirmation_assertion": signed_assertion(context),
-                }
-                kwargs.update(changes)
-                with self.assertRaises(ContentWorkflowError) as raised:
-                    self.service.confirm_framework(**kwargs)
-                self.assertEqual(raised.exception.code, "CONTENT_REVIEW_CONFLICT")
-                self.assertEqual(self.kernel.load(), before)
+        blueprint_ref, _session_ref, session, _state = self._review()
+        before = self._snapshot()
+        with self.assertRaises(ReviewSourceStaleError):
+            ReviewSessionService(self.kernel).open_or_resume(
+                command_id="mismatched-review-context",
+                expected_revision=self.kernel.load().revision,
+                review_type="content-full-deck",
+                target_artifact_ref=blueprint_ref,
+                source_version="content-v99",
+                source_revision=self.kernel.load().revision,
+                open_policy="notify-only",
+            )
+        self.assertEqual(session["source_version"], "content-v1")
+        self.assertEqual(self._snapshot(), before)
 
     def test_identity_replay_is_rejected_atomically_across_new_challenge(self) -> None:
-        identity = "verified-message://one-time-identity"
-        framework_ref, _state = self._save()
-        context = self.service.confirmation_context()
-        self.service.confirm_framework(
-            command_id="first-identity-use",
+        first = self.kernel.commit(
+            command_id="cross-revision-command",
             expected_revision=self.kernel.load().revision,
-            source_version=framework_ref,
-            challenge_id=str(context["challenge_id"]),
-            challenge_revision=int(context["challenge_revision"]),
-            host_confirmation_assertion=signed_assertion(
-                context,
-                identity_type="verified-message",
-                identity_ref=identity,
-            ),
+            event_type="test.cross-revision",
+            artifact_updates={"test/value": ("test-artifact", {"value": 1})},
+            command_fingerprint="1" * 64,
         )
-        replacement_ref, _state = self._save(version=2)
-        replacement_context = self.service.confirmation_context()
-        before = self.kernel.load()
-
-        with self.assertRaises(ContentWorkflowError) as raised:
-            self.service.confirm_framework(
-                command_id="replayed-identity",
-                expected_revision=before.revision,
-                source_version=replacement_ref,
-                challenge_id=str(replacement_context["challenge_id"]),
-                challenge_revision=int(
-                    replacement_context["challenge_revision"]
-                ),
-                host_confirmation_assertion=signed_assertion(
-                    replacement_context,
-                    identity_type="verified-message",
-                    identity_ref=identity,
-                ),
+        self.kernel.commit(
+            command_id="advance-after-command",
+            expected_revision=first.revision,
+            event_type="test.advance",
+            artifact_updates={},
+        )
+        before = self._snapshot()
+        with self.assertRaises(ContractValidationError):
+            self.kernel.commit(
+                command_id="cross-revision-command",
+                expected_revision=self.kernel.load().revision,
+                event_type="test.cross-revision",
+                artifact_updates={
+                    "test/value": ("test-artifact", {"value": 2})
+                },
+                command_fingerprint="2" * 64,
             )
-
-        self.assertEqual(raised.exception.code, "CONTENT_REVIEW_CONFLICT")
-        self.assertEqual(self.kernel.load(), before)
-        self.assertNotIn("content/framework-confirmation", before.artifact_heads)
-
-
+        self.assertEqual(self._snapshot(), before)
 if __name__ == "__main__":
     unittest.main()

@@ -73,10 +73,6 @@ class MaterialModeUnconfirmedError(AiPptError):
     """Raised when neither current materials nor an explicit empty mode is bound."""
 
 
-class ProposalOnlyIdentityViolationError(AiPptError):
-    """Raised when no-material content is presented as sourced customer truth."""
-
-
 class FeedbackGovernanceError(AiPptError):
     """Raised when feedback bypasses its required governance state."""
 

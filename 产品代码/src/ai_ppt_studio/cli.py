@@ -25,7 +25,6 @@ from ai_ppt_studio.errors import (
     ProjectNotFoundError,
     ProtectedPathError,
 )
-from ai_ppt_studio.experience_models import ExperienceLevel
 from ai_ppt_studio.experience_store import ExperienceStore
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 from ai_ppt_studio.paths import PathPolicy
@@ -75,42 +74,49 @@ def build_parser() -> argparse.ArgumentParser:
     status = commands.add_parser("status")
     status.add_argument("--project", type=Path, required=True)
 
-    experience_create = commands.add_parser("experience-create")
-    experience_create.add_argument("--project", type=Path, required=True)
-    experience_create.add_argument("--input", type=Path, required=True)
+    experience_absorb = commands.add_parser("experience-absorb-same-type")
+    experience_absorb.add_argument("--input", type=Path, required=True)
 
     experience_list = commands.add_parser("experience-list")
-    experience_list.add_argument(
-        "--level", choices=[level.value for level in ExperienceLevel]
-    )
+    experience_list.add_argument("--domain", choices=("content", "visual"))
+    experience_list.add_argument("--layer", choices=("same-type", "global"))
 
     experience_show = commands.add_parser("experience-show")
-    experience_show.add_argument("--experience", required=True)
+    experience_show.add_argument(
+        "--domain", choices=("content", "visual"), required=True
+    )
+    experience_show.add_argument(
+        "--layer", choices=("same-type", "global"), required=True
+    )
+    experience_show.add_argument("--experience-id", required=True)
 
     experience_recommend = commands.add_parser("experience-recommend")
+    experience_recommend.add_argument(
+        "--domain", choices=("content", "visual"), required=True
+    )
+    experience_recommend.add_argument("--type-signature", required=True)
     experience_recommend.add_argument("--input", type=Path, required=True)
-    experience_recommend.add_argument("--limit", type=int, default=5)
+    experience_recommend.add_argument("--limit", type=int, default=8)
 
     experience_apply = commands.add_parser("experience-apply")
     experience_apply.add_argument("--project", type=Path, required=True)
-    experience_apply.add_argument("--experience", required=True)
+    experience_apply.add_argument("--experience-ref", required=True)
     experience_apply.add_argument("--input", type=Path, required=True)
 
     experience_evaluate = commands.add_parser("experience-evaluate")
-    experience_evaluate.add_argument("--application", required=True)
+    experience_evaluate.add_argument("--application-id", required=True)
     experience_evaluate.add_argument("--input", type=Path, required=True)
 
-    experience_set_level = commands.add_parser("experience-set-level")
-    experience_set_level.add_argument("--experience", required=True)
-    experience_set_level.add_argument(
-        "--level", choices=[level.value for level in ExperienceLevel], required=True
-    )
-    experience_set_level.add_argument("--reason", required=True)
+    experience_promote = commands.add_parser("experience-promote-global")
+    experience_promote.add_argument("--same-type-ref", required=True)
+    experience_promote.add_argument("--user-directive-ref", default="")
+    experience_promote.add_argument("--promoted-at", required=True)
 
     experience_rollback = commands.add_parser("experience-rollback")
-    experience_rollback.add_argument("--experience", required=True)
-    experience_rollback.add_argument("--version", type=int, required=True)
+    experience_rollback.add_argument("--experience-ref", required=True)
+    experience_rollback.add_argument("--target-version-ref", required=True)
     experience_rollback.add_argument("--reason", required=True)
+    experience_rollback.add_argument("--rolled-back-at", required=True)
     return parser
 
 
@@ -305,59 +311,86 @@ def dispatch(args: argparse.Namespace) -> dict[str, object]:
             }
         )
         return {**result, "command": command}
-    if command == "experience-create":
-        kernel = _project_kernel(projects, args.project)
+    if command == "experience-absorb-same-type":
         payload = _load_json_object(args.input, policy, "Experience input")
-        experience = experiences.create_candidate(kernel, payload)
+        experience = experiences.absorb_same_type(payload)
         return {
             "ok": True,
             "command": command,
             "experience": experience.as_dict(),
         }
     if command == "experience-list":
-        level = ExperienceLevel(args.level) if args.level else None
         return {
             "ok": True,
             "command": command,
-            "experiences": [item.as_dict() for item in experiences.list(level)],
+            "experiences": [
+                item.as_dict()
+                for item in experiences.list_current(
+                    domain=args.domain, layer=args.layer
+                )
+            ],
         }
     if command == "experience-show":
         return {
             "ok": True,
             "command": command,
-            "experience": experiences.get(args.experience).as_dict(),
+            "experience": experiences.get_current(
+                args.domain, args.layer, args.experience_id
+            ).as_dict(),
         }
     if command == "experience-recommend":
         payload = _load_json_object(args.input, policy, "Experience context")
         return {
             "ok": True,
             "command": command,
-            "recommendations": experiences.recommend(payload, limit=args.limit),
+            "recommendations": experiences.recommend(
+                domain=args.domain,
+                type_signature=args.type_signature,
+                applicability=payload,
+                limit=args.limit,
+            ),
         }
     if command == "experience-apply":
         kernel = _project_kernel(projects, args.project)
         payload = _load_json_object(args.input, policy, "Experience context")
         application = experiences.record_application(
-            kernel, args.experience, payload
+            experience_ref=args.experience_ref,
+            target_project_id=kernel.project_id,
+            target_type_signature=str(
+                payload.get("target_type_signature") or ""
+            ),
+            context=dict(payload.get("context") or {}),
+            evidence_refs=list(payload.get("evidence_refs") or []),
+            applied_at=str(payload.get("applied_at") or ""),
+            explicit_validation=bool(
+                payload.get("explicit_validation", False)
+            ),
         )
         return {
             "ok": True,
             "command": command,
             "application": application.as_dict(),
-            "experience": experiences.get(args.experience).as_dict(),
         }
     if command == "experience-evaluate":
         payload = _load_json_object(args.input, policy, "Experience evaluation")
-        evaluation = experiences.evaluate(args.application, payload)
+        evaluation = experiences.evaluate(
+            application_id=args.application_id,
+            outcome=str(payload.get("outcome") or ""),
+            user_outcome_ref=str(payload.get("user_outcome_ref") or ""),
+            hard_gate_refs=list(payload.get("hard_gate_refs") or []),
+            evidence_refs=list(payload.get("evidence_refs") or []),
+            evaluated_at=str(payload.get("evaluated_at") or ""),
+        )
         return {
             "ok": True,
             "command": command,
             "evaluation": evaluation.as_dict(),
-            "experience": experiences.get(evaluation.experience_id).as_dict(),
         }
-    if command == "experience-set-level":
-        experience = experiences.set_level(
-            args.experience, ExperienceLevel(args.level), args.reason
+    if command == "experience-promote-global":
+        experience = experiences.promote_global(
+            same_type_ref=args.same_type_ref,
+            user_global_directive_ref=args.user_directive_ref or None,
+            promoted_at=args.promoted_at,
         )
         return {
             "ok": True,
@@ -366,7 +399,10 @@ def dispatch(args: argparse.Namespace) -> dict[str, object]:
         }
     if command == "experience-rollback":
         experience = experiences.rollback(
-            args.experience, args.version, args.reason
+            experience_ref=args.experience_ref,
+            target_version_ref=args.target_version_ref,
+            reason=args.reason,
+            rolled_back_at=args.rolled_back_at,
         )
         return {
             "ok": True,

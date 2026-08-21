@@ -1,1 +1,1 @@
-"""External storage and platform adapters."""
+"""Adapters that isolate external or historical runtime shapes."""

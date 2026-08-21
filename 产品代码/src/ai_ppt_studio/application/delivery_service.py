@@ -6,9 +6,14 @@ from datetime import datetime, timezone
 import hashlib
 from typing import Any
 
+from ai_ppt_studio.application.artifact_guards import require_exact_ref, resolve_kind
 from ai_ppt_studio.application.gate_evaluator import GateEvaluator
+from ai_ppt_studio.application.review_commands import fingerprint, replay_state
+from ai_ppt_studio.application.release_policy_service import (
+    ReleaseTargetPolicyService,
+)
+from ai_ppt_studio.domains.presentation.release_policy import SUPPORTED_TARGET_IDS
 from ai_ppt_studio.domains.presentation.targets import (
-    REQUIRED_TARGET_IDS,
     TargetRenderEvidence,
     validate_required_targets,
 )
@@ -22,7 +27,6 @@ from ai_ppt_studio.domains.delivery.contracts import (
     validate_slide_qa,
 )
 from ai_ppt_studio.errors import (
-    ArtifactReferenceError,
     ContractValidationError,
     GateBlockedError,
 )
@@ -66,7 +70,7 @@ class DeliveryService:
     def _validated_build_payload(
         self, payload: dict[str, Any]
     ) -> dict[str, Any]:
-        visual_contract_record = self._require_exact_ref(
+        visual_contract_record = require_exact_ref(self.kernel,
             str(payload.get("visual_contract_ref") or ""),
             "visual/contract",
             "visual-contract",
@@ -75,8 +79,9 @@ class DeliveryService:
             payload, visual_contract_record["payload"]
         )
         state = self.kernel.load()
+        _policy_ref, policy = ReleaseTargetPolicyService(self.kernel).current()
         g2_evidence: list[TargetRenderEvidence] = []
-        for target_id in REQUIRED_TARGET_IDS:
+        for target_id in policy.required_target_ids:
             ref = state.artifact_heads.get(
                 f"visual/target-evidence/G2/{target_id}", ""
             )
@@ -87,7 +92,7 @@ class DeliveryService:
             try:
                 g2_evidence.append(
                     TargetRenderEvidence.from_payload(
-                        self._resolve_kind(ref, "target-render-evidence")["payload"]
+                        resolve_kind(self.kernel, ref, "target-render-evidence")["payload"]
                     )
                 )
             except (ValueError, GateBlockedError) as error:
@@ -95,7 +100,9 @@ class DeliveryService:
                     "Final build requires valid same-hash G2 target evidence"
                 ) from error
         try:
-            g2_matrix = validate_required_targets(g2_evidence)
+            g2_matrix = validate_required_targets(
+                g2_evidence, policy.required_target_ids
+            )
         except GateBlockedError as error:
             raise ContractValidationError(
                 "Final build requires valid same-hash G2 target evidence"
@@ -104,7 +111,7 @@ class DeliveryService:
             raise ContractValidationError(
                 "G2 and G4 must reference the same PPTX SHA-256"
             )
-        pptx = self._resolve_kind(normalized["source_pptx_ref"], "final-pptx")[
+        pptx = resolve_kind(self.kernel, normalized["source_pptx_ref"], "final-pptx")[
             "payload"
         ]
         if (
@@ -117,7 +124,7 @@ class DeliveryService:
                 "Final PPTX identity, hash, route, slides, or tool does not match the build"
             )
         for value in normalized["native_editability_evidence_refs"]:
-            evidence = self._resolve_kind(value, "editability-evidence")["payload"]
+            evidence = resolve_kind(self.kernel, value, "editability-evidence")["payload"]
             if (
                 evidence.get("semantic_objects_editable") is not True
                 or evidence.get("whole_slide_bitmap") is not False
@@ -127,7 +134,7 @@ class DeliveryService:
                     "Editability evidence must cover every slide and reject whole-slide bitmaps"
                 )
         for value in normalized["preflight_render_refs"]:
-            preflight = self._resolve_kind(value, "preflight-render")["payload"]
+            preflight = resolve_kind(self.kernel, value, "preflight-render")["payload"]
             if (
                 preflight.get("identity") != "preflight-only"
                 or preflight.get("slide_ids") != normalized["slide_ids"]
@@ -156,7 +163,7 @@ class DeliveryService:
         current_build_ref = state.artifact_heads.get("delivery/build", "")
         if not current_build_ref:
             raise ContractValidationError("No current build exists to replace")
-        source = self._resolve_kind(
+        source = resolve_kind(self.kernel,
             source_build_ref, "presentation-build"
         )["payload"]
         normalized = self._validated_build_payload(dict(source))
@@ -178,7 +185,7 @@ class DeliveryService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
-        build_record = self._require_exact_ref(
+        build_record = require_exact_ref(self.kernel,
             str(payload.get("build_ref") or ""),
             "delivery/build",
             "presentation-build",
@@ -201,7 +208,7 @@ class DeliveryService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
-        build_record = self._require_exact_ref(
+        build_record = require_exact_ref(self.kernel,
             str(payload.get("build_ref") or ""),
             "delivery/build",
             "presentation-build",
@@ -218,7 +225,7 @@ class DeliveryService:
             )
         normalized = validate_deck_qa(payload, build, current_refs)
         for value in current_refs:
-            record = self._resolve_kind(value, "slide-qa")["payload"]
+            record = resolve_kind(self.kernel, value, "slide-qa")["payload"]
             if (
                 record.get("build_ref") != payload["build_ref"]
                 or record.get("pptx_sha256") != build["pptx_sha256"]
@@ -247,9 +254,9 @@ class DeliveryService:
         current_build_ref = state.artifact_heads.get("delivery/build", "")
         if not current_build_ref:
             raise ContractValidationError("No last-valid delivery build exists")
-        build = self._resolve_kind(current_build_ref, "presentation-build")["payload"]
+        build = resolve_kind(self.kernel, current_build_ref, "presentation-build")["payload"]
         normalized = validate_failed_attempt(payload, current_build_ref, build)
-        attempt = self._resolve_kind(normalized["attempt_ref"], "build-attempt")[
+        attempt = resolve_kind(self.kernel, normalized["attempt_ref"], "build-attempt")[
             "payload"
         ]
         if attempt.get("status") != "failed":
@@ -277,7 +284,7 @@ class DeliveryService:
             raise ContractValidationError(
                 "Delivery repair requires a failed attempt and last-valid build"
             )
-        build = self._resolve_kind(current_build_ref, "presentation-build")["payload"]
+        build = resolve_kind(self.kernel, current_build_ref, "presentation-build")["payload"]
         normalized = validate_repair(
             payload, failed_attempt_ref, current_build_ref, build
         )
@@ -310,7 +317,7 @@ class DeliveryService:
                 "Full-deck target-render evidence must belong to G4"
             )
         build_ref = str(payload.get("presentation_build_ref") or "")
-        build = self._require_exact_ref(
+        build = require_exact_ref(self.kernel,
             build_ref, "delivery/build", "presentation-build"
         )["payload"]
         try:
@@ -326,20 +333,20 @@ class DeliveryService:
             raise ContractValidationError(
                 "G4 target evidence must cover the current full-deck build and hash"
             )
-        self._resolve_kind(evidence.font_inventory_ref, "font-inventory")
-        self._resolve_kind(evidence.font_substitution_plan_ref, "font-plan")
-        self._resolve_kind(
+        resolve_kind(self.kernel, evidence.font_inventory_ref, "font-inventory")
+        resolve_kind(self.kernel, evidence.font_substitution_plan_ref, "font-plan")
+        resolve_kind(self.kernel,
             evidence.reviewer_attestation_ref, "desktop-review-attestation"
         )
-        self._resolve_kind(evidence.source_pptx_ref, "final-pptx")
-        self._resolve_kind(evidence.evidence_ref, "target-render-capture")
+        resolve_kind(self.kernel, evidence.source_pptx_ref, "final-pptx")
+        resolve_kind(self.kernel, evidence.evidence_ref, "target-render-capture")
         for value in evidence.export_refs:
-            self._resolve_kind(value, "target-export")
+            resolve_kind(self.kernel, value, "target-export")
         for value in evidence.page_image_refs:
-            self._resolve_kind(value, "target-page-image")
+            resolve_kind(self.kernel, value, "target-page-image")
         for check in evidence.slide_checks:
             for value in check["evidence_refs"]:
-                self._resolve_kind(value, "slide-check")
+                resolve_kind(self.kernel, value, "slide-check")
         normalized = {
             **evidence.as_payload(),
             "stage": "G4",
@@ -376,45 +383,51 @@ class DeliveryService:
         if state.gate_status.get("G4") != "delivery-ready":
             raise GateBlockedError("G4", ("delivery-not-ready",))
         build_ref = str(payload.get("build_ref") or "")
-        build = self._require_exact_ref(
+        build = require_exact_ref(self.kernel,
             build_ref, "delivery/build", "presentation-build"
         )["payload"]
+        policy_ref, policy = ReleaseTargetPolicyService(self.kernel).current()
         target_refs = [
             state.artifact_heads.get(
                 f"delivery/target-evidence/G4/{target_id}", ""
             )
-            for target_id in REQUIRED_TARGET_IDS
+            for target_id in policy.required_target_ids
         ]
         if "" in target_refs:
             raise ContractValidationError(
-                "DeliveryPackage requires all four current G4 target evidence heads"
+                "DeliveryPackage requires all current required G4 target evidence heads"
             )
-        normalized = validate_delivery_package(payload, build, target_refs)
-        self._resolve_kind(normalized["pptx_ref"], "final-pptx")
+        normalized = validate_delivery_package(
+            payload, build, target_refs, policy_ref
+        )
+        resolve_kind(self.kernel, normalized["pptx_ref"], "final-pptx")
         for value in normalized["preview_refs"]:
-            preview = self._resolve_kind(value, "delivery-preview")["payload"]
+            preview = resolve_kind(self.kernel, value, "delivery-preview")["payload"]
             if preview.get("build_ref") != build_ref:
                 raise ContractValidationError(
                     "Delivery preview must bind the current build"
                 )
-        manifest = self._resolve_kind(
+        manifest = resolve_kind(self.kernel,
             normalized["source_manifest_ref"], "source-manifest"
         )["payload"]
         if manifest.get("visual_contract_ref") != build.get("visual_contract_ref"):
             raise ContractValidationError(
                 "Source manifest must bind the build visual contract"
             )
-        font_report = self._resolve_kind(
+        font_report = resolve_kind(self.kernel,
             normalized["font_platform_report_ref"], "font-platform-report"
         )["payload"]
         if (
             font_report.get("build_ref") != build_ref
-            or font_report.get("targets") != list(REQUIRED_TARGET_IDS)
+            or font_report.get("release_target_policy_ref") != policy_ref
+            or font_report.get("targets") != list(policy.required_target_ids)
+            or font_report.get("deferred_targets")
+            != list(policy.deferred_target_ids)
         ):
             raise ContractValidationError(
-                "Font/platform report must bind the current build and four targets"
+                "Font/platform report must bind the current build and release target policy"
             )
-        qa_report = self._resolve_kind(
+        qa_report = resolve_kind(self.kernel,
             normalized["qa_report_ref"], "delivery-qa-report"
         )["payload"]
         if (
@@ -426,7 +439,7 @@ class DeliveryService:
                 "QA report must bind the current build and deck QA"
             )
         for value in target_refs:
-            self._resolve_kind(value, "target-render-evidence")
+            resolve_kind(self.kernel, value, "target-render-evidence")
         committed = self.kernel.commit(
             command_id=command_id,
             expected_revision=expected_revision,
@@ -443,6 +456,23 @@ class DeliveryService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> KernelState:
+        command_fingerprint = fingerprint(
+            "record-chat-delivery", {"payload": payload}
+        )
+        with self.kernel.semantic_command(command_fingerprint):
+            replay = replay_state(self.kernel, command_id, command_fingerprint)
+            if replay is not None:
+                return replay
+            return self._record_chat_delivery(
+                command_id, expected_revision, payload
+            )
+
+    def _record_chat_delivery(
+        self,
+        command_id: str,
+        expected_revision: int,
+        payload: dict[str, Any],
+    ) -> KernelState:
         state = self.kernel.load()
         if state.gate_status.get("G4") != "delivery-ready":
             raise GateBlockedError("G4", ("delivery-package-not-ready",))
@@ -450,10 +480,10 @@ class DeliveryService:
         package_ref = state.artifact_heads.get("delivery/package", "")
         if not build_ref or not package_ref:
             raise GateBlockedError("G4", ("delivery-package-missing",))
-        build = self._require_exact_ref(
+        build = require_exact_ref(self.kernel,
             build_ref, "delivery/build", "presentation-build"
         )["payload"]
-        self._require_exact_ref(
+        require_exact_ref(self.kernel,
             package_ref, "delivery/package", "delivery-package"
         )
         normalized = validate_chat_delivery_receipt(
@@ -463,7 +493,7 @@ class DeliveryService:
             self.kernel.artifacts.resolve(ArtifactReference.parse(value))
         retry_of = normalized["retry_of"]
         if retry_of:
-            self._resolve_kind(retry_of, "chat-delivery-receipt")
+            resolve_kind(self.kernel, retry_of, "chat-delivery-receipt")
         receipt_ref = str(
             self.kernel.artifacts.put("chat-delivery-receipt", normalized)
         )
@@ -491,6 +521,26 @@ class DeliveryService:
         *,
         user_message_ref: str,
     ) -> KernelState:
+        command_fingerprint = fingerprint(
+            "confirm-g4", {"user_message_ref": user_message_ref}
+        )
+        with self.kernel.semantic_command(command_fingerprint):
+            replay = replay_state(self.kernel, command_id, command_fingerprint)
+            if replay is not None:
+                return replay
+            return self._confirm_g4(
+                command_id,
+                expected_revision,
+                user_message_ref=user_message_ref,
+            )
+
+    def _confirm_g4(
+        self,
+        command_id: str,
+        expected_revision: int,
+        *,
+        user_message_ref: str,
+    ) -> KernelState:
         state = self.kernel.load()
         if (
             state.gate_status.get("G4") != "user-reviewable"
@@ -502,12 +552,14 @@ class DeliveryService:
         build_ref = state.artifact_heads.get("delivery/build", "")
         package_ref = state.artifact_heads.get("delivery/package", "")
         receipt_ref = state.artifact_heads.get("chat-delivery/pptx", "")
+        policy_ref, _policy = ReleaseTargetPolicyService(self.kernel).current()
         confirmation = {
             "gate": "G4",
             "user_message_ref": user_message_ref,
             "build_ref": build_ref,
             "package_ref": package_ref,
             "receipt_ref": receipt_ref,
+            "release_target_policy_ref": policy_ref,
         }
         confirmation_ref = str(
             self.kernel.artifacts.put("g4-confirmation", confirmation)
@@ -516,17 +568,72 @@ class DeliveryService:
             confirmation_ref=confirmation_ref,
             user_message_ref=user_message_ref,
         )
+        from ai_ppt_studio.application.retrospective_service import (
+            RetrospectiveService,
+        )
+        from ai_ppt_studio.application.review_commands import stable_id
+
+        completed_at = datetime.now(timezone.utc).isoformat()
+        completion, retrospective_job = RetrospectiveService.prepare_completion(
+            project_id=state.project_id,
+            completion_kind="delivered",
+            completion_identity=stable_id(
+                "project-completion",
+                "delivered",
+                build_ref,
+                user_message_ref,
+            ),
+            completion_ref=user_message_ref,
+            completed_at=completed_at,
+            completion_details={
+                "build_ref": build_ref,
+                "package_ref": package_ref,
+                "receipt_ref": receipt_ref,
+                "g4_confirmation_ref": confirmation_ref,
+            },
+        )
         return self.kernel.commit(
             command_id=command_id,
             expected_revision=expected_revision,
             event_type="gate.G4.confirmed",
             artifact_updates={
-                "gate/G4/confirmation": ("g4-confirmation", confirmation)
+                "gate/G4/confirmation": ("g4-confirmation", confirmation),
+                "project/completion": ("project-completion", completion),
+                "experience/retrospective/job": (
+                    "experience-retrospective-job",
+                    retrospective_job,
+                ),
             },
             gate_mutation=mutation,
         )
 
     def reopen_g4(
+        self,
+        command_id: str,
+        expected_revision: int,
+        *,
+        user_message_ref: str,
+        impact_scope: list[str],
+    ) -> KernelState:
+        command_fingerprint = fingerprint(
+            "reopen-g4",
+            {
+                "user_message_ref": user_message_ref,
+                "impact_scope": impact_scope,
+            },
+        )
+        with self.kernel.semantic_command(command_fingerprint):
+            replay = replay_state(self.kernel, command_id, command_fingerprint)
+            if replay is not None:
+                return replay
+            return self._reopen_g4(
+                command_id,
+                expected_revision,
+                user_message_ref=user_message_ref,
+                impact_scope=impact_scope,
+            )
+
+    def _reopen_g4(
         self,
         command_id: str,
         expected_revision: int,
@@ -548,7 +655,7 @@ class DeliveryService:
         build_ref = state.artifact_heads.get("delivery/build", "")
         if not build_ref:
             raise GateBlockedError("G4", ("current-build-missing",))
-        build = self._resolve_kind(build_ref, "presentation-build")["payload"]
+        build = resolve_kind(self.kernel, build_ref, "presentation-build")["payload"]
         if (
             not isinstance(impact_scope, list)
             or not impact_scope
@@ -584,6 +691,16 @@ class DeliveryService:
             artifact_updates={
                 "gate/G4/reopen": ("scope-reopen", reopen)
             },
+            artifact_removals=tuple(
+                slot
+                for slot in (
+                    "project/completion",
+                    "experience/retrospective/job",
+                    "experience/project-retrospective",
+                    "experience/retrospective/error",
+                )
+                if slot in state.artifact_heads
+            ),
             gate_mutation=mutation,
         )
 
@@ -625,28 +742,42 @@ class DeliveryService:
             raise ContractValidationError(
                 "Schema 3 delivery receipts currently require delivery_type=pptx"
             )
-        state = self.kernel.load()
-        build_ref = state.artifact_heads.get("delivery/build", "")
-        package_ref = state.artifact_heads.get("delivery/package", "")
-        if not build_ref or not package_ref:
-            raise GateBlockedError("G4", ("current-build-or-package-missing",))
-        build = self._resolve_kind(build_ref, "presentation-build")["payload"]
-        return self.record_chat_delivery(
-            command_id,
-            expected_revision,
+        command_fingerprint = fingerprint(
+            "record-public-chat-delivery",
             {
-                "delivery_type": "pptx",
-                "build_ref": build_ref,
-                "package_ref": package_ref,
-                "pptx_ref": build["source_pptx_ref"],
-                "pptx_sha256": build["pptx_sha256"],
+                "delivery_type": delivery_type,
                 "artifact_refs": artifact_refs,
                 "message_ref": message_ref,
                 "send_status": send_status,
-                "sent_at": datetime.now(timezone.utc).isoformat(),
                 "retry_of": retry_of,
             },
         )
+        with self.kernel.semantic_command(command_fingerprint):
+            replay = replay_state(self.kernel, command_id, command_fingerprint)
+            if replay is not None:
+                return replay
+            state = self.kernel.load()
+            build_ref = state.artifact_heads.get("delivery/build", "")
+            package_ref = state.artifact_heads.get("delivery/package", "")
+            if not build_ref or not package_ref:
+                raise GateBlockedError("G4", ("current-build-or-package-missing",))
+            build = resolve_kind(self.kernel, build_ref, "presentation-build")["payload"]
+            return self._record_chat_delivery(
+                command_id,
+                expected_revision,
+                {
+                    "delivery_type": "pptx",
+                    "build_ref": build_ref,
+                    "package_ref": package_ref,
+                    "pptx_ref": build["source_pptx_ref"],
+                    "pptx_sha256": build["pptx_sha256"],
+                    "artifact_refs": artifact_refs,
+                    "message_ref": message_ref,
+                    "send_status": send_status,
+                    "sent_at": datetime.now(timezone.utc).isoformat(),
+                    "retry_of": retry_of,
+                },
+            )
 
     def reopen_public_scope(
         self,
@@ -663,26 +794,33 @@ class DeliveryService:
             )
         if not explanation:
             raise ContractValidationError("Reopening G4 requires a reason")
-        state = self.kernel.load()
-        build_ref = state.artifact_heads.get("delivery/build", "")
-        if not build_ref:
-            raise GateBlockedError("G4", ("current-build-missing",))
-        build = self._resolve_kind(build_ref, "presentation-build")["payload"]
-        identity = hashlib.sha256(
-            f"{command_id}:{explanation}".encode("utf-8")
-        ).hexdigest()
-        return self.reopen_g4(
-            command_id,
-            expected_revision,
-            user_message_ref=f"chat://message/reopen-scope/{identity}",
-            impact_scope=list(build.get("slide_ids") or []),
+        command_fingerprint = fingerprint(
+            "reopen-public-scope", {"gate": gate, "reason": explanation}
         )
+        with self.kernel.semantic_command(command_fingerprint):
+            replay = replay_state(self.kernel, command_id, command_fingerprint)
+            if replay is not None:
+                return replay
+            state = self.kernel.load()
+            build_ref = state.artifact_heads.get("delivery/build", "")
+            if not build_ref:
+                raise GateBlockedError("G4", ("current-build-missing",))
+            build = resolve_kind(self.kernel, build_ref, "presentation-build")["payload"]
+            identity = hashlib.sha256(
+                f"{command_id}:{explanation}".encode("utf-8")
+            ).hexdigest()
+            return self._reopen_g4(
+                command_id,
+                expected_revision,
+                user_message_ref=f"chat://message/reopen-scope/{identity}",
+                impact_scope=list(build.get("slide_ids") or []),
+            )
 
     def delivery_status_projection(self) -> dict[str, Any]:
         state = self.kernel.load()
         build_ref = state.artifact_heads.get("delivery/build", "")
         build = (
-            self._resolve_kind(build_ref, "presentation-build")["payload"]
+            resolve_kind(self.kernel, build_ref, "presentation-build")["payload"]
             if build_ref
             else {}
         )
@@ -693,7 +831,7 @@ class DeliveryService:
             if not value:
                 slide_records.append(None)
                 continue
-            payload = self._resolve_kind(value, "slide-qa")["payload"]
+            payload = resolve_kind(self.kernel, value, "slide-qa")["payload"]
             slide_records.append(
                 payload
                 if payload.get("build_ref") == build_ref
@@ -717,14 +855,16 @@ class DeliveryService:
         )
         target_rows: list[dict[str, str]] = []
         target_statuses: list[str] = []
-        for target_id in REQUIRED_TARGET_IDS:
+        _policy_ref, policy = ReleaseTargetPolicyService(self.kernel).current()
+        for target_id in SUPPORTED_TARGET_IDS:
+            required = target_id in policy.required_target_ids
             value = state.artifact_heads.get(
                 f"delivery/target-evidence/G4/{target_id}", ""
             )
-            status = "pending"
+            status = "pending" if required else "deferred"
             sha256 = ""
-            if value:
-                payload = self._resolve_kind(value, "target-render-evidence")[
+            if value and required:
+                payload = resolve_kind(self.kernel, value, "target-render-evidence")[
                     "payload"
                 ]
                 sha256 = str(payload.get("pptx_sha256") or "")
@@ -743,7 +883,8 @@ class DeliveryService:
             target_rows.append(
                 {"target_id": target_id, "status": status, "pptx_sha256": sha256}
             )
-            target_statuses.append(status)
+            if required:
+                target_statuses.append(status)
         target_gate = (
             "passed"
             if target_statuses and set(target_statuses) == {"passed"}
@@ -760,7 +901,7 @@ class DeliveryService:
         receipt_ref = state.artifact_heads.get("chat-delivery/pptx", "")
         chat_send = {"status": "pending", "message_ref": "", "sent_at": ""}
         if receipt_ref:
-            receipt = self._resolve_kind(
+            receipt = resolve_kind(self.kernel,
                 receipt_ref, "chat-delivery-receipt"
             )["payload"]
             current_receipt = (
@@ -786,7 +927,7 @@ class DeliveryService:
         else:
             deck_ref = state.artifact_heads.get("delivery/qa/deck", "")
             deck = (
-                self._resolve_kind(deck_ref, "deck-qa")["payload"]
+                resolve_kind(self.kernel, deck_ref, "deck-qa")["payload"]
                 if deck_ref
                 else {}
             )
@@ -798,7 +939,7 @@ class DeliveryService:
             ):
                 blocker = "deck-qa-incomplete-or-failed"
             elif target_gate != "passed":
-                blocker = "four-target-evidence-incomplete-or-failed"
+                blocker = "required-target-evidence-incomplete-or-failed"
             elif state.gate_status.get("G4") == "delivery-ready" and not state.artifact_heads.get(
                 "delivery/package"
             ):
@@ -814,20 +955,3 @@ class DeliveryService:
             "hash_identity": str(build.get("pptx_sha256") or ""),
             "chat_send": chat_send,
         }
-
-    def _require_exact_ref(self, value: str, slot: str, kind: str) -> dict:
-        reference = ArtifactReference.parse(value)
-        state = self.kernel.load()
-        if state.artifact_heads.get(slot) != value or reference.kind != kind:
-            raise ArtifactReferenceError(
-                f"Artifact reference is not the current {slot} head: {value}"
-            )
-        return self.kernel.artifacts.resolve(reference)
-
-    def _resolve_kind(self, value: str, kind: str) -> dict:
-        reference = ArtifactReference.parse(value)
-        if reference.kind != kind:
-            raise ArtifactReferenceError(
-                f"Expected artifact kind {kind}, got {reference.kind}"
-            )
-        return self.kernel.artifacts.resolve(reference)

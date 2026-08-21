@@ -394,7 +394,7 @@ class V16VisualBridgeTests(unittest.TestCase):
         for action, label, wrong_kind, wrong_role in cases:
             with self.subTest(action=action), tempfile.TemporaryDirectory() as temp:
                 project = Path(temp)
-                visual, revision, refs = prepared_g2(project, slide_count=2)
+                visual, revision, refs = prepared_g2(project, slide_count=3)
                 requested = dispatch_v16({
                     "operation": "request-agent-action",
                     "project_root": str(project),
@@ -489,14 +489,29 @@ class V16VisualBridgeTests(unittest.TestCase):
     def test_visual_projection_marks_and_g3_use_existing_public_operations(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
-            visual, revision, _refs = prepared_g2(project, slide_count=2)
+            visual, revision, _refs = prepared_g2(project, slide_count=3)
             published = visual.publish_visual_review("bridge-publish", revision)
             source_version = published.artifact_heads["visual/contract"]
+            opened = dispatch_v16(
+                {
+                    "operation": "open-or-resume-review-session",
+                    "project_root": str(project),
+                    "command_id": "bridge-open-visual-review",
+                    "expected_revision": published.revision,
+                    "review_type": "visual-professional",
+                    "target_artifact_ref": source_version,
+                    "source_version": source_version,
+                    "source_revision": published.revision,
+                    "open_policy": "foreground-if-waiting",
+                }
+            )
+            session = opened["result"]["session"]
+            review_revision = opened["result"]["snapshot"]["revision"]
             projection = dispatch_v16(
                 {
-                    "operation": "get-review-projection",
+                    "operation": "get-visual-review-projection",
                     "project_root": str(project),
-                    "review_type": "visual",
+                    "review_session_id": session["review_session_id"],
                 }
             )
             self.assertEqual(
@@ -504,19 +519,27 @@ class V16VisualBridgeTests(unittest.TestCase):
             )
             saved = dispatch_v16(
                 {
-                    "operation": "save-review-marks",
+                    "operation": "save-visual-contract-review-marks",
                     "project_root": str(project),
-                    "expected_revision": published.revision,
-                    "review_type": "visual",
+                    "expected_revision": review_revision,
+                    "review_session_id": session["review_session_id"],
                     "source_version": source_version,
                     "marks": [
                         {
                             "mark_id": "bridge-visual-mark",
-                            "field_anchor": "visual-slide-s1-visible-copy",
-                            "exact_text": "三条断点",
-                            "prefix": "五套系统",
-                            "suffix": "",
+                            "target_type": "contract-field",
+                            "slide_id": "S01",
+                            "deck_section_id": "",
+                            "target_key": "composition_intent",
+                            "selected_text": "",
+                            "context_before": "",
+                            "context_after": "",
                             "comment": "增强证据层级",
+                            "visual_contract_ref": source_version,
+                            "source_version": source_version,
+                            "revision": review_revision,
+                            "created_at": "2026-08-15T09:00:00+08:00",
+                            "created_by": "user",
                         }
                     ],
                 }
