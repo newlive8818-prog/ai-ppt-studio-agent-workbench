@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import re
+import unicodedata
+from pathlib import PurePosixPath
 from typing import Any
 
+from ai_ppt_studio.domains.presentation.release_policy import SUPPORTED_TARGET_IDS
 from ai_ppt_studio.errors import ContractValidationError
 
 VISUAL_RULE_LEVELS = frozenset(
@@ -15,6 +18,7 @@ FORBIDDEN_SCORE_FIELDS = frozenset(
     {"score", "rating", "weighted_score", "average", "vote_count", "conditional_pass"}
 )
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+URL_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 
 
 def _text(payload: dict[str, Any], field: str) -> str:
@@ -45,6 +49,109 @@ def _strict_route(payload: dict[str, Any]) -> None:
         )
 
 
+def _project_relative_posix_path(
+    value: Any, field: str, *, allow_empty: bool = False
+) -> str:
+    if not isinstance(value, str):
+        raise ContractValidationError(f"{field} must be a string")
+    if allow_empty and value == "":
+        return ""
+    if not value or value != value.strip():
+        raise ContractValidationError(
+            f"{field} must be a project-relative POSIX path"
+        )
+    path = PurePosixPath(value)
+    if (
+        any(unicodedata.category(character).startswith("C") for character in value)
+        or URL_SCHEME_PATTERN.match(value)
+        or path.is_absolute()
+        or not path.parts
+        or ".." in path.parts
+        or "\\" in value
+        or value != path.as_posix()
+    ):
+        raise ContractValidationError(
+            f"{field} must be a project-relative POSIX path"
+        )
+    return value
+
+
+def validate_anchor_render_assets(
+    payload: dict[str, Any], *, valid_slide_ids: set[str] | None = None
+) -> dict[str, Any]:
+    """Close the three-slide identity and its current/previous review renders."""
+
+    if not isinstance(payload, dict):
+        raise ContractValidationError("Anchor render identity must be an object")
+    slide_ids = payload.get("slide_ids")
+    if (
+        not isinstance(slide_ids, list)
+        or len(slide_ids) != 3
+        or any(
+            not isinstance(slide_id, str)
+            or not slide_id
+            or slide_id != slide_id.strip()
+            for slide_id in slide_ids
+        )
+        or len(set(slide_ids)) != 3
+    ):
+        raise ContractValidationError(
+            "AnchorSlideSet must contain exactly three unique slide IDs"
+        )
+    if valid_slide_ids is not None and not set(slide_ids).issubset(
+        valid_slide_ids
+    ):
+        raise ContractValidationError(
+            "Every anchor slide must belong to the current visual contract set"
+        )
+
+    render_assets = payload.get("render_assets")
+    if (
+        not isinstance(render_assets, list)
+        or len(render_assets) != 3
+        or any(not isinstance(item, dict) for item in render_assets)
+    ):
+        raise ContractValidationError(
+            "AnchorSlideSet render_assets must contain exactly three objects"
+        )
+    normalized_assets: list[dict[str, str]] = []
+    expected_fields = {
+        "slide_id",
+        "current_asset_ref",
+        "previous_asset_ref",
+    }
+    for expected_slide_id, item in zip(slide_ids, render_assets, strict=True):
+        if set(item) != expected_fields:
+            raise ContractValidationError(
+                "Anchor render assets must use the closed current/previous schema"
+            )
+        slide_id = item.get("slide_id")
+        if slide_id != expected_slide_id:
+            raise ContractValidationError(
+                "Anchor render assets must uniquely follow slide_ids order"
+            )
+        current_asset_ref = _project_relative_posix_path(
+            item.get("current_asset_ref"),
+            "current_asset_ref",
+        )
+        previous_asset_ref = _project_relative_posix_path(
+            item.get("previous_asset_ref"),
+            "previous_asset_ref",
+            allow_empty=True,
+        )
+        normalized_assets.append(
+            {
+                "slide_id": slide_id,
+                "current_asset_ref": current_asset_ref,
+                "previous_asset_ref": previous_asset_ref,
+            }
+        )
+    return {
+        "slide_ids": list(slide_ids),
+        "render_assets": normalized_assets,
+    }
+
+
 def validate_visual_brief(
     payload: dict[str, Any], required_target_ids: tuple[str, ...]
 ) -> dict[str, Any]:
@@ -53,7 +160,7 @@ def validate_visual_brief(
     _strict_route(payload)
     normalized = dict(payload)
     for field in (
-        "content_blueprint_ref",
+        "reading_blueprint_ref",
         "design_proposition",
         "audience_fit",
         "narrative_rhythm",
@@ -62,9 +169,13 @@ def validate_visual_brief(
         "powerpoint_constraints",
     ):
         normalized[field] = _text(payload, field)
-    if tuple(payload.get("target_ids") or ()) != required_target_ids:
+    if (
+        not required_target_ids
+        or set(required_target_ids).difference(SUPPORTED_TARGET_IDS)
+        or tuple(payload.get("target_ids") or ()) != required_target_ids
+    ):
         raise ContractValidationError(
-            "VisualBrief target IDs must equal the current release policy in order"
+            "VisualBrief target IDs must equal the current release policy"
         )
     normalized["target_ids"] = list(required_target_ids)
     return normalized
@@ -77,7 +188,7 @@ def validate_deck_design_system(payload: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(payload)
     for field in (
         "visual_brief_ref",
-        "content_blueprint_ref",
+        "reading_blueprint_ref",
         "theme_proposition",
         "composition_grammar",
         "imagery_strategy",
@@ -123,7 +234,7 @@ def validate_visual_contract_set(
         raise ContractValidationError("VisualContractSet must be an object")
     _strict_route(payload)
     normalized = dict(payload)
-    for field in ("deck_design_system_ref", "content_blueprint_ref"):
+    for field in ("deck_design_system_ref", "reading_blueprint_ref"):
         normalized[field] = _text(payload, field)
 
     role_runs = payload.get("role_runs")
@@ -172,12 +283,19 @@ def validate_visual_contract_set(
     seen: set[str] = set()
     exact_fields = (
         "slide_id",
-        "communication_goal",
-        "core_claim",
-        "title",
-        "visible_copy",
+        "page_task",
+        "reading_question",
+        "neutral_title",
+        "visible_copy_blocks",
+        "identity_labels",
+        "evidence_bindings",
+        "analysis_or_proposal_blocks",
+        "solution_mapping_refs",
+        "previous_relation",
+        "next_relation",
         "speaker_notes",
-        "source_refs",
+        "reading_quality",
+        "material_mode",
     )
     required_text = (
         "page_family",
@@ -322,7 +440,7 @@ def validate_visual_review(payload: dict[str, Any]) -> dict[str, Any]:
 def validate_anchor_slide_set(
     payload: dict[str, Any], visual_contract_set: dict[str, Any]
 ) -> dict[str, Any]:
-    """Validate a strict-B, native-first set of two or three anchor slides."""
+    """Validate a strict-B, native-first set of exactly three anchor slides."""
 
     if not isinstance(payload, dict):
         raise ContractValidationError("AnchorSlideSet must be an object")
@@ -330,26 +448,16 @@ def validate_anchor_slide_set(
     normalized["visual_contract_set_ref"] = _text(
         payload, "visual_contract_set_ref"
     )
-    slide_ids = payload.get("slide_ids")
-    if (
-        not isinstance(slide_ids, list)
-        or not 2 <= len(slide_ids) <= 3
-        or any(not isinstance(slide_id, str) or not slide_id for slide_id in slide_ids)
-        or len(set(slide_ids)) != len(slide_ids)
-    ):
-        raise ContractValidationError(
-            "AnchorSlideSet must contain two or three unique slide IDs"
-        )
     contract_ids = {
         contract.get("slide_id")
         for contract in visual_contract_set.get("slide_contracts") or []
         if isinstance(contract, dict)
     }
-    if not set(slide_ids).issubset(contract_ids):
-        raise ContractValidationError(
-            "Every anchor slide must belong to the current visual contract set"
-        )
-    normalized["slide_ids"] = list(slide_ids)
+    render_identity = validate_anchor_render_assets(
+        payload, valid_slide_ids=contract_ids
+    )
+    normalized.update(render_identity)
+    normalized["selection_reason"] = _text(payload, "selection_reason")
     normalized["native_first_pptx_ref"] = _text(
         payload, "native_first_pptx_ref"
     )

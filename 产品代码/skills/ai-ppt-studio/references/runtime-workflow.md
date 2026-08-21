@@ -1,64 +1,56 @@
-# Schema 3 runtime workflow
+# Schema 3 Runtime workflow
 
-## Startup and project selection
+## Startup and authority
 
 1. Run `python3 scripts/ai_ppt_runtime.py preflight`.
-2. Create a managed project with `create_ai_ppt_project`, or omit `projectRoot` to resume the latest schema 3 project.
-3. Keep every project, artifact, render, PPTX, target export, and experience record below the configured managed runtime root.
-4. Use `get_ai_ppt_project_snapshot` after every write and retain the returned revision.
+2. Create with `create_ai_ppt_project`, or omit `projectRoot` to resume the latest schema 3 project.
+3. Keep every project, artifact, review resource, render, PPTX, target export, and experience record below the configured managed Runtime root.
+4. Call `get_ai_ppt_project_snapshot` after every write and retain `revision`.
+5. Call `get_ai_ppt_project_status` for the user-facing state; do not derive status from Gate names or UI state.
 
-The runtime never falls back to a v1.x state/projection. An old project is available only through the explicit one-way importer; missing review or desktop evidence remains unproven.
+The Runtime never falls back to an old state/projection. Legacy projects are available only through explicit one-way import; missing evidence remains unproven.
 
-## Formal writes
+## Formal write groups
 
-- `add_ai_ppt_material` records only user-provided text, URLs, or copied bytes.
-- `save_ai_ppt_mission_draft` writes the AI-authored `MissionDraft`. Required fields can make it `confirmable`, never confirmed.
-- `confirm_ai_ppt_mission` creates an immutable `MissionConfirmation` only after the task, current materials or explicit no-material choice, background, constraints, red lines, and unknowns have been shown. A verified sidebar/message adapter may supply a real reference; otherwise the MCP server requests host-native confirmation and writes only after host `accept` plus explicit confirmation. The Skill does not assume any reference URI format.
-- `request_ai_ppt_agent_action` creates one immutable role-bound task over exact `artifact://<kind>/<sha256>` inputs.
-- `commit_ai_ppt_artifact` validates and commits the formal output; a task result cannot bypass its domain contract.
-- `save_content_page_decision` silently writes one current-source PageDecision and comment; it sends no follow-up, changes no content, and confirms no Gate.
-- `submit_content_review_batch` freezes one complete immutable review batch and is the only content-review write that starts concentrated Codex processing.
-- `save_content_batch_revision_plan` stores the chief's whole-deck plan without applying it; `confirm_content_batch_revision_plan` requires a current host confirmation before content change.
-- `open_content_evidence_browser` creates only a short-lived read-only evidence session bound to one source/slide/evidence/material/asset identity.
-- `save_review_marks` writes exact text, prefix, suffix, field anchor, comment, and source version only for G3 visual review; it never confirms a Gate.
-- `record_internal_gate` is restricted to authorized G1/G2 reviewers and exact current evidence heads.
-- `confirm_ai_ppt_gate` accepts only G0/G3/G4. It first resolves the exact current `sourceVersion`, revision, evidence refs, and challenge, then requires a verified user message/action or a fresh host-native confirmation. One confirmation belongs to one current checkpoint and is consumed once; `MissionConfirmation` never confirms G0, G3, or G4.
-- For a passed historical G0 created before trusted host assertions, `legacy-credential-upgrade` is available only when the old confirmation's acceptance and blueprint refs exactly equal current heads and the credential is strictly old-format. The host must confirm the current challenge again. Success replaces only `gate/G0/confirmation` and preserves current visual lineage; it never upgrades an old message string by itself. Any content drift requires normal G0 reopen and downstream invalidation.
-- `record_chat_delivery` binds the current delivery package and exact sent PPTX.
-- `reopen_ai_ppt_scope` preserves immutable history. Reopening G0 atomically locks G1–G4, invalidates the downstream active Agent task, and removes downstream current heads without deleting their artifact objects.
+- Project and Mission: `add_ai_ppt_material`, `save_ai_ppt_mission_draft`, `confirm_ai_ppt_mission`, `set_ai_ppt_release_target_policy`.
+- Formal work: `request_ai_ppt_agent_action`, `submit_ai_ppt_human_decision`, `commit_ai_ppt_artifact`.
+- Content: build the four objects, run two hard gates, repair, save page decisions, submit or withdraw a Batch, confirm a revision plan, and create a change set.
+- Review: `open_or_resume_review_session`, `record_review_host_open_receipt`, `record_review_host_notification_receipt`, and `record_review_ai_receipt`.
+- Visual feedback: `submit_visual_anchor_feedback_batch` and `save_visual_contract_review_marks`.
+- Gates and delivery: `record_internal_gate`, `confirm_ai_ppt_gate`, `record_chat_delivery`, `close_ai_ppt_project`, `abort_ai_ppt_project`, and `reopen_ai_ppt_scope`.
+- Experience: `recommend_experience`, `record_experience_application`, and `summarize_project_experience`.
 
-Every write uses `expectedRevision`. On `REVISION_CONFLICT` or `REVIEW_SOURCE_STALE`, refresh first and preserve unsaved user drafts.
+Every write uses `expectedRevision` and an idempotent command identity. Domain services recheck current heads and Gate preconditions. On `REVISION_CONFLICT` or `REVIEW_SOURCE_STALE`, refresh first and preserve user drafts.
 
-One Agent turn cannot cross from mission confirmation through the next user Gate unless a new host verification/elicitation result is obtained after the current review source was published. `HOST_CONFIRMATION_DECLINED` and `HOST_CONFIRMATION_UNAVAILABLE` cause zero Gate business writes.
+The formal semantics are stricter than the tool names:
 
-## Mission and content precondition
+- `MissionConfirmation` is created only after the complete current task, material inventory or explicit no-material choice, background, constraints, red lines, and unknowns are shown and the host verifies the current confirmation action. Intent words are never evidence, and ordinary conversation or a stale card cannot confirm.
+- `save_content_page_decision` silently persists one current-source `PageDecision` plus its required non-approved comment. It sends no follow-up, changes no content, and confirms no Gate. Only one complete immutable `ContentReviewBatch` starts concentrated processing.
+- The chief saves one whole-deck revision plan; user confirmation is required before applying it. Every new source version receives full re-review with no inherited approvals.
+- Visual ReviewMarks bind exact field/text anchors, prefix, suffix, comment, source version, and revision. A stale anchor conflicts; saving marks never confirms G3.
+- `record_internal_gate` is restricted to authorized G1/G2 reviewers and exact current evidence heads. `confirm_ai_ppt_gate` accepts only G0/G3/G4, resolves the exact current source version, revision, evidence refs, and single-use challenge, and requires a verified current user action or fresh host-native confirmation. `MissionConfirmation` never confirms a Gate.
+- `legacy-credential-upgrade` may replace only the credential of an already-passed historical G0 when its frozen acceptance and blueprint refs still equal current heads and its credential is strictly old-format. It requires a fresh host confirmation of the current challenge. Content drift requires normal G0 reopen and atomic downstream invalidation.
 
-The order is strict: save `MissionDraft` → show task, materials, and unknowns → recognize confirmation intent only in the current card context → call `confirm_ai_ppt_mission` → obtain a verified reference or host-native confirmation → pass the Python content precondition gate → continue as `material-backed`, `mixed-evidence`, or `proposal-led`.
+One Agent turn stops at the next later user Gate unless a new host verification or elicitation result arrives after the current review source is published. Never replay an older message or infer a Gate from task or Mission approval. `HOST_CONFIRMATION_DECLINED` and `HOST_CONFIRMATION_UNAVAILABLE` cause zero Gate business writes.
 
-- After the current complete `confirmable` card is shown and confirmation is its only pending high-impact action, `OK / 确认 / 采纳 / 继续` and clear equivalents may trigger the tool. The words themselves are never persisted as evidence.
-- The same words in ordinary conversation, unrelated feedback, or against a stale/non-current card do not confirm the mission.
-- `HOST_CONFIRMATION_DECLINED` and `HOST_CONFIRMATION_UNAVAILABLE` make no business write. Preserve the card and retry; never ask for more material and never bypass AI PPT Studio because of a host capability failure.
+## Mission and content source replacement
 
-- A relatively sufficient current material inventory becomes `material-backed`.
-- A current inventory with material evidence and material gaps becomes `mixed-evidence`.
-- `no-materials-confirmed` binds the current empty-material identity and becomes `proposal-led`.
-- Any material or mission identity change makes the old `MissionConfirmation` stale.
-- Formal content task creation and content artifact commits both re-check the Python gate. Node, sidebar, Browser, prompts, and fixtures cannot bypass it.
-- All modes preserve 来源事实, 材料推断, 用户已确认, 诊断假设, 方案建议, 待联合验证, 证据缺口, and 禁止使用 consistently. Missing evidence never blocks complete content work; invented customer facts, numbers, cases, capabilities, results, or commitments always fail.
-- After the mission precondition, new projects do not require a content-framework confirmation or a full-deck expansion authorization. Historical projects may retain those immutable artifacts, but they are not new-work prerequisites.
+Save `MissionDraft` → show the current complete card → recognize intent only in that card's sole-pending-action context → obtain verified or host-native confirmation → create `MissionConfirmation` → pass the Python content precondition → build the four content objects. `materials-provided` binds the current material inventory; `no-materials-confirmed` binds the current empty-material identity. `PresalesEvidenceBook` then classifies the work as `material-backed`, `mixed-evidence`, or `proposal-led`.
+
+Formal content task creation and formal content artifact commit both recheck that Python precondition. Node, React, Browser, prompts, fixtures, and adapter calls cannot bypass it. Across all modes, preserve `来源事实`, `材料推断`, `用户已确认`, `诊断假设`, `方案建议`, `待联合验证`, `证据缺口`, and `禁止使用`. Missing evidence does not block complete content work; invented customer facts, numbers, cases, capabilities, results, or commitments always fail.
+
+A new Mission, material inventory, or `ReadingDeckBlueprint.source_version` preserves immutable history but atomically removes stale current confirmation, review, visual, delivery, completion, and queued Agent heads as applicable. It reopens G0 and locks G1–G4. Old artifacts remain readable but cannot authorize new writes.
 
 ## Gate meaning
 
-- G0: current internally accepted content blueprint plus explicit user confirmation.
-- G1: complete Deck Design System and all slide visual contracts pass internal contract review.
-- G2: strict route B native anchors plus every target required by the current `ReleaseTargetPolicy` pass semantic, aesthetic, engineering, and target-render checks on one PPTX SHA-256.
-- G3: current complete visual contract plus explicit user confirmation.
-- G4: current full-deck build, QA, new final-PPTX records for every policy-required target, policy-bound delivery package, sent chat receipt, and explicit final user confirmation.
+- G0: current two-hard-gate-passing `ReadingDeckBlueprint`, one complete all-approved content review Batch, and explicit user confirmation.
+- G1: complete `DeckDesignSystem` plus all `SlideVisualContract` objects pass internal contract checks.
+- G2: native anchors and all targets required by the current immutable `ReleaseTargetPolicy` pass semantic, aesthetic, engineering, and named-target-render checks against one PPTX hash. Deferred profiles are not Gate rows and do not imply compatibility.
+- G3: current complete visual review source plus explicit user confirmation.
+- G4: current full-deck build, QA, new final-PPTX evidence for every policy-required target, delivery package bound to the re-resolved current policy, verified sent-file receipt, and explicit final confirmation. G2 anchor evidence cannot be reused.
 
-## UI resources
+## Review and capability boundary
 
-`get_ai_ppt_sidebar_projection` is a pure-data projection for the real Codex sidebar. UI-01/UI-02/UI-04/UI-05 remain compact; UI-03 may use the host's maximum available width for the complete continuous content review. When no verified sidebar host exists, it returns `HOST_SIDEBAR_UNAVAILABLE`; it never renders a Widget in chat.
+Create one current ReviewSession per review type and source identity. Internally retain the complete `ReadingDeckBlueprint`, but expose content pages only through the accepted `ContentReviewPageViewModel`; backend notes, evidence identities/source-entry UI, mappings, relations, reading-quality catalogs, and other internal fields do not become content-review modules. Let the host create its authenticated Review Bridge resource and open only that resource in the Codex built-in Browser at 760/1000/1440px. The Bridge resolves current project, source version, and revision from Python authority; the page cannot choose them.
 
-Content review is published to the maximum-width sidebar only after `ReadingDeckBlueprint` passes both content hard gates. It preserves neutral titles, complete visible copy, evidence, notes, reading quality, page relations, PageDecision, and immutable batch state. `open_content_evidence_browser` is read-only evidence assistance for one exact material scope and cannot save PageDecision or ReviewMark.
-
-`open_ai_ppt_browser_review` prepares the G3 visual professional review. A directly connected adapter may return `status=opened`. The production stdio path normally returns `status=review-session-ready`, `openMode=agent-browser`, `browserAction=open-scoped-url`, and a short-lived scoped URL; the Agent must immediately open that URL with the Codex built-in Browser and must not claim success before navigation succeeds. Missing in-process adapter injection is not a host Browser failure. Report `BROWSER_REVIEW_UNAVAILABLE` only when the Agent Browser is absent or actual navigation fails, and `BROWSER_REVIEW_SAVE_UNAVAILABLE` only when the Review Bridge cannot reliably persist marks. Preserve state and drafts and retry; no chat UI display mode is a substitute.
+Reliable persistence, host open, host notification, and AI receipt are independent. A `review-session-ready` response is only a handoff: immediately open its scoped URL with the Agent's Codex built-in Browser and do not claim success before actual navigation. Missing stdio adapter injection is not Browser unavailability. Report `BROWSER_REVIEW_UNAVAILABLE` only when the Agent Browser is absent or scoped navigation fails, and `BROWSER_REVIEW_SAVE_UNAVAILABLE` only when Review Bridge/Python persistence is unreliable. Preserve Runtime state, last valid artifacts, and drafts. A fixture, local preview, generated URL, loopback request, or Browser render cannot prove a real host action.

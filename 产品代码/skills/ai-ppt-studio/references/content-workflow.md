@@ -1,87 +1,56 @@
 # Evidence-first presales content workflow
 
-## Preconditions
+## Mission and material mode
 
-Formal content work requires the current trusted `MissionConfirmation` and current material identity. It does not require a separate framework confirmation or a full-deck expansion authorization.
+Finish what the presentation says before deciding how it looks.
 
-Select one material mode:
+1. Save `MissionDraft` with `save_ai_ppt_mission_draft` and show the complete current task card.
+2. Obtain `MissionConfirmation` through a verified user action or host-native confirmation. A complete draft is only `confirmable`; confirmation intent is not evidence.
+3. Register only user-provided sources and preserve their identities, hashes, exclusions, conflicts, unknowns, and prohibited extrapolations.
+4. Derive one current mode: `material-backed` when critical claims are sufficiently grounded, `mixed-evidence` when facts and explicit gaps coexist, or `proposal-led` when the user has confirmed no current customer material.
 
-- `material-backed`: relatively sufficient customer/project evidence;
-- `mixed-evidence`: facts and material gaps coexist;
-- `proposal-led`: no current customer material.
+Across all modes, keep source fact, source-derived inference, `诊断假设`, `方案建议`, `待联合验证`, conflict, unknown, and gap distinguishable. Never invent customer facts, numbers, cases, capabilities, results, or commitments.
 
-All three modes continue through complete content production, internal hard gates, sidebar review, and G0.
+Evidence determines what the system may conclude. The chief deletes, downgrades, or rewrites unsupported intended conclusions; they may remain only as a labeled inference, hypothesis, proposal, validation item, gap, or prohibited extrapolation. Never select evidence after fixing a persuasive conclusion.
 
-## Production authority
+Use the internal identity vocabulary consistently: `来源事实`, `材料推断`, `用户已确认`, `诊断假设`, `方案建议`, `待联合验证`, `证据缺口`, and `禁止使用`. Missing material is not itself a hard-gate failure; fabrication, nonexistent citation, identity impersonation, unsupported capability/fit, or guaranteed outcome is.
 
-One `售前方案总师` owns the complete content line. On-demand specialists may answer bounded risk questions, but they are not a fixed production pipeline and do not divide final responsibility.
+## Presales chief and four current objects
 
-The chief may delete, downgrade, or rewrite an intended conclusion that lacks evidence. Unsupported content may remain only as `材料推断`, `诊断假设`, `方案建议`, or `待联合验证`. It cannot become customer fact, proven fit, result, or commitment.
+Let the presales chief own the complete reasoning chain and write one current authority per object:
 
-## Required production order
+1. `PresalesEvidenceBook`: sources, supported facts, inferences, conflicts, unknowns, evidence gaps, exclusions, and mode.
+2. `CustomerDecisionContext`: audience, decision stage, business issue, questions, constraints, desired action, and evidence-book reference.
+3. `ProblemSolutionFitMap`: traceable current-state, problem, requirement, proposal, value hypothesis, and validation path.
+4. `ReadingDeckBlueprint`: final page order, neutral title, page task, visible copy, speaker notes, evidence bindings, cross-page relations, identity labels, and media intent.
 
-1. Build `PresalesEvidenceBook`: facts, sources, conflicts, unknowns, gaps, exclusions, and forbidden extrapolations.
-2. Build `CustomerDecisionContext`: audience, decision stage, current business matter, consensus, decision questions, constraints, and unresolved questions.
-3. Build `ProblemSolutionFitMap`: situation, symptoms, causes/hypotheses, impacts, constraints, derived requirements, solution components, mappings, boundaries, alternatives, and validation.
-4. Build the complete `ReadingDeckBlueprint` with neutral titles, all visible copy, identity labels, evidence, analysis/proposals, solution mappings, page relations, and speaker notes.
-5. Run the `事实与证据硬门`.
-6. Run the `售前阅读与客户立场硬门`.
-7. The chief repairs failures and reruns every affected hard gate until both pass.
-8. Publish the passing source to the existing full-deck sidebar review.
+Write in that order and bind every object to exact current `artifact://<kind>/<sha256>` upstream heads. Use specialists only for a concrete uncertainty or a high-impact `RevisionProposal`; a specialist recommendation cannot write the blueprint or approve its own work.
 
-Evidence determines what the system may conclude. Never choose evidence after fixing a persuasive proposition.
+Use neutral titles for factual objects, material scope, business matters, problem domains, solution components, work stages, validation matters, or next-step work. Do not put unsupported causality, superiority, necessity, uniqueness, or customer action decisions in titles; keep judgments inside the page and label their identity.
 
-## Identity vocabulary
+## Two hard gates and repair
 
-Use the same identity throughout visible copy, notes, review, and G0:
+Run `run_content_evidence_gate` and `run_content_presales_reading_gate` on the current `ReadingDeckBlueprint`. Both are binary and source-version-bound. A failure produces actionable requirements; use `repair_reading_deck_blueprint`, preserve repair history, publish a new source version, and rerun every invalidated gate. A score, fixture, or reviewer count cannot compensate for a failed check.
 
-- `来源事实`
-- `材料推断`
-- `用户已确认`
-- `诊断假设`
-- `方案建议`
-- `待联合验证`
-- `证据缺口`
-- `禁止使用`
+Hard-gate reviewers never edit the blueprint. If a result is called an independent Agent review, preserve the real independent instance identity, isolated context/hash, exact input source/hash, and output record; otherwise label it `isolated-review-task`.
 
-Material absence is not a hard-gate failure. Fabrication, nonexistent citations, identity impersonation, unsupported capability/fit, or guaranteed outcome is a failure.
+## Full-deck review and G0
 
-## Neutral titles
+After both hard gates pass:
 
-Titles state factual objects, material scope, business matters, problem domains, solution components, work stages, validation matters, or next-step work.
+1. Open or resume one current `content-full-deck` ReviewSession.
+2. Keep `ReadingDeckBlueprint` complete as the internal governance authority, but project only the accepted `ContentReviewPageViewModel`: page goal, desired customer judgment, actual page text, optional real material/page visuals, and the current page decision. Do not expose speaker notes, evidence identities or source-entry UI, analysis/proposal catalogs, mappings, cross-page relations, reading-quality fields, or the complete backend field catalog.
+3. When a page has no real reviewable visual, omit the image region, its title, and any large empty state; expand “页面实际文字” to the full row. Zero images are valid in every material mode and do not imply insufficient evidence. Do not fill the gap with decorative, network, or AI-generated imagery.
+4. Save exactly one `approved | modify | evidence | merge-or-delete` `PageDecision` per slide. Every non-approved decision requires a comment. `save_content_page_decision` is silent: it persists only that current decision/comment, sends no follow-up, changes no content, and confirms no Gate.
+5. Only after every page is decided, submit one immutable `ContentReviewBatch`; only that complete Batch starts concentrated processing.
+6. If all decisions are approved, open G0 review. If any requests change, the chief saves one whole-deck `ContentBatchRevisionPlan`; the user explicitly confirms it before one change set is created. Publish a new blueprint source version, rerun invalidated hard gates, and fully re-review every page with no inherited approvals.
 
-Do not place unsupported causality, superiority, necessity, uniqueness, or customer action decisions in titles. Put judgments inside the page and label them as material observation, AI analysis, diagnostic hypothesis, proposal, or joint validation.
-
-## Hard-gate truthfulness
-
-Hard-gate reviewers do not edit the blueprint. They return `passed` or `failed` with structured repair requirements.
-
-If a review is described as an independent Agent review, preserve a real independent instance ID, isolated context/hash, input source/hash, and output record. Without those records, label it `isolated-review-task`.
-
-## Sidebar review and G0
-
-Keep the approved full-deck review interaction:
-
-- complete continuous deck at maximum sidebar width;
-- full visible copy, real evidence, sources, notes, reading quality, and page relations;
-- one `approved | modify | evidence | merge-or-delete` decision per page;
-- comments required for every non-approved decision;
-- `save_content_page_decision` is a silent page save: it persists only the current decision/comment, sends no follow-up, and never changes content or Gate state;
-- all pages complete before `submit_content_review_batch` creates one immutable review batch and one concentrated Codex follow-up;
-- the chief uses `save_content_batch_revision_plan` to produce one deck-level revision plan for the entire submitted batch;
-- the user confirms that plan through `confirm_content_batch_revision_plan` before any content change;
-- chief revises and reruns necessary gates;
-- every new source version receives full re-review;
-- final current source is confirmed at G0 in chat.
-
-Saving a page, submitting a batch, confirming a revision plan, or confirming the mission never confirms G0.
-
-Do not discuss or produce formal visual work before G0 passes.
+Saving decisions, submitting a Batch, confirming a revision plan, or notifying the host never passes G0. Confirm G0 only for the current all-approved Batch through an explicit user judgment with a real host-verified reference. Begin visual work only after G0 passes.
 
 ## Pause conditions
 
-Pause only for critical source conflict, materially different diagnosis branches, a high-impact scope/commitment change, or inability to converge. A missing material or ordinary evidence gap is not a pause condition; convert it into a hypothesis, option, validation question, material request suggestion, or joint validation action and continue.
+Pause only for a critical source conflict, materially divergent diagnosis branches, a high-impact scope or commitment change, or inability to converge. An ordinary evidence gap does not pause complete content work; convert it into a hypothesis, option, validation question, material request suggestion, or joint-validation action.
 
 ## Legacy compatibility
 
-`PresalesContentStrategy`, `ClaimEvidenceMap`, `DeckArgumentMap`, `SlideDraftSet`, framework confirmations, and expansion authorizations may be read from historical projects during migration. New projects must not use them as required authority or recreate the fixed multi-agent pipeline.
+`PresalesContentStrategy`, `ClaimEvidenceMap`, `DeckArgumentMap`, `SlideDraftSet`, framework confirmations, expansion authorizations, and legacy review objects are read-only migration inputs. New work must not recreate them as authority, a fixed multi-Agent pipeline, a separate evidence page, or another primary surface.

@@ -26,7 +26,7 @@ from tests.v16_visual_fixtures import prepared_g2
 class V16DeliveryContractTests(unittest.TestCase):
     def test_build_requires_g3_and_complete_native_editable_deck(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            visual, revision, refs = prepared_g2(Path(temp), slide_count=2)
+            visual, revision, refs = prepared_g2(Path(temp), slide_count=3)
             delivery = DeliveryService(visual.kernel)
             artifacts = build_artifacts(delivery, refs["slide_ids"])
             with self.assertRaises(GateBlockedError):
@@ -42,7 +42,7 @@ class V16DeliveryContractTests(unittest.TestCase):
                 )
 
         with tempfile.TemporaryDirectory() as temp:
-            delivery, revision, refs = prepared_g3(Path(temp), slide_count=2)
+            delivery, revision, refs = prepared_g3(Path(temp), slide_count=3)
             mismatched = build_artifacts(
                 delivery, refs["slide_ids"], sha256="7" * 64
             )

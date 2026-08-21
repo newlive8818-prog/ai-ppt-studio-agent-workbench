@@ -271,11 +271,6 @@ def validate_delivery_package(
     normalized["build_ref"] = _text(payload, "build_ref")
     normalized["pptx_ref"] = _text(payload, "pptx_ref")
     normalized["pptx_sha256"] = _text(payload, "pptx_sha256")
-    if payload.get("release_target_policy_ref") != release_target_policy_ref:
-        raise ContractValidationError(
-            "DeliveryPackage must bind the current release target policy"
-        )
-    normalized["release_target_policy_ref"] = release_target_policy_ref
     if (
         normalized["pptx_ref"] != build.get("source_pptx_ref")
         or normalized["pptx_sha256"] != build.get("pptx_sha256")
@@ -292,9 +287,14 @@ def validate_delivery_package(
         normalized[field] = _text(payload, field)
     if payload.get("target_evidence_refs") != target_refs:
         raise ContractValidationError(
-            "DeliveryPackage must contain current required G4 target evidence references in canonical order"
+            "DeliveryPackage must contain all current required G4 target evidence references in canonical order"
         )
     normalized["target_evidence_refs"] = list(target_refs)
+    if payload.get("release_target_policy_ref") != release_target_policy_ref:
+        raise ContractValidationError(
+            "DeliveryPackage must bind the current release target policy"
+        )
+    normalized["release_target_policy_ref"] = release_target_policy_ref
     if payload.get("status") != "delivery-ready":
         raise ContractValidationError(
             "DeliveryPackage status must be delivery-ready"

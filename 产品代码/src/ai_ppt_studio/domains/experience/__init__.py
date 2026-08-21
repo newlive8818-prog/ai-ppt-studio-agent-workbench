@@ -1,19 +1,13 @@
-"""Experience intake and governed evolution contracts."""
+"""Public v2.2 experience-domain contracts."""
 
 from .contracts import (
-    validate_anti_pattern_candidate,
-    validate_experience_intake,
-    validate_preference_signal,
-    validate_professional_mechanism_candidate,
-    validate_qualified_selection,
-    validate_role_specific_slice,
+    validate_experience_application,
+    validate_experience_item,
+    validate_experience_outcome,
 )
 
 __all__ = [
-    "validate_anti_pattern_candidate",
-    "validate_experience_intake",
-    "validate_preference_signal",
-    "validate_professional_mechanism_candidate",
-    "validate_qualified_selection",
-    "validate_role_specific_slice",
+    "validate_experience_application",
+    "validate_experience_item",
+    "validate_experience_outcome",
 ]

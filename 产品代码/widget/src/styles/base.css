@@ -1,0 +1,38 @@
+:root {
+  color: #172033;
+  background: #f7f8fc;
+  font-family: "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { min-height: 100%; margin: 0; }
+body { background: #f7f8fc; }
+button, textarea, input { color: inherit; font: inherit; }
+button:focus-visible, textarea:focus-visible, input:focus-visible {
+  outline: 3px solid rgb(60 87 230 / 28%);
+  outline-offset: 2px;
+}
+
+.loading-shell {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  padding: 28px;
+  text-align: center;
+}
+.loading-mark {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 2px;
+  color: white;
+  background: #182438;
+  font-size: 14px;
+  font-weight: 800;
+}
+.loading-shell h1 { margin: 18px 0 7px; font-size: 20px; }
+.loading-shell p { max-width: 420px; margin: 0; color: #667085; line-height: 1.6; }

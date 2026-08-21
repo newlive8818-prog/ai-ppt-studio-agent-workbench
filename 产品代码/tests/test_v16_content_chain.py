@@ -1,156 +1,125 @@
+"""Migration guards for the retired v1.6 content chain.
+
+The filename is retained so the historical regression slot keeps protecting the
+product, but every assertion targets the single v2.2 evidence-first chain.
+"""
+
 from __future__ import annotations
 
-import os
+import importlib.util
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ai_ppt_studio.application.content_service import ContentService
-from ai_ppt_studio.application.scoped_confirmation import (
-    HOST_CONFIRMATION_SECRET_ENV,
-)
-from ai_ppt_studio.errors import ContentWorkflowError
-from tests.test_v16_content_acceptance import (
-    TEST_SECRET,
-    authorize_current_framework,
-)
-from tests.v16_content_fixtures import (
-    complete_slide_draft_payload,
-    publish_content_stage,
-)
+from ai_ppt_studio.application.content_hard_gate_service import ContentHardGateService
+from ai_ppt_studio.application.presales_content_service import PresalesContentService
+from ai_ppt_studio.kernel.references import ArtifactReference
+from ai_ppt_studio.kernel.transactions import ProjectKernel
+from tests.test_v22_content_contracts import blueprint, decision_context, evidence_book, fit_map
 
 
-def valid_mission() -> dict[str, str]:
-    return {
-        "topic": "经营一体化方案",
-        "primary_audience": "客户决策者",
-        "desired_judgment_or_action": "批准一期立项",
-    }
+class V16ContentChainMigrationTests(unittest.TestCase):
+    def test_retired_content_writers_are_physically_absent(self) -> None:
+        for module in (
+            "ai_ppt_studio.application.content_service",
+            "ai_ppt_studio.application.content_review_service",
+            "ai_ppt_studio.application.framework_discussion_service",
+        ):
+            with self.subTest(module=module):
+                self.assertIsNone(importlib.util.find_spec(module))
 
+    def test_v22_chain_writes_only_four_authoritative_objects_then_two_hard_gates(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = ProjectKernel.initialize(Path(folder), project_id="迁移项目")
+            state = kernel.commit(
+                command_id="seed",
+                expected_revision=0,
+                event_type="test.seeded",
+                artifact_updates={
+                    "mission/confirmation": (
+                        "mission-confirmation",
+                        {"material_mode": "materials-provided"},
+                    ),
+                    "materials": (
+                        "material-inventory",
+                        {"sources": [{"source_id": "source-1"}]},
+                    ),
+                },
+            )
+            service = PresalesContentService(kernel)
 
-def valid_materials() -> dict[str, list[dict[str, str]]]:
-    return {
-        "sources": [
-            {
-                "source_id": "s1",
-                "origin": "user-provided",
-                "kind": "text",
-                "locator": "chat://message/material-1",
-                "sha256": "a" * 64,
-            }
-        ]
-    }
+            evidence = evidence_book()
+            evidence["mission_confirmation_ref"] = state.artifact_heads["mission/confirmation"]
+            evidence["material_inventory_ref"] = state.artifact_heads["materials"]
+            evidence_ref = service.build_evidence_book("evidence", state.revision, evidence)
 
+            context = decision_context()
+            context["evidence_book_ref"] = evidence_ref
+            context_ref = service.build_decision_context(
+                "context", kernel.load().revision, context
+            )
 
-def build_ready_draft(
-    service: ContentService,
-    slide_count: int = 1,
-    *,
-    mission_user_action_ref: str = "test-user-action://confirmed-content-fixture",
-    mission_user_message_ref: str = "",
-) -> tuple[int, str, dict[str, str]]:
-    mission = service.save_mission_draft("c1", 0, valid_mission())
-    materials = service.register_materials("c2", 1, valid_materials())
-    mission_confirmation = service.confirm_mission(
-        "c3-confirm",
-        2,
-        mission_draft_ref=mission,
-        material_mode="materials-provided",
-        material_inventory_ref=materials,
-        user_action_ref=mission_user_action_ref,
-        user_message_ref=mission_user_message_ref,
-    )
-    with patch.dict(
-        os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
-    ):
-        authorize_current_framework(service, mission_confirmation)
-    revision = service.kernel.load().revision
-    strategy = publish_content_stage(
-        service,
-        "c4",
-        "strategy",
-        {
-            "mission_ref": mission,
-            "material_inventory_ref": materials,
-            "content_identity_mode": "material-backed",
-            "decision_stage": "立项",
-            "core_tension": "系统割裂",
-        },
-    )
-    claim_map = publish_content_stage(
-        service,
-        "c5",
-        "claim-map",
-        {
-            "strategy_ref": strategy,
-            "claims": [
-                {
-                    "claim_id": "claim-1",
-                    "status": "supported",
-                    "evidence_refs": [materials],
-                }
-            ],
-        },
-    )
-    argument = publish_content_stage(
-        service,
-        "c6",
-        "argument-map",
-        {
-            "strategy_ref": strategy,
-            "claim_evidence_map_ref": claim_map,
-            "chapters": [
-                {"chapter_id": "ch1", "task": "建立问题共识"}
-            ],
-        },
-    )
-    draft = publish_content_stage(
-        service,
-        "c7",
-        "slide-draft-set",
-        complete_slide_draft_payload(
-            argument_map_ref=argument,
-            material_ref=materials,
-            slide_count=slide_count,
-            slide_id_prefix="s",
-        ),
-    )
-    return service.kernel.load().revision, draft, {
-        "mission": mission,
-        "materials": materials,
-        "strategy": strategy,
-        "claim_map": claim_map,
-        "argument": argument,
-    }
+            mapping = fit_map()
+            mapping["evidence_book_ref"] = evidence_ref
+            mapping["decision_context_ref"] = context_ref
+            mapping_ref = service.build_problem_solution_fit(
+                "mapping", kernel.load().revision, mapping
+            )
 
+            deck = blueprint()
+            deck.update(
+                project_id=kernel.project_id,
+                evidence_book_ref=evidence_ref,
+                decision_context_ref=context_ref,
+                problem_solution_fit_ref=mapping_ref,
+            )
+            deck_ref = service.build_reading_deck_blueprint(
+                "blueprint", kernel.load().revision, deck
+            )
+            gates = ContentHardGateService(kernel)
+            gates.run_evidence_gate(
+                command_id="evidence-gate",
+                expected_revision=kernel.load().revision,
+                semantic_check_results=[],
+                reviewer_mode="isolated-review-task",
+            )
+            gates.run_presales_reading_gate(
+                command_id="reading-gate",
+                expected_revision=kernel.load().revision,
+                semantic_check_results=[],
+                reviewer_mode="isolated-review-task",
+            )
 
-class V16ContentChainTests(unittest.TestCase):
-    def test_content_chain_requires_current_verified_upstream_heads(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            service = ContentService.initialize(Path(temp), project_id="p1")
-            revision, draft, refs = build_ready_draft(service)
-            self.assertTrue(draft.startswith("artifact://slide-draft-set/"))
-            self.assertEqual(service.kernel.load().revision, revision)
-            with self.assertRaises(ContentWorkflowError) as caught:
-                service.register_content_stage(
-                    "bad",
-                    revision,
-                    "argument-map",
+            final = kernel.load()
+            self.assertEqual(
+                set(final.artifact_heads).intersection(
                     {
-                        "strategy_ref": (
-                            "artifact://presales-content-strategy/" + "f" * 64
-                        ),
-                        "claim_evidence_map_ref": refs["claim_map"],
-                        "chapters": [{"chapter_id": "x", "task": "x"}],
-                    },
-                )
-            self.assertEqual(caught.exception.code, "CONTENT_REVIEW_CONFLICT")
-            self.assertEqual(service.kernel.load().revision, revision)
+                        "content/evidence-book",
+                        "content/decision-context",
+                        "content/problem-solution-fit",
+                        "content/reading-blueprint",
+                    }
+                ),
+                {
+                    "content/evidence-book",
+                    "content/decision-context",
+                    "content/problem-solution-fit",
+                    "content/reading-blueprint",
+                },
+            )
+            self.assertNotIn("content/framework-confirmation", final.artifact_heads)
+            self.assertNotIn(
+                "content/full-deck-expansion-authorization", final.artifact_heads
+            )
+            acceptance = kernel.artifacts.resolve(
+                ArtifactReference.parse(final.artifact_heads["content/acceptance"])
+            )["payload"]
+            self.assertEqual(acceptance["reading_blueprint_ref"], deck_ref)
+            self.assertEqual(acceptance["overall_result"], "passed")
 
 
 if __name__ == "__main__":

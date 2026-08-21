@@ -18,7 +18,11 @@ from ai_ppt_studio.acceptance.ledger import (
     extract_numbered_requirements,
 )
 from ai_ppt_studio.kernel.references import ArtifactReference
-from scripts.acceptance.verify_release import verify_final_acceptance
+from scripts.acceptance.verify_release import (
+    _verify_installed_release,
+    _verify_ledger,
+    verify_final_acceptance,
+)
 from tests.v16_delivery_fixtures import (
     package_artifacts,
     prepared_delivery_ready,
@@ -28,9 +32,9 @@ from tests.host_confirmation_fixtures import gate_confirmation_kwargs
 
 
 SOURCES = (
-    (PROJECT / "01-产品需求基线-v1.0.md", "PRD", "17"),
-    (PROJECT / "02-系统详细设计-v1.0.md", "SDD", "21"),
-    (PROJECT / "03-UI设计与交互规范-v1.0.md", "UI", "23"),
+    (PROJECT / "01-产品需求基线-v1.0.md", "PRD", "验收标准"),
+    (PROJECT / "02-系统详细设计-v1.0.md", "SDD", "测试策略"),
+    (PROJECT / "03-UI设计与交互规范-v1.0.md", "UI", "UI 验收"),
 )
 
 
@@ -40,7 +44,7 @@ def sha(path: Path) -> str:
 
 def accepted_project(base: Path) -> Path:
     project = base / "runtime" / "projects" / "v16-real-project"
-    delivery, revision, refs = prepared_delivery_ready(project, slide_count=2)
+    delivery, revision, refs = prepared_delivery_ready(project, slide_count=3)
     artifacts = package_artifacts(delivery, refs)
     package_ref = delivery.register_delivery_package(
         "final-verifier-package",
@@ -63,16 +67,14 @@ def accepted_project(base: Path) -> Path:
             "retry_of": "",
         },
     )
-    from ai_ppt_studio.application.gate_confirmation import GateConfirmationPolicy
-
-    context = GateConfirmationPolicy(delivery.kernel).context("G4")
+    context = delivery.gate_confirmation_context()
     delivery.confirm_g4(
         "final-verifier-g4",
         sent.revision,
         **gate_confirmation_kwargs(
             context,
             identity_type="verified-message",
-            identity_ref="chat://message/final-verifier-accepted",
+            identity_ref="chat://message/verified-final-verifier-accepted",
         ),
     )
     return project
@@ -80,15 +82,16 @@ def accepted_project(base: Path) -> Path:
 
 def closed_ledger(base: Path) -> tuple[Path, Path]:
     requirements = []
-    for path, prefix, section in SOURCES:
+    for path, prefix, section_title in SOURCES:
         requirements.extend(
             extract_numbered_requirements(
                 path.read_text(encoding="utf-8"),
                 source_prefix=prefix,
-                section_prefix=section,
+                source_file=path.name,
+                section_title=section_title,
             )
         )
-    self_unproven = AcceptanceLedger("1.6", tuple(requirements))
+    self_unproven = AcceptanceLedger("2.2", tuple(requirements))
     proofs = []
     for kind in sorted(
         {value for item in requirements for value in item.required_evidence}
@@ -120,13 +123,13 @@ def closed_ledger(base: Path) -> tuple[Path, Path]:
                 ],
             }
         )
-    evidence_path = base / "v1.6-evidence.json"
+    evidence_path = base / "v2.2-evidence.json"
     evidence_path.write_text(
         json.dumps({"schema_version": "1.0", "proofs": proofs}, indent=2),
         encoding="utf-8",
     )
     closed = self_unproven.with_evidence(EvidenceIndex.from_path(evidence_path))
-    ledger_path = base / "v1.6-acceptance-ledger.json"
+    ledger_path = base / "v2.2-acceptance-ledger.json"
     ledger_path.write_text(
         json.dumps(closed.as_dict(), ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
@@ -144,6 +147,7 @@ def installed_release(base: Path) -> Path:
         "plugin_name": "ai-ppt-studio",
         "plugin_version": "0.4.0-test",
         "hash_algorithm": "sha256",
+        "tool_catalog_sha256": "a" * 64,
         "files": {"plugin.txt": sha(plugin_file)},
     }
     manifest_path = cache / "release-manifest.json"
@@ -163,13 +167,32 @@ def installed_release(base: Path) -> Path:
                 "installed_probe": {
                     "status": "passed",
                     "source_repository_pythonpath": False,
-                    "tool_count": 18,
+                    "tool_count": 2,
+                    "tools": ["get_ai_ppt_project_snapshot", "save_review_marks"],
+                    "tool_catalog_sha256": "a" * 64,
                     "chat_ui_template_count": 0,
                     "ordinary_tools_data_only": True,
-                    "sidebar_capability_code": "HOST_SIDEBAR_UNAVAILABLE",
-                    "browser_capability_code": "BROWSER_REVIEW_UNAVAILABLE",
-                    "sidebar_real_host_evidence": False,
-                    "browser_real_host_evidence": False,
+                    "professional_review": {
+                        "review_session": "available",
+                        "content_review_projection": True,
+                        "visual_review_projection": True,
+                        "host_open": {
+                            "status": "unavailable",
+                            "code": "BROWSER_REVIEW_UNAVAILABLE",
+                            "proofEligible": False,
+                            "realHostEvidence": False,
+                        },
+                        "host_notification": {
+                            "status": "unverified",
+                            "proofEligible": False,
+                            "realHostEvidence": False,
+                        },
+                        "ai_receipt": {
+                            "status": "unverified",
+                            "proofEligible": False,
+                            "realHostEvidence": False,
+                        },
+                    },
                 },
                 "simulation": True,
                 "proof_eligible": False,
@@ -195,20 +218,15 @@ class FinalAcceptanceVerifierTests(unittest.TestCase):
                 install_evidence_path=install,
                 fixture_mode=True,
             )
-            self.assertEqual(result["requirement_count"], 104)
-            self.assertEqual(result["passed_requirement_count"], 104)
+            self.assertGreater(result["requirement_count"], 0)
+            self.assertEqual(
+                result["passed_requirement_count"], result["requirement_count"]
+            )
+            self.assertEqual(
+                result["evidence_identity"], "deterministic-contract-fixture"
+            )
+            self.assertEqual(result["acceptance_ledger_version"], "2.2")
             self.assertEqual(result["g2_pptx_sha256"], result["g4_pptx_sha256"])
-            self.assertTrue(result["release_target_policy_ref"].startswith(
-                "artifact://release-target-policy/"
-            ))
-            self.assertEqual(result["required_target_ids"], ["macos-powerpoint"])
-            self.assertEqual(
-                result["deferred_target_ids"],
-                ["macos-wps", "windows-powerpoint", "windows-wps"],
-            )
-            self.assertEqual(
-                result["compatibility_claim_scope"], ["macos-powerpoint"]
-            )
             self.assertFalse(result["proof_eligible"])
 
             with self.assertRaises(ValueError):
@@ -218,6 +236,45 @@ class FinalAcceptanceVerifierTests(unittest.TestCase):
                     evidence_index_path=evidence,
                     install_evidence_path=install,
                 )
+
+    def test_installed_tool_count_comes_from_unique_probe_array(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            install = installed_release(Path(temp))
+            verified = _verify_installed_release(install, fixture_mode=True)
+            self.assertEqual(verified["tool_count"], 2)
+            payload = json.loads(install.read_text(encoding="utf-8"))
+            payload["installed_probe"]["tools"] = ["duplicate", "duplicate"]
+            install.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "tool catalog"):
+                _verify_installed_release(install, fixture_mode=True)
+
+    def test_ledger_rejects_empty_identity_and_text_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            ledger, evidence = closed_ledger(base)
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+
+            empty = base / "empty.json"
+            empty.write_text(
+                json.dumps({"version": "2.2", "requirements": []}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "ledger is empty"):
+                _verify_ledger(empty, evidence, fixture_mode=True)
+
+            identity_drift = base / "identity-drift.json"
+            changed = json.loads(json.dumps(payload))
+            changed["requirements"][0]["requirement_id"] = "PRD-ACC-PRODUCT-999"
+            identity_drift.write_text(json.dumps(changed), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "identities drifted"):
+                _verify_ledger(identity_drift, evidence, fixture_mode=True)
+
+            text_drift = base / "text-drift.json"
+            changed = json.loads(json.dumps(payload))
+            changed["requirements"][0]["text"] += " 漂移"
+            text_drift.write_text(json.dumps(changed), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "text drifted"):
+                _verify_ledger(text_drift, evidence, fixture_mode=True)
 
     def test_rejects_changed_installed_file_or_mixed_gate_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

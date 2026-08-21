@@ -1,204 +1,214 @@
 from __future__ import annotations
 
 import json
-import sys
 import tempfile
 import unittest
 from pathlib import Path
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.config import RuntimeConfig
-from ai_ppt_studio.application.project_service import ProjectService
 from ai_ppt_studio.errors import ExperienceValidationError
-from ai_ppt_studio.experience_models import ExperienceLevel, EvaluationOutcome
 from ai_ppt_studio.experience_store import ExperienceStore
 from ai_ppt_studio.paths import PathPolicy
-
-
-def candidate_payload(name: str = "双主体协同页对齐机制") -> dict[str, object]:
-    return {
-        "name": name,
-        "experience_type": "visual-mechanism",
-        "mechanism": "双主体协同页先建立共享坐标轴，再统一文字基线、图形中心线和连接点。",
-        "model_interpretation": "错位不是单个元素问题，而是页面缺少统一网格与锚点。",
-        "source_refs": ["reviews/feedback/v0003.json"],
-        "scope": {
-            "scenes": ["战略合作方案"],
-            "audiences": ["国企决策者"],
-            "slide_tasks": ["双方能力协同"],
-            "conditions": ["双主体", "流程链"],
-        },
-        "evidence_refs": ["renders/slide-06-before.png", "renders/slide-06-after.png"],
-        "before_after_refs": [
-            {
-                "before": "renders/slide-06-before.png",
-                "after": "renders/slide-06-after.png",
-            }
-        ],
-        "counterexamples": [],
-        "privacy_level": "private",
-        "portable_scope": "personal-installation",
-        "sanitized_for_reuse": True,
-    }
-
-
-def context() -> dict[str, object]:
-    return {
-        "scene": "战略合作方案",
-        "audience": "国企决策者",
-        "slide_task": "双方能力协同",
-        "conditions": ["双主体", "流程链"],
-    }
+from tests.v22_experience_fixtures import experience_item
 
 
 class ExperienceStoreTests(unittest.TestCase):
-    def make_runtime(self, base: Path):
+    def make_store(self, base: Path) -> tuple[RuntimeConfig, ExperienceStore]:
         config = RuntimeConfig.create(
             base / "runtime", base / "repo", base / "install", base / "web"
         )
-        policy = PathPolicy(config)
-        projects = ProjectService(config)
-        source = projects.create_project("华西合作方案")
-        target_a = projects.create_project("重庆轨道能力方案")
-        target_b = projects.create_project("环境投资合作方案")
-        return config, projects, source, target_a, target_b, ExperienceStore(config, policy)
+        return config, ExperienceStore(config, PathPolicy(config))
 
-    def test_create_candidate_persists_immutable_personal_memory_version(self) -> None:
+    def test_writes_only_same_type_global_and_v22_evaluation_layout(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            base = Path(temp)
-            config, _, source, _, _, store = self.make_runtime(base)
+            config, store = self.make_store(Path(temp))
+            created = store.absorb_same_type(experience_item())
 
-            created = store.create_candidate(source, candidate_payload())
-
-            self.assertEqual(created.level, ExperienceLevel.CANDIDATE)
-            self.assertEqual(created.version, 1)
-            self.assertEqual(created.source_project_ids, (source.project_id,))
+            self.assertEqual(created.item["layer"], "same-type")
             self.assertTrue(Path(created.path).is_file())
             self.assertTrue(
-                Path(created.path).is_relative_to(config.runtime_root / "personal-memory")
-            )
-            self.assertFalse(Path(created.path).is_relative_to(Path(source.project_root)))
-            latest = store.get(created.experience_id)
-            self.assertEqual(latest.mechanism, candidate_payload()["mechanism"])
-            index = json.loads(
-                (config.runtime_root / "personal-memory" / "experience-index.json").read_text(
-                    encoding="utf-8"
+                Path(created.path).is_relative_to(
+                    config.runtime_root / "personal-memory" / "same-type"
                 )
             )
-            self.assertEqual(index["experiences"][0]["experience_id"], created.experience_id)
+            self.assertFalse(
+                (config.runtime_root / "personal-memory" / "experiences").exists()
+            )
+            status = store.capability_status()
+            self.assertEqual(status["schema_version"], "2.2")
+            self.assertNotIn("create_candidate", status["operations"])
+            self.assertNotIn("set_level", status["operations"])
 
-    def test_candidate_requires_a_sanitized_reusable_mechanism(self) -> None:
+    def test_recommendation_is_domain_and_exact_type_scoped(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            _, _, source, _, _, store = self.make_runtime(Path(temp))
-            payload = candidate_payload()
-            payload["sanitized_for_reuse"] = False
-            with self.assertRaises(ExperienceValidationError):
-                store.create_candidate(source, payload)
-            with self.assertRaisesRegex(ExperienceValidationError, "Invalid experience id"):
-                store.get("EXP-../../evaluation")
+            _, store = self.make_store(Path(temp))
+            content = store.absorb_same_type(experience_item())
+            visual = experience_item(
+                experience_id="exp-visual-grid",
+                domain="visual",
+                type_signature="presales:transport:visual",
+            )
+            visual["mechanism"] = "同类视觉先统一网格，再变化构图。"
+            store.absorb_same_type(visual)
 
-    def test_recommend_matches_context_across_projects_and_explains_why(self) -> None:
+            recommendations = store.recommend(
+                domain="content",
+                type_signature="presales:transport:decision",
+                applicability={"conditions": ["阅读优先"]},
+            )
+            self.assertEqual(
+                [item["experience_ref"] for item in recommendations],
+                [content.experience_ref],
+            )
+            self.assertEqual(
+                store.recommend(
+                    domain="content",
+                    type_signature="presales:transport:visual",
+                    applicability={"conditions": ["阅读优先"]},
+                ),
+                [],
+            )
+
+    def test_real_cross_type_successes_promote_and_counterexample_narrows_global(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            _, _, source, _, _, store = self.make_runtime(Path(temp))
-            created = store.create_candidate(source, candidate_payload())
+            config, store = self.make_store(Path(temp))
+            created = store.absorb_same_type(experience_item())
+            current = created
+            for suffix, target_type in (
+                ("a", "presales:transport:decision"),
+                ("b", "presales:manufacturing:decision"),
+            ):
+                application = store.record_application(
+                    experience_ref=current.experience_ref,
+                    target_project_id=f"project-{suffix}",
+                    target_type_signature=target_type,
+                    context={"conditions": ["阅读优先"]},
+                    evidence_refs=[
+                        "artifact://reading-deck-blueprint/" + suffix * 64
+                    ],
+                    applied_at=f"2026-08-15T0{1 if suffix == 'a' else 3}:00:00+08:00",
+                    explicit_validation=True,
+                )
+                store.evaluate(
+                    application_id=application.application_id,
+                    outcome="success",
+                    user_outcome_ref=f"host-message://accepted-{suffix}",
+                    hard_gate_refs=[
+                        "artifact://content-hard-gate-record/" + suffix * 64
+                    ],
+                    evidence_refs=[
+                        "artifact://reading-deck-blueprint/" + suffix * 64
+                    ],
+                    evaluated_at=f"2026-08-15T0{2 if suffix == 'a' else 4}:00:00+08:00",
+                )
+                current = store.get_current(
+                    "content", "same-type", "exp-reading-path"
+                )
 
-            recommendations = store.recommend(context())
-
-            self.assertEqual(recommendations[0]["experience_id"], created.experience_id)
-            self.assertGreater(recommendations[0]["match_score"], 0)
-            self.assertIn("scene:战略合作方案", recommendations[0]["match_reasons"])
-            self.assertEqual(recommendations[0]["level"], "candidate")
-            mismatch = context()
-            mismatch["scene"] = "年度财务报表"
-            self.assertEqual(store.recommend(mismatch), [])
-
-    def test_two_accepted_successes_in_distinct_projects_promote_candidate(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            config, _, source, target_a, target_b, store = self.make_runtime(Path(temp))
-            created = store.create_candidate(source, candidate_payload())
-
-            first = store.record_application(target_a, created.experience_id, context())
+            promoted = store.promote_global(
+                same_type_ref=current.experience_ref,
+                promoted_at="2026-08-15T05:00:00+08:00",
+            )
+            application = store.record_application(
+                experience_ref=promoted.experience_ref,
+                target_project_id="project-finance",
+                target_type_signature="presales:finance:decision",
+                context={"conditions": ["阅读优先"]},
+                evidence_refs=[
+                    "artifact://reading-deck-blueprint/" + "c" * 64
+                ],
+                applied_at="2026-08-15T06:00:00+08:00",
+            )
             store.evaluate(
-                first.application_id,
-                {
-                    "outcome": EvaluationOutcome.SUCCESS.value,
-                    "user_accepted": True,
-                    "notes": "一次通过",
-                    "evidence_refs": ["reviews/delivery-review.html"],
-                },
+                application_id=application.application_id,
+                outcome="failure",
+                user_outcome_ref="host-message://rejected-finance",
+                hard_gate_refs=[
+                    "artifact://content-hard-gate-record/" + "d" * 64
+                ],
+                evidence_refs=[
+                    "artifact://reading-deck-blueprint/" + "e" * 64
+                ],
+                evaluated_at="2026-08-15T07:00:00+08:00",
             )
-            after_first = store.get(created.experience_id)
-            self.assertEqual(after_first.level, ExperienceLevel.CANDIDATE)
-
-            second = store.record_application(target_b, created.experience_id, context())
-            evaluation = store.evaluate(
-                second.application_id,
-                {
-                    "outcome": EvaluationOutcome.SUCCESS.value,
-                    "user_accepted": True,
-                    "notes": "减少了对齐返工",
-                    "evidence_refs": ["renders/accepted.png"],
-                },
+            self.assertEqual(
+                store.recommend(
+                    domain="content",
+                    type_signature="presales:finance:decision",
+                    applicability={"conditions": ["阅读优先"]},
+                ),
+                [],
             )
-
-            promoted = store.get(created.experience_id)
-            self.assertEqual(evaluation.experience_id, created.experience_id)
-            self.assertEqual(promoted.level, ExperienceLevel.PERSONAL)
-            self.assertEqual(set(promoted.accepted_success_project_ids), {target_a.project_id, target_b.project_id})
-            self.assertEqual(promoted.success_count, 2)
-            self.assertGreater(promoted.confidence, after_first.confidence)
-            decisions = (config.runtime_root / "evaluation" / "promotion-decisions.jsonl").read_text(
-                encoding="utf-8"
-            )
-            self.assertIn('"to_level":"personal"', decisions)
-
-    def test_two_failures_after_promotion_demote_to_candidate(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            _, projects, source, target_a, target_b, store = self.make_runtime(Path(temp))
-            created = store.create_candidate(source, candidate_payload())
-            for target in (target_a, target_b):
-                application = store.record_application(target, created.experience_id, context())
-                store.evaluate(
-                    application.application_id,
-                    {"outcome": "success", "user_accepted": True, "evidence_refs": []},
+            self.assertTrue(
+                store.recommend(
+                    domain="content",
+                    type_signature="presales:energy:decision",
+                    applicability={"conditions": ["阅读优先"]},
                 )
-            self.assertEqual(store.get(created.experience_id).level, ExperienceLevel.PERSONAL)
-
-            for name in ("失败项目一", "失败项目二"):
-                target = projects.create_project(name)
-                application = store.record_application(target, created.experience_id, context())
-                store.evaluate(
-                    application.application_id,
-                    {"outcome": "failure", "user_accepted": False, "evidence_refs": []},
-                )
-
-            demoted = store.get(created.experience_id)
-            self.assertEqual(demoted.level, ExperienceLevel.CANDIDATE)
-            self.assertEqual(demoted.failures_since_promotion, 2)
-
-    def test_disable_excludes_recommendation_and_rollback_restores_prior_content(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            _, _, source, _, _, store = self.make_runtime(Path(temp))
-            created = store.create_candidate(source, candidate_payload())
-            changed = store.set_level(
-                created.experience_id,
-                ExperienceLevel.DISABLED,
-                "暂时不用于推荐",
             )
-            self.assertGreater(changed.version, created.version)
-            self.assertEqual(store.recommend(context()), [])
+            promotions = (
+                config.runtime_root / "evaluation" / "promotions.jsonl"
+            ).read_text(encoding="utf-8")
+            self.assertIn('"action":"promote-global"', promotions)
 
+    def test_rollback_creates_a_new_version_without_erasing_usage_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            _, store = self.make_store(Path(temp))
+            original = store.absorb_same_type(experience_item())
+            application = store.record_application(
+                experience_ref=original.experience_ref,
+                target_project_id="project-target",
+                target_type_signature="presales:transport:decision",
+                context={"conditions": ["阅读优先"]},
+                evidence_refs=[
+                    "artifact://reading-deck-blueprint/" + "f" * 64
+                ],
+                applied_at="2026-08-15T01:00:00+08:00",
+            )
+            current = store.get_current(
+                "content", "same-type", "exp-reading-path"
+            )
             rolled_back = store.rollback(
-                created.experience_id,
-                version=1,
+                experience_ref=current.experience_ref,
+                target_version_ref=original.experience_ref,
                 reason="恢复首版机制",
+                rolled_back_at="2026-08-15T02:00:00+08:00",
             )
-            self.assertGreater(rolled_back.version, changed.version)
-            self.assertEqual(rolled_back.level, ExperienceLevel.CANDIDATE)
-            self.assertEqual(rolled_back.rollback_from_version, 1)
-            self.assertEqual(store.recommend(context())[0]["experience_id"], created.experience_id)
+            self.assertEqual(rolled_back.item["version"], current.item["version"] + 1)
+            self.assertEqual(rolled_back.item["rollback_from_version"], 1)
+            self.assertEqual(rolled_back.item["application_count"], 1)
+            self.assertEqual(application.experience_ref, original.experience_ref)
+
+            index = json.loads(store.index_path.read_text(encoding="utf-8"))
+            self.assertEqual(index["schema_version"], "2.2")
+            self.assertTrue(all("level" not in item for item in index["items"]))
+            self.assertTrue(
+                all(
+                    item["layer"] in {"same-type", "global"}
+                    for item in index["items"]
+                )
+            )
+
+    def test_global_requires_directive_or_two_distinct_success_types(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            _, store = self.make_store(Path(temp))
+            created = store.absorb_same_type(experience_item())
+            created.item["success_type_signatures"] = []
+            with self.assertRaises(ExperienceValidationError):
+                store.promote_global(
+                    same_type_ref=created.experience_ref,
+                    promoted_at="2026-08-15T01:00:00+08:00",
+                )
+            promoted = store.promote_global(
+                same_type_ref=created.experience_ref,
+                user_global_directive_ref="host-message://use-globally",
+                promoted_at="2026-08-15T01:00:00+08:00",
+            )
+            self.assertEqual(promoted.item["layer"], "global")
 
 
 if __name__ == "__main__":

@@ -95,6 +95,99 @@ class ProjectKernelTests(unittest.TestCase):
                     artifact_updates={},
                 )
 
+    def test_terminal_safe_revision_is_readable_but_has_no_successor(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            kernel = ProjectKernel.initialize(Path(temp), project_id="p1")
+            terminal_revision = (2**53) - 1
+            predecessor = terminal_revision - 1
+            transaction_id = "terminal-predecessor"
+            command_id = "terminal-predecessor-command"
+            state = {
+                "schema_version": "3.0",
+                "project_id": "p1",
+                "revision": predecessor,
+                "artifact_heads": {},
+                "gate_status": {
+                    "G0": "open",
+                    "G1": "locked",
+                    "G2": "locked",
+                    "G3": "locked",
+                    "G4": "locked",
+                },
+                "processed_commands": {command_id: predecessor},
+                "last_transaction_id": transaction_id,
+            }
+            kernel.state_path.write_text(json.dumps(state), encoding="utf-8")
+            kernel.events_root.mkdir(parents=True, exist_ok=True)
+            (kernel.events_root / f"r{predecessor:08d}.json").write_text(
+                json.dumps({
+                    "transaction_id": transaction_id,
+                    "command_id": command_id,
+                    "revision": predecessor,
+                    "artifact_heads": {},
+                }),
+                encoding="utf-8",
+            )
+
+            committed = kernel.commit(
+                command_id="reach-terminal",
+                expected_revision=predecessor,
+                event_type="test.reach-terminal",
+                artifact_updates={
+                    "terminal": ("terminal-artifact", {"value": "terminal"})
+                },
+                command_fingerprint="e" * 64,
+            )
+            self.assertEqual(committed.revision, terminal_revision)
+            before_state = kernel.state_path.read_bytes()
+            before_events = {
+                path.name: path.read_bytes()
+                for path in kernel.events_root.iterdir()
+                if path.is_file()
+            }
+            before_objects = object_files(kernel)
+
+            replayed = kernel.commit(
+                command_id="reach-terminal",
+                expected_revision=predecessor,
+                event_type="test.reach-terminal",
+                artifact_updates={
+                    "terminal": ("terminal-artifact", {"value": "terminal"})
+                },
+                command_fingerprint="e" * 64,
+            )
+            self.assertEqual(replayed, committed)
+            self.assertEqual(kernel.state_path.read_bytes(), before_state)
+            self.assertEqual(
+                {
+                    path.name: path.read_bytes()
+                    for path in kernel.events_root.iterdir()
+                    if path.is_file()
+                },
+                before_events,
+            )
+            self.assertEqual(object_files(kernel), before_objects)
+
+            with self.assertRaises(ContractValidationError):
+                kernel.commit(
+                    command_id="past-terminal",
+                    expected_revision=terminal_revision,
+                    event_type="test.past-terminal",
+                    artifact_updates={},
+                )
+
+            self.assertEqual(kernel.load().revision, terminal_revision)
+            self.assertEqual(kernel.state_path.read_bytes(), before_state)
+            self.assertEqual(
+                {
+                    path.name: path.read_bytes()
+                    for path in kernel.events_root.iterdir()
+                    if path.is_file()
+                },
+                before_events,
+            )
+            self.assertEqual(object_files(kernel), before_objects)
+
     def test_fingerprinted_command_replay_rejects_different_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             kernel = ProjectKernel.initialize(Path(temp), project_id="p1")
@@ -165,7 +258,7 @@ class ProjectKernelTests(unittest.TestCase):
                 real_write(path, payload)
 
             with patch(
-                "ai_ppt_studio.kernel.transactions.atomic_write_json",
+                "ai_ppt_studio.kernel.persistence.atomic_write_json",
                 side_effect=fail_state,
             ), self.assertRaises(OSError):
                 kernel.commit(
@@ -274,7 +367,7 @@ class ProjectKernelTests(unittest.TestCase):
                         raise OSError(f"simulated {failure_target} failure")
 
                 with patch(
-                    "ai_ppt_studio.kernel.transactions.atomic_write_json",
+                    "ai_ppt_studio.kernel.persistence.atomic_write_json",
                     side_effect=fail_after_write,
                 ), self.assertRaises(OSError):
                     kernel.commit(
@@ -304,7 +397,7 @@ class ProjectKernelTests(unittest.TestCase):
                 kernel = ProjectKernel.initialize(Path(temp), project_id="p1")
                 before_state = kernel.state_path.read_bytes()
                 real_write = __import__(
-                    "ai_ppt_studio.kernel.transactions",
+                    "ai_ppt_studio.kernel.persistence",
                     fromlist=["atomic_write_json"],
                 ).atomic_write_json
                 real_unlink = Path.unlink
@@ -337,7 +430,7 @@ class ProjectKernelTests(unittest.TestCase):
                     real_unlink(path, *args, **kwargs)
 
                 with patch(
-                    "ai_ppt_studio.kernel.transactions.atomic_write_json",
+                    "ai_ppt_studio.kernel.persistence.atomic_write_json",
                     side_effect=fail_after_state_write,
                 ), patch.object(Path, "unlink", autospec=True, side_effect=selective_unlink):
                     with self.assertRaises(TransactionRollbackError) as caught:
@@ -372,7 +465,7 @@ class ProjectKernelTests(unittest.TestCase):
             cleanup_attempts: list[str] = []
             real_unlink = Path.unlink
             real_write = __import__(
-                "ai_ppt_studio.kernel.transactions",
+                "ai_ppt_studio.kernel.persistence",
                 fromlist=["atomic_write_json"],
             ).atomic_write_json
 
@@ -394,7 +487,7 @@ class ProjectKernelTests(unittest.TestCase):
                 real_unlink(path, *args, **kwargs)
 
             with patch(
-                "ai_ppt_studio.kernel.transactions.atomic_write_json",
+                "ai_ppt_studio.kernel.persistence.atomic_write_json",
                 side_effect=fail_after_state_write,
             ), patch.object(
                 kernel,

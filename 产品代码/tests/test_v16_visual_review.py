@@ -13,7 +13,11 @@ sys.path.insert(0, str(ROOT / "src"))
 from ai_ppt_studio.application.review_service import ReviewService
 from ai_ppt_studio.errors import GateBlockedError, ReviewSourceStaleError
 from ai_ppt_studio.kernel.references import ArtifactReference
-from tests.v16_visual_fixtures import prepared_g2, valid_design_system
+from tests.v16_visual_fixtures import (
+    prepared_g2,
+    valid_design_system,
+    valid_visual_brief,
+)
 from tests.host_confirmation_fixtures import gate_confirmation_kwargs
 
 
@@ -21,9 +25,9 @@ def visual_marks() -> list[dict[str, str]]:
     return [
         {
             "mark_id": "visual-m1",
-            "field_anchor": "visual-slide-s1-visible-copy",
-            "exact_text": "三条断点",
-            "prefix": "五套系统",
+            "field_anchor": "visual-slide-s01-visible-copy-blocks",
+            "exact_text": "材料记录了流程断点",
+            "prefix": "",
             "suffix": "",
             "comment": "这里需要强化证据层级",
         }
@@ -31,6 +35,62 @@ def visual_marks() -> list[dict[str, str]]:
 
 
 class V16VisualReviewTests(unittest.TestCase):
+    def test_trusted_g3_confirmation_is_version_bound_and_consumed_once(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            visual, revision, _refs = prepared_g2(Path(temp), slide_count=3)
+            published = visual.publish_visual_review(
+                "publish-before-trusted-g3", revision
+            )
+            context = visual.gate_confirmation_context()
+            consumed_before = len(published.consumed_user_confirmations)
+            confirmed = visual.confirm_g3(
+                "trusted-g3",
+                published.revision,
+                **gate_confirmation_kwargs(
+                    context,
+                    identity_type="verified-message",
+                    identity_ref="chat://message/verified-g3",
+                ),
+            )
+
+            self.assertEqual(confirmed.gate_status["G3"], "passed")
+            self.assertEqual(confirmed.gate_status["G4"], "open")
+            self.assertEqual(
+                len(confirmed.consumed_user_confirmations),
+                consumed_before + 1,
+            )
+            confirmation = visual.kernel.artifacts.resolve(
+                ArtifactReference.parse(
+                    confirmed.artifact_heads["gate/G3/confirmation"]
+                )
+            )["payload"]
+            self.assertEqual(confirmation["source_version"], context["source_version"])
+            self.assertEqual(confirmation["evidence_refs"], context["evidence_refs"])
+            self.assertEqual(confirmation["challenge_id"], context["challenge_id"])
+            self.assertEqual(confirmation["challenge_revision"], context["challenge_revision"])
+            self.assertEqual(confirmation["confirmation_identity_type"], "verified-message")
+            self.assertEqual(confirmation["user_message_ref"], "chat://message/verified-g3")
+            self.assertFalse(confirmation["user_action_ref"])
+
+    def test_plain_chat_reference_cannot_confirm_g3(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            visual, revision, _refs = prepared_g2(Path(temp), slide_count=3)
+            published = visual.publish_visual_review(
+                "publish-before-untrusted-g3", revision
+            )
+
+            with self.assertRaises(GateBlockedError):
+                visual.confirm_g3(
+                    "fabricated-chat-g3",
+                    published.revision,
+                    user_message_ref="chat://message/fabricated-g3",
+                )
+
+            self.assertEqual(visual.kernel.load().revision, published.revision)
+            self.assertEqual(
+                visual.kernel.load().gate_status["G3"], "user-reviewable"
+            )
+
     def test_g2_pass_freezes_every_visual_write_until_g3_publication(self) -> None:
         def current_payload(visual, slot: str) -> dict:
             reference = ArtifactReference.parse(
@@ -101,7 +161,7 @@ class V16VisualReviewTests(unittest.TestCase):
         }
         for name, attempt in attempts.items():
             with self.subTest(entrypoint=name), tempfile.TemporaryDirectory() as temp:
-                visual, revision, refs = prepared_g2(Path(temp), slide_count=2)
+                visual, revision, refs = prepared_g2(Path(temp), slide_count=3)
                 with self.assertRaises(GateBlockedError) as raised:
                     attempt(visual, revision, refs)
                 self.assertIn(
@@ -112,7 +172,7 @@ class V16VisualReviewTests(unittest.TestCase):
 
     def test_g3_publication_rejects_any_head_diverged_from_g2_reviewed_lineage(self) -> None:
         slots = (
-            "content/blueprint",
+            "content/reading-blueprint",
             "visual/brief",
             "visual/convergence",
             "visual/design-system",
@@ -123,11 +183,10 @@ class V16VisualReviewTests(unittest.TestCase):
             "visual/review/G2/engineering",
             "release/target-policy",
             "visual/target-evidence/G2/macos-powerpoint",
-            "gate/G2/lineage",
         )
         for index, slot in enumerate(slots):
             with self.subTest(slot=slot), tempfile.TemporaryDirectory() as temp:
-                visual, revision, _refs = prepared_g2(Path(temp), slide_count=2)
+                visual, revision, _refs = prepared_g2(Path(temp), slide_count=3)
                 current_ref = visual.kernel.load().artifact_heads[slot]
                 reference = ArtifactReference.parse(current_ref)
                 replacement = copy.deepcopy(
@@ -145,23 +204,17 @@ class V16VisualReviewTests(unittest.TestCase):
                     visual.publish_visual_review(
                         "publish-diverged-visual-review", diverged.revision
                     )
-                if slot == "content/blueprint":
-                    self.assertIn(
-                        "current-G0-confirmation-lineage-stale",
-                        raised.exception.missing_evidence,
-                    )
-                else:
-                    self.assertIn(
-                        "G2-reviewed-visual-lineage-stale",
-                        raised.exception.missing_evidence,
-                    )
+                self.assertIn(
+                    "G2-reviewed-visual-lineage-stale",
+                    raised.exception.missing_evidence,
+                )
                 self.assertNotIn(
                     "visual/contract", visual.kernel.load().artifact_heads
                 )
 
     def test_g3_publication_freezes_all_visual_production_entrypoints(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            visual, revision, refs = prepared_g2(Path(temp), slide_count=2)
+            visual, revision, refs = prepared_g2(Path(temp), slide_count=3)
             published = visual.publish_visual_review("publish-visual-review", revision)
             attempts = {
                 "visual-brief": lambda: visual.register_visual_brief(
@@ -217,7 +270,7 @@ class V16VisualReviewTests(unittest.TestCase):
 
     def test_g3_context_rejects_contract_lineage_diverged_from_current_heads(self) -> None:
         slots = (
-            "content/blueprint",
+            "content/reading-blueprint",
             "visual/convergence",
             "visual/design-system",
             "visual/contracts",
@@ -227,11 +280,10 @@ class V16VisualReviewTests(unittest.TestCase):
             "visual/review/G2/engineering",
             "release/target-policy",
             "visual/target-evidence/G2/macos-powerpoint",
-            "gate/G2/lineage",
         )
         for index, slot in enumerate(slots):
             with self.subTest(slot=slot), tempfile.TemporaryDirectory() as temp:
-                visual, revision, _refs = prepared_g2(Path(temp), slide_count=2)
+                visual, revision, _refs = prepared_g2(Path(temp), slide_count=3)
                 published = visual.publish_visual_review(
                     "publish-visual-review", revision
                 )
@@ -248,15 +300,13 @@ class V16VisualReviewTests(unittest.TestCase):
                     artifact_updates={slot: (reference.kind, replacement)},
                 )
 
-                from ai_ppt_studio.application.gate_confirmation import GateConfirmationPolicy
-
                 with self.assertRaises(GateBlockedError):
-                    GateConfirmationPolicy(visual.kernel).context("G3")
+                    visual.gate_confirmation_context()
                 self.assertEqual(visual.kernel.load().revision, tampered.revision)
 
     def test_formal_g3_reopen_removes_current_visual_lineage_before_rework(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            visual, revision, refs = prepared_g2(Path(temp), slide_count=2)
+            visual, revision, refs = prepared_g2(Path(temp), slide_count=3)
             published = visual.publish_visual_review("publish-visual-review", revision)
             contract_ref = published.artifact_heads["visual/contract"]
 
@@ -286,26 +336,17 @@ class V16VisualReviewTests(unittest.TestCase):
                 "new-visual-brief-after-reopen",
                 reopened.revision,
                 {
-                    "content_blueprint_ref": refs["blueprint"],
-                    "production_route": "strict-B",
+                    **valid_visual_brief(refs["blueprint"]),
                     "design_proposition": "重开后的新视觉命题",
-                    "audience_fit": "决策者先看结论",
-                    "narrative_rhythm": "问题—证据—方案—价值—行动",
-                    "imagery_strategy": "只使用可追溯素材和非语义装饰",
-                    "diagram_strategy": "关系使用原生可编辑对象",
-                    "powerpoint_constraints": "事实与关系保持原生可编辑",
-                    "target_ids": ["macos-powerpoint"],
                 },
             )
             self.assertTrue(brief_ref.startswith("artifact://visual-brief/"))
 
     def test_g3_confirmation_rechecks_lineage_after_challenge_creation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            visual, revision, refs = prepared_g2(Path(temp), slide_count=2)
+            visual, revision, refs = prepared_g2(Path(temp), slide_count=3)
             published = visual.publish_visual_review("publish-visual-review", revision)
-            from ai_ppt_studio.application.gate_confirmation import GateConfirmationPolicy
-
-            context = GateConfirmationPolicy(visual.kernel).context("G3")
+            context = visual.gate_confirmation_context()
             assertion = gate_confirmation_kwargs(context)[
                 "host_confirmation_assertion"
             ]
@@ -337,7 +378,7 @@ class V16VisualReviewTests(unittest.TestCase):
 
     def test_complete_projection_marks_and_chat_only_g3(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            visual, revision, refs = prepared_g2(Path(temp), slide_count=2)
+            visual, revision, refs = prepared_g2(Path(temp), slide_count=3)
             published = visual.publish_visual_review("publish-visual-review", revision)
             self.assertEqual(published.gate_status["G3"], "user-reviewable")
             visual_contract_ref = published.artifact_heads["visual/contract"]
@@ -364,8 +405,9 @@ class V16VisualReviewTests(unittest.TestCase):
                 [
                     "visual-framework",
                     "deck-design-system",
-                    "visual-slide-s1",
-                    "visual-slide-s2",
+                    "visual-slide-s01",
+                    "visual-slide-s02",
+                    "visual-slide-s03",
                 ],
             )
             self.assertNotIn("visual-overview", anchors)
@@ -407,10 +449,10 @@ class V16VisualReviewTests(unittest.TestCase):
             )
             for literal in (
                 "可信的经营证据链",
-                "为什么现在必须改变",
-                "五套系统",
-                "三条断点",
-                "解释来源",
+                "当前流程断点与证据边界",
+                "材料记录了流程断点",
+                "建议联合核实影响范围",
+                "完整讲解当前事实、未知和验证动作",
                 "information_hierarchy",
                 "native_first_pptx_ref",
                 "macos-powerpoint",
@@ -449,12 +491,10 @@ class V16VisualReviewTests(unittest.TestCase):
                 visual.confirm_g3(
                     "invalid-g3",
                     saved.revision,
-                    user_message_ref="review://saved/visual-m1",
+                    user_message_ref="chat://message/fabricated-g3",
                 )
             self.assertEqual(visual.kernel.load().revision, saved.revision)
-            from ai_ppt_studio.application.gate_confirmation import GateConfirmationPolicy
-
-            context = GateConfirmationPolicy(visual.kernel).context("G3")
+            context = visual.gate_confirmation_context()
             confirmed = visual.confirm_g3(
                 "confirm-g3",
                 saved.revision,
@@ -465,7 +505,7 @@ class V16VisualReviewTests(unittest.TestCase):
 
     def test_visual_marks_reject_a_stale_source_without_overwriting_head(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            visual, revision, refs = prepared_g2(Path(temp), slide_count=2)
+            visual, revision, refs = prepared_g2(Path(temp), slide_count=3)
             published = visual.publish_visual_review("publish-visual-review", revision)
             reviewer = ReviewService(visual.kernel)
             with self.assertRaises(ReviewSourceStaleError):

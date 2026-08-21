@@ -1,5 +1,9 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import {
+  PUBLIC_TOOL_CATALOG,
+  PUBLIC_TOOL_CATALOG_SHA256,
+} from "../mcp/tool-catalog.mjs";
 
 const projectRoot = process.env.AI_PPT_PROBE_PROJECT?.trim() || undefined;
 
@@ -18,35 +22,12 @@ await client.connect(transport);
 try {
   const listed = await client.listTools();
   const toolNames = listed.tools.map((tool) => tool.name).sort();
-  const requiredTools = [
-    "add_ai_ppt_material",
-    "commit_ai_ppt_artifact",
-    "confirm_ai_ppt_gate",
-    "confirm_ai_ppt_mission",
-    "create_ai_ppt_project",
-    "get_ai_ppt_project_snapshot",
-    "get_ai_ppt_sidebar_projection",
-    "get_delivery_status_projection",
-    "open_ai_ppt_browser_review",
-    "read_ai_ppt_project_asset",
-    "record_chat_delivery",
-    "record_internal_gate",
-    "reopen_ai_ppt_scope",
-    "request_ai_ppt_agent_action",
-    "save_ai_ppt_mission_draft",
-    "save_review_marks",
-    "set_ai_ppt_release_target_policy",
-    "submit_ai_ppt_human_decision",
-  ];
-  if (toolNames.length !== requiredTools.length) {
-    throw new Error(
-      `Expected ${requiredTools.length} pure-data tools, found ${toolNames.length}.`,
-    );
+  const expectedNames = PUBLIC_TOOL_CATALOG.map((tool) => tool.name).sort();
+  if (new Set(toolNames).size !== toolNames.length) {
+    throw new Error(`Duplicate public tool names: ${toolNames.join(", ")}`);
   }
-  for (const name of requiredTools) {
-    if (!toolNames.includes(name)) {
-      throw new Error(`${name} not found. Tools: ${toolNames.join(", ")}`);
-    }
+  if (JSON.stringify(toolNames) !== JSON.stringify(expectedNames)) {
+    throw new Error(`Public tool catalog drift: ${toolNames.join(", ")}`);
   }
   for (const tool of listed.tools) {
     const metaKeys = Object.keys(tool._meta || {});
@@ -88,49 +69,15 @@ try {
   }
 
   const selectedProjectRoot = initialSnapshot.project.project_root;
-  const sidebarResult = await client.callTool({
-    name: "get_ai_ppt_sidebar_projection",
-    arguments: { projectRoot: selectedProjectRoot, initialSpace: "overview" },
-  });
-  const sidebarCode = sidebarResult.structuredContent?.error?.code;
-  if (sidebarResult.isError !== true || sidebarCode !== "HOST_SIDEBAR_UNAVAILABLE") {
-    throw new Error("Missing host sidebar must be reported as HOST_SIDEBAR_UNAVAILABLE.");
-  }
-
-  const reviewTarget = [
-    ["content", initialSnapshot.workspace?.blueprint?.source_version],
-    ["visual", initialSnapshot.workspace?.visual?.source_version],
-  ].find(([, sourceVersion]) => typeof sourceVersion === "string" && sourceVersion);
-  let browserStatus = "review-source-unavailable";
-  let browserCode = "REVIEW_SOURCE_UNAVAILABLE";
-  let browserOpenMode = "";
-  if (reviewTarget) {
-    const [reviewType, sourceVersion] = reviewTarget;
-    const browserResult = await client.callTool({
-      name: "open_ai_ppt_browser_review",
-      arguments: {
-        projectRoot: selectedProjectRoot,
-        reviewType,
-        sourceVersion,
-      },
-    });
-    browserStatus = browserResult.structuredContent?.status || "";
-    browserOpenMode = browserResult.structuredContent?.openMode || "";
-    browserCode = "BROWSER_REVIEW_AVAILABLE";
-    if (
-      browserResult.isError === true ||
-      browserStatus !== "review-session-ready" ||
-      browserOpenMode !== "agent-browser" ||
-      browserResult.structuredContent?.browserAction !== "open-scoped-url" ||
-      !/^http:\/\/127\.0\.0\.1:\d+\/#token=/.test(
-        browserResult.structuredContent?.url || "",
-      )
-    ) {
-      throw new Error(
-        "Production MCP must return a review-session-ready Agent Browser handoff.",
-      );
-    }
-  }
+  const browserCode = "BROWSER_REVIEW_UNAVAILABLE";
+  const requiredReviewTools = [
+    "open_or_resume_review_session",
+    "get_content_review_projection",
+    "get_visual_review_projection",
+  ];
+  const professionalReviewToolsPresent = requiredReviewTools.every((name) =>
+    toolNames.includes(name),
+  );
 
   process.stdout.write(
     `${JSON.stringify(
@@ -138,6 +85,7 @@ try {
         ok: true,
         tool_count: toolNames.length,
         tools: toolNames,
+        tool_catalog_sha256: PUBLIC_TOOL_CATALOG_SHA256,
         chat_ui: {
           templateCount: 0,
           ordinaryToolsAreDataOnly: true,
@@ -153,18 +101,30 @@ try {
               ),
           ),
         },
-        sidebar: {
-          status: "unavailable",
-          code: sidebarCode,
-          proofEligible: false,
-          realHostEvidence: false,
-        },
-        browser: {
-          status: browserStatus,
-          code: browserCode,
-          openMode: browserOpenMode,
-          proofEligible: false,
-          realHostEvidence: false,
+        professional_review: {
+          review_session: professionalReviewToolsPresent ? "available" : "unavailable",
+          content_review_projection: toolNames.includes(
+            "get_content_review_projection",
+          ),
+          visual_review_projection: toolNames.includes(
+            "get_visual_review_projection",
+          ),
+          host_open: {
+            status: "unavailable",
+            code: browserCode,
+            proofEligible: false,
+            realHostEvidence: false,
+          },
+          host_notification: {
+            status: "unverified",
+            proofEligible: false,
+            realHostEvidence: false,
+          },
+          ai_receipt: {
+            status: "unverified",
+            proofEligible: false,
+            realHostEvidence: false,
+          },
         },
         project: {
           name: initialSnapshot.project.name,

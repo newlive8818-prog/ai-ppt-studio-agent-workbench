@@ -27,7 +27,6 @@ from ai_ppt_studio.errors import (
     ProjectIdentityError,
     ProjectNotFoundError,
     ProtectedPathError,
-    ProposalOnlyIdentityViolationError,
     ReviewMarkSaveError,
     ReviewSourceStaleError,
     RevisionConflictError,
@@ -128,8 +127,6 @@ def _error_payload(exc: Exception) -> tuple[int, dict[str, object]]:
         code = "MISSION_NOT_CONFIRMED"
     elif isinstance(exc, MaterialModeUnconfirmedError):
         code = "MATERIAL_MODE_UNCONFIRMED"
-    elif isinstance(exc, ProposalOnlyIdentityViolationError):
-        code = "PROPOSAL_ONLY_IDENTITY_VIOLATION"
     elif isinstance(exc, ProjectNotFoundError):
         code = "PROJECT_NOT_FOUND"
     elif isinstance(exc, ProtectedPathError):

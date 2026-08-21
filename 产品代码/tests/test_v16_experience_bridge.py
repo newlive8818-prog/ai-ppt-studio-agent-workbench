@@ -1,3 +1,5 @@
+"""Bridge regression tests migrated from the v1.6 experience surface."""
+
 from __future__ import annotations
 
 import sys
@@ -9,193 +11,133 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.application.v16_bridge import dispatch_v16
-from ai_ppt_studio.application.release_policy_service import (
-    ReleaseTargetPolicyService,
-)
 from ai_ppt_studio.errors import ContractValidationError
-from ai_ppt_studio.kernel.references import ArtifactReference
-from tests.test_v16_experience_evolution import prepared_personal_candidate
-from tests.v16_experience_fixtures import (
-    prepared_experience,
-    valid_intake_payload,
-    valid_mechanism_payload,
-    valid_preference_payload,
-)
+from ai_ppt_studio.kernel.transactions import ProjectKernel
+from tests.test_v22_project_retrospective import retrospective_payload
+from tests.v22_experience_fixtures import experience_item
 
 
-class V16ExperienceBridgeTests(unittest.TestCase):
-    def test_task_bound_evolution_decision_atomically_updates_both_heads_and_replays(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            project = Path(temp)
-            experience, revision, refs = prepared_personal_candidate(project)
-            _policy_ref, policy_state = ReleaseTargetPolicyService(
-                experience.kernel
-            ).bind_current_policy(
-                "bind-policy-for-task-bound-experience-bridge-snapshot",
-                revision,
-            )
-            revision = policy_state.revision
-            requested = dispatch_v16({
-                "operation": "request-agent-action",
-                "project_root": str(project),
-                "expected_revision": revision,
-                "command_id": "atomic-evolution-task",
-                "action_type": "evaluate-experience",
-                "target_refs": [refs["candidate"], refs["policy"]],
-                "instructions": "依据当前评估证据作出经验进化决定。",
-            })["result"]
-            task_id = requested["task"]["task_id"]
-            payload = {
-                "artifact_type": "experience-evolution-decision",
-                "decision_id": "atomic-disable-reading-path",
-                "action": "disable",
-                "candidate_ref": refs["candidate"],
-                "policy_ref": refs["policy"],
-                "evaluation_refs": refs["promotion_evaluations"],
-                "reason": "治理复核要求暂停推荐并保留历史。",
-                "decided_by": "经验进化治理智能体",
-            }
-            event_count = len(tuple(experience.kernel.events_root.iterdir()))
-            committed = dispatch_v16({
-                "operation": "commit-artifact",
-                "project_root": str(project),
-                "expected_revision": revision + 1,
-                "command_id": "atomic-evolution-result",
-                "kind": "experience",
-                "task_id": task_id,
-                "payload": payload,
-            })["result"]
-            self.assertEqual(committed["snapshot"]["revision"], revision + 2)
-            self.assertEqual(
-                len(tuple(experience.kernel.events_root.iterdir())), event_count + 1
-            )
-            state = experience.kernel.load()
-            self.assertEqual(
-                state.artifact_heads["experience/candidate/candidate-reading-path"],
-                committed["artifact_ref"],
-            )
-            self.assertIn(
-                "experience/evolution-decision/atomic-disable-reading-path",
-                state.artifact_heads,
-            )
-            task = experience.kernel.artifacts.resolve(ArtifactReference.parse(
-                state.artifact_heads[f"agent/task/{task_id}"]
-            ))["payload"]
-            self.assertEqual(task["status"], "completed")
-            self.assertEqual(task["result_refs"], [committed["artifact_ref"]])
-            events = tuple(experience.kernel.events_root.iterdir())
-
-            replayed = dispatch_v16({
-                "operation": "commit-artifact",
-                "project_root": str(project),
-                "expected_revision": revision + 1,
-                "command_id": "atomic-evolution-result",
-                "kind": "experience",
-                "task_id": task_id,
-                "payload": payload,
-            })["result"]
-            self.assertEqual(replayed, committed)
-            self.assertEqual(tuple(experience.kernel.events_root.iterdir()), events)
-
-    def test_existing_commit_operation_and_snapshot_project_experience(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            project = Path(temp)
-            experience, revision, refs = prepared_experience(project)
-            _policy_ref, policy_state = ReleaseTargetPolicyService(
-                experience.kernel
-            ).bind_current_policy(
-                "bind-policy-for-experience-bridge-snapshot",
-                revision,
-            )
-            revision = policy_state.revision
-            intake = dispatch_v16(
+class V16ExperienceBridgeMigrationTests(unittest.TestCase):
+    def test_generic_commit_accepts_only_the_current_experience_item_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            project = Path(folder)
+            ProjectKernel.initialize(project, project_id="p1")
+            payload = {"artifact_type": "experience-item", **experience_item()}
+            committed = dispatch_v16(
                 {
                     "operation": "commit-artifact",
                     "project_root": str(project),
-                    "expected_revision": revision,
+                    "command_id": "commit-current-experience",
+                    "expected_revision": 0,
                     "kind": "experience",
-                    "payload": {
-                        **valid_intake_payload(refs),
-                        "artifact_type": "experience-intake",
-                    },
+                    "payload": payload,
                 }
             )
-            intake_ref = intake["result"]["artifact_ref"]
-            revision = intake["result"]["snapshot"]["revision"]
-            for payload in (
-                {
-                    **valid_preference_payload(intake_ref, refs),
-                    "artifact_type": "preference-signal",
-                },
-                {
-                    **valid_mechanism_payload(intake_ref, refs),
-                    "artifact_type": "professional-mechanism-candidate",
-                },
-            ):
-                result = dispatch_v16(
-                    {
-                        "operation": "commit-artifact",
-                        "project_root": str(project),
-                        "expected_revision": revision,
-                        "kind": "experience",
-                        "payload": payload,
-                    }
+            self.assertTrue(
+                committed["result"]["artifact_ref"].startswith(
+                    "artifact://experience-item/"
                 )
-                revision = result["result"]["snapshot"]["revision"]
-            snapshot = dispatch_v16(
-                {
-                    "operation": "get-project-snapshot",
-                    "project_root": str(project),
-                }
-            )["snapshot"]
-            projection = snapshot["experience"]
-            self.assertEqual(
-                set(projection),
-                {
-                    "intake_counts",
-                    "result_counts",
-                    "candidates",
-                    "role_slices",
-                    "application_outcomes",
-                    "stable_release_candidates",
-                },
             )
-            self.assertEqual(projection["intake_counts"]["total"], 1)
-            self.assertEqual(
-                projection["intake_counts"]["by_source_type"],
-                {"preferred-example": 1},
-            )
-            self.assertEqual(projection["result_counts"]["total"], 2)
-            self.assertEqual(
-                projection["result_counts"]["by_result_type"],
-                {
-                    "preference-signal": 1,
-                    "professional-mechanism-candidate": 1,
-                },
-            )
-            self.assertEqual(projection["candidates"], [])
-            self.assertNotIn("raw_feedback", str(projection))
-            self.assertNotIn("diagnosis", str(projection))
-            self.assertNotIn("case_content", str(projection))
-
-    def test_unsupported_experience_artifact_does_not_change_revision(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            project = Path(temp)
-            experience, revision, _refs = prepared_experience(project)
+            before = ProjectKernel(project, project_id="p1").load()
             with self.assertRaises(ContractValidationError):
                 dispatch_v16(
                     {
                         "operation": "commit-artifact",
                         "project_root": str(project),
-                        "expected_revision": revision,
+                        "command_id": "commit-retired-experience",
+                        "expected_revision": before.revision,
                         "kind": "experience",
-                        "payload": {
-                            "artifact_type": "legacy-experience-rule",
-                            "status": "stable",
-                        },
+                        "payload": {"artifact_type": "experience-intake"},
                     }
                 )
-            self.assertEqual(experience.kernel.load().revision, revision)
+            self.assertEqual(ProjectKernel(project, project_id="p1").load(), before)
+
+    def test_recommend_and_application_bridge_bind_the_exact_version(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            project = Path(folder)
+            kernel = ProjectKernel.initialize(project, project_id="p1")
+            created = dispatch_v16(
+                {
+                    "operation": "commit-artifact",
+                    "project_root": str(project),
+                    "command_id": "absorb",
+                    "expected_revision": 0,
+                    "kind": "experience",
+                    "payload": {
+                        "artifact_type": "experience-item",
+                        **experience_item(),
+                    },
+                }
+            )
+            experience_ref = created["result"]["artifact_ref"]
+            recommended = dispatch_v16(
+                {
+                    "operation": "recommend-experience",
+                    "project_root": str(project),
+                    "domain": "content",
+                    "type_signature": "presales:transport:decision",
+                    "applicability": {"conditions": ["阅读优先"]},
+                    "top_n": 3,
+                }
+            )
+            self.assertEqual(
+                [item["experience_ref"] for item in recommended["recommendations"]],
+                [experience_ref],
+            )
+            request = {
+                "operation": "record-experience-application",
+                "project_root": str(project),
+                "command_id": "apply",
+                "expected_revision": kernel.load().revision,
+                "experience_ref": experience_ref,
+                "target_project_id": "p1",
+                "target_type_signature": "presales:transport:decision",
+                "context": {"conditions": ["阅读优先"]},
+                "evidence_refs": [
+                    "artifact://reading-deck-blueprint/" + "e" * 64
+                ],
+                "applied_at": "2026-08-15T06:00:00+08:00",
+                "explicit_validation": False,
+            }
+            first = dispatch_v16(request)
+            self.assertEqual(dispatch_v16(request), first)
+            self.assertEqual(
+                first["result"]["application"]["experience_ref"], experience_ref
+            )
+            with self.assertRaises(ContractValidationError):
+                dispatch_v16(
+                    {**request, "context": {"conditions": ["不同语义"]}}
+                )
+
+    def test_terminal_project_and_retrospective_are_separate_operations(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            project = Path(folder)
+            ProjectKernel.initialize(project, project_id="p1")
+            closed = dispatch_v16(
+                {
+                    "operation": "close-project",
+                    "project_root": str(project),
+                    "command_id": "close",
+                    "expected_revision": 0,
+                    "user_message_ref": "chat://message/close",
+                    "completed_at": "2026-08-15T07:00:00+08:00",
+                }
+            )
+            completed = dispatch_v16(
+                {
+                    "operation": "summarize-project-experience",
+                    "project_root": str(project),
+                    "command_id": "summarize",
+                    "expected_revision": closed["result"]["snapshot"]["revision"],
+                    "terminal_status": "closed",
+                    "payload": retrospective_payload("closed"),
+                    "started_at": "2026-08-15T07:01:00+08:00",
+                    "finished_at": "2026-08-15T07:02:00+08:00",
+                    "retryable": True,
+                }
+            )
+            self.assertEqual(completed["result"]["job"]["status"], "completed")
+            self.assertTrue(completed["result"]["retrospective_ref"])
 
 
 if __name__ == "__main__":

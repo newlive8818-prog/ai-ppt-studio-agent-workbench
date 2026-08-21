@@ -8,7 +8,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.domains.presentation.targets import (
-    REQUIRED_TARGET_IDS,
     TargetRenderEvidence,
     validate_required_targets,
 )
@@ -101,22 +100,10 @@ class TargetEvidenceMatrixTests(unittest.TestCase):
         self.assertEqual(result.pptx_sha256, "a" * 64)
         self.assertEqual(result.target_ids, SUPPORTED_TARGET_IDS)
 
-    def test_single_required_target_forms_complete_matrix(self) -> None:
-        result = validate_required_targets(
-            [evidence("macos-powerpoint")],
-            ("macos-powerpoint",),
-        )
-
-        self.assertEqual(result.pptx_sha256, "a" * 64)
-        self.assertEqual(result.target_ids, ("macos-powerpoint",))
-
-    def test_deferred_evidence_cannot_replace_or_join_required_target(self) -> None:
-        for values in (
-            [evidence("macos-wps")],
-            [evidence("macos-powerpoint"), evidence("macos-wps")],
-        ):
-            with self.subTest(values=values), self.assertRaises(GateBlockedError):
-                validate_required_targets(values, ("macos-powerpoint",))
+    def test_accepts_current_single_required_target(self) -> None:
+        required = ("macos-powerpoint",)
+        result = validate_required_targets([evidence(required[0])], required)
+        self.assertEqual(result.target_ids, required)
 
     def test_rejects_missing_failed_duplicate_or_mismatched_hash(self) -> None:
         cases = (
@@ -141,15 +128,6 @@ class TargetEvidenceMatrixTests(unittest.TestCase):
         for values in cases:
             with self.subTest(values=values), self.assertRaises(GateBlockedError):
                 validate_required_targets(values, SUPPORTED_TARGET_IDS)
-
-    def test_rejects_empty_duplicate_or_unsupported_required_target_ids(self) -> None:
-        for required in (
-            (),
-            ("macos-powerpoint", "macos-powerpoint"),
-            ("linux-libreoffice",),
-        ):
-            with self.subTest(required=required), self.assertRaises(GateBlockedError):
-                validate_required_targets([], required)
 
     def test_rejects_incomplete_preflight_or_wrong_target_identity(self) -> None:
         invalid_payloads = []

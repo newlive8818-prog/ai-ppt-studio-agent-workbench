@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ai_ppt_studio.domains.presentation.targets import REQUIRED_TARGET_IDS
+from ai_ppt_studio.application.release_policy_service import ReleaseTargetPolicyService
 from ai_ppt_studio.errors import (
     ContractValidationError,
     GateBlockedError,
@@ -30,7 +30,7 @@ from tests.v16_delivery_fixtures import (
 class V16DeliveryRecoveryTests(unittest.TestCase):
     def test_failed_attempt_and_repair_preserve_last_valid_build(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            delivery, revision, refs = prepared_build(Path(temp), slide_count=2)
+            delivery, revision, refs = prepared_build(Path(temp), slide_count=3)
             attempt_ref = str(
                 delivery.kernel.artifacts.put(
                     "build-attempt",
@@ -44,7 +44,7 @@ class V16DeliveryRecoveryTests(unittest.TestCase):
             invalid = {
                 "attempt_ref": attempt_ref,
                 "last_valid_build_ref": "artifact://presentation-build/" + "a" * 64,
-                "target_slide_ids": ["s1"],
+                "target_slide_ids": [refs["slide_ids"][0]],
                 "failure_code": "PRESENTATION_BUILD_FAILED",
                 "failure_reason": "第 1 页对象构建失败",
                 "retry_policy": "targeted-repair",
@@ -68,7 +68,7 @@ class V16DeliveryRecoveryTests(unittest.TestCase):
                     {
                         "failed_attempt_ref": failed_ref,
                         "last_valid_build_ref": refs["build"],
-                        "target_slide_ids": ["s1"],
+                        "target_slide_ids": [refs["slide_ids"][0]],
                         "preserve_refs": [],
                         "failure_conditions": ["对象构建失败"],
                         "required_outcome": "第 1 页恢复并通过四门",
@@ -81,7 +81,7 @@ class V16DeliveryRecoveryTests(unittest.TestCase):
                 {
                     "failed_attempt_ref": failed_ref,
                     "last_valid_build_ref": refs["build"],
-                    "target_slide_ids": ["s1"],
+                    "target_slide_ids": [refs["slide_ids"][0]],
                     "preserve_refs": [refs["build"]],
                     "failure_conditions": ["对象构建失败"],
                     "required_outcome": "第 1 页恢复并通过四门",
@@ -96,7 +96,7 @@ class V16DeliveryRecoveryTests(unittest.TestCase):
     def test_reopened_g4_replaces_build_without_reusing_stale_downstream_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             delivery, revision, refs = prepared_delivery_ready(
-                Path(temp), slide_count=2
+                Path(temp), slide_count=3
             )
             package_ref = delivery.register_delivery_package(
                 "stale-package",
@@ -125,7 +125,7 @@ class V16DeliveryRecoveryTests(unittest.TestCase):
                 "reopen-delivery",
                 sent.revision,
                 user_message_ref="chat://message/revise-slide-one",
-                impact_scope=["s1"],
+                impact_scope=[refs["slide_ids"][0]],
             )
             self.assertEqual(reopened.gate_status["G4"], "open")
             self.assertEqual(reopened.artifact_heads["delivery/package"], package_ref)
@@ -164,7 +164,7 @@ class V16DeliveryRecoveryTests(unittest.TestCase):
 
     def test_restore_build_creates_a_new_auditable_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            delivery, revision, refs = prepared_build(Path(temp), slide_count=2)
+            delivery, revision, refs = prepared_build(Path(temp), slide_count=3)
             replacement_artifacts = build_artifacts(
                 delivery,
                 refs["slide_ids"],
@@ -197,29 +197,30 @@ class V16DeliveryRecoveryTests(unittest.TestCase):
 
     def test_same_hash_target_retry_replaces_only_one_target_head(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            delivery, revision, refs = prepared_qa(Path(temp), slide_count=2)
+            delivery, revision, refs = prepared_qa(Path(temp), slide_count=3)
             original: dict[str, str] = {}
-            for target_id in REQUIRED_TARGET_IDS:
+            _policy_ref, policy = ReleaseTargetPolicyService(delivery.kernel).current()
+            for target_id in policy.required_target_ids:
                 original[target_id] = delivery.register_target_render_evidence(
                     f"initial-{target_id}",
                     revision,
                     rich_g4_target_payload(delivery, target_id, refs),
                 )
                 revision += 1
-            retry_target = "macos-wps"
+            retry_target = policy.required_target_ids[0]
             retried_payload = rich_g4_target_payload(
                 delivery, retry_target, refs
             )
-            retried_payload["application_version"] = "WPS/test-retry-version"
+            retried_payload["application_version"] = "PowerPoint/test-retry-version"
             replacement_ref = delivery.register_target_render_evidence(
-                "retry-macos-wps",
+                "retry-required-target",
                 revision,
                 retried_payload,
             )
             revision += 1
             self.assertNotEqual(replacement_ref, original[retry_target])
             current = delivery.kernel.load().artifact_heads
-            for target_id in REQUIRED_TARGET_IDS:
+            for target_id in policy.required_target_ids:
                 expected = (
                     replacement_ref if target_id == retry_target else original[target_id]
                 )
@@ -232,7 +233,7 @@ class V16DeliveryRecoveryTests(unittest.TestCase):
     def test_failed_chat_send_is_idempotent_and_revision_safe(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             delivery, revision, refs = prepared_delivery_ready(
-                Path(temp), slide_count=2
+                Path(temp), slide_count=3
             )
             package_ref = delivery.register_delivery_package(
                 "retry-package",

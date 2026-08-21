@@ -1,23 +1,40 @@
 # Strict route B visual workflow
 
-## Visual input and internal exploration
+## Freeze the input
 
-Start only after G0. Derive the design problem from frozen content, audience, decision objective, brand, real evidence, reading mode, environment, and editability boundary. Internal creative roles may compare structurally different mechanisms and challenge weak proposals; this is not a user-selected G1 direction.
+Start only after G0. Bind the current `ReadingDeckBlueprint`, audience, decision objective, brand, evidence, reading mode, environment, and editability boundary. Internal exploration may compare mechanisms, but the user does not choose an implementation technology or an internal G1/G2 direction.
 
-Image 2 exploration is non-binding. It may help investigate composition, atmosphere, image language, or art direction, but its raster text is never a content source and its page image is never the final editable slide.
+Image 2 exploration is non-binding. Raster text is never a content source and a generated page image is never a final editable slide.
 
-## Full contract before anchors
+## Complete contract before anchors
 
-Create the complete `DeckDesignSystem` and all `SlideVisualContract` entries first. The Deck contract includes theme proposition, composition grammar, grid, density rhythm, typography, color, imagery, recurring geometry, page families, native/bitmap routing, accessibility, fallback, and acceptance rules. Every page contract binds frozen text and notes, source/material refs, page family, composition intent, hierarchy, reading order, regions, relationships, imagery, typography/color application, editability, fallback, and binary acceptance checks.
+Create the full `DeckDesignSystem` and every `SlideVisualContract`. The Deck system defines theme proposition, composition grammar, grid, density rhythm, typography, color, imagery, recurring geometry, page families, native/bitmap routing, accessibility, fallback, and binary acceptance rules. Every slide contract binds frozen text and notes, source/material refs, page family, composition intent, hierarchy, reading order, regions, relationships, imagery, token application, editability, fallback, and acceptance checks.
 
-G1 is internal. It passes only when the entire current contract resolves and every applicable contract check passes.
+G1 is internal and passes only when the current full contract resolves and every applicable check passes.
 
-## Native-first anchors and Image 2 boundary
+## Native-first anchors and G2
 
-Codex Presentations creates the difficult and content-complex anchor pages as native editable objects from the accepted full contract. Freeze the native-first build before any Image 2 asset. An Image 2 asset may be added only as a separate replaceable background, texture, illustration, or light effect with no text, number, business relationship, or real-evidence impersonation.
+Use Codex Presentations to create difficult and content-complex anchors as native editable objects. Freeze the native-first build before adding any Image 2 asset. Add an Image 2 asset only as a separate replaceable background, texture, illustration, or light effect with no factual text, number, business relationship, or evidence impersonation.
 
-## G2 and G3
+Resolve the immutable current `ReleaseTargetPolicy` and bind its exact artifact ref into visual lineage. Validate semantic fidelity, aesthetics, PowerPoint engineering, target rendering, fonts, and editability for each `required_target_ids` row. All current rows must bind the same anchor PPTX hash. One missing, failed, stale, or different-hash row blocks G2. Deferred targets are not Gate rows and never imply compatibility.
 
-G2 resolves the current project-bound `ReleaseTargetPolicy`, freezes its artifact ref into the visual lineage, and requires independent aesthetic and PowerPoint engineering reviews plus every `required_target_ids` target record for the same PPTX SHA-256. Current v1.6 requires only `macos-powerpoint`; `macos-wps`, `windows-powerpoint`, and `windows-wps` are deferred. Each required row must pass semantic, aesthetic, engineering, and target-render doors. Do not claim WPS or Windows compatibility, and a preflight-only output cannot replace desktop evidence.
+## Visual professional review and G3
 
-After G2, publish the full visual contract, anchor identity, and target evidence identities to the shared professional review resource. Exact marks never pass a Gate. G3 requires explicit Codex chat confirmation of the current visual source.
+After G2, open the current `visual-professional` ReviewSession in the Codex built-in Browser. Keep two top-level views:
+
+1. Anchor results: show the real anchor images, accept drag-created rectangle regions, keep drafts across slides, and submit multiple comments as one immutable `AnchorFeedbackBatch`. A point-like click creates nothing.
+2. Complete visual contract: render the Deck system, anchor identity, current required-target identities, and every slide contract in order. Save field marks and selected-text marks as one `VisualContractReviewMarkSet`.
+
+Keep the two feedback types, their current slots, and their persistence actions separate. After either save, report persistence, host notification, and AI receipt independently. G3 requires an explicit user judgment bound to the current visual contract, source version, revision, and review Batch/mark identities; saved feedback alone never confirms it.
+
+The accepted v2.8 production frontend is the binding user-surface contract:
+
+- use one compact top bar, with no project badge and no persistent product navigation;
+- keep the slide directory in a left overlay drawer and contract marks in a right overlay drawer so opening either does not alter document geometry or scroll position;
+- do not show a persistent right-side feedback panel;
+- show no feedback-batch panel in the empty state; after real feedback exists, place one compact batch below the canvas;
+- reveal text-range marking only contextually after a real selection;
+- keep the two top-level views separate and make the complete contract readable in source order;
+- preserve visible contract semantics for `核心主张`, `页面可见文案`, `讲解备注`, and `来源引用`.
+
+These frontend facts do not prove Runtime persistence, Review Bridge behavior, MCP wiring, host open/notification, AI receipt, or G3. Review marks and feedback batches never pass G3; explicit current user judgment is still required.

@@ -32,6 +32,9 @@ class KernelState:
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+    def review_session_ref(self, review_type: str) -> str:
+        return self.artifact_heads.get(f"review/session/{review_type}", "")
+
     @classmethod
     def initial(cls, project_id: str) -> "KernelState":
         return cls(schema_version="3.0", project_id=project_id, revision=0)

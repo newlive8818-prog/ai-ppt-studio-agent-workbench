@@ -1,8 +1,7 @@
-"""Schema 3 professional-review integration flow.
+"""Deterministic v2.2 professional-review integration flow.
 
-This test uses deterministic target-evidence fixtures. It verifies the current
-authoritative kernel, projection, and exact-mark contracts; it is not real
-desktop PowerPoint/WPS evidence.
+The fixtures prove Runtime contracts only. They are not Browser, host receipt,
+AI receipt, PowerPoint, or customer acceptance evidence.
 """
 
 from __future__ import annotations
@@ -10,59 +9,85 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+import sys
 
-from ai_ppt_studio.application.review_service import ReviewService
-from tests.v16_visual_fixtures import prepared_g2
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from ai_ppt_studio.application.content_review.projection_service import (
+    ContentReviewProjectionService,
+)
+from ai_ppt_studio.application.visual_review_service import VisualReviewService
+from ai_ppt_studio.kernel.transactions import ProjectKernel
+from tests.test_v22_content_review_projection import accepted_review
+from tests.test_v22_visual_review_service import seed_visual_review
 
 
 class SimulateReviewFlowTests(unittest.TestCase):
     def test_full_review_flow(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="ai-ppt-v16-review-flow-") as temp:
-            visual, revision, _refs = prepared_g2(Path(temp), slide_count=2)
-            published = visual.publish_visual_review("publish-review", revision)
-            reviewer = ReviewService(visual.kernel)
+        with tempfile.TemporaryDirectory(prefix="ai-ppt-v22-review-flow-") as temp:
+            kernel = ProjectKernel.initialize(Path(temp), project_id="review-flow")
+            _blueprint_ref, _content_ref, content_session, content_state = (
+                accepted_review(kernel, slide_count=4)
+            )
+            (
+                _design_ref,
+                _anchor_ref,
+                visual_contract_ref,
+                _visual_ref,
+                visual_session,
+                visual_state,
+            ) = seed_visual_review(kernel)
 
-            content = reviewer.content_projection()
-            visual_projection = reviewer.visual_projection()
-            content_pages = [
-                section["anchor"]
-                for section in content["sections"]
-                if section["anchor"].startswith("slide-")
-            ]
-            visual_pages = [
-                section["anchor"]
-                for section in visual_projection["sections"]
-                if section["anchor"].startswith("visual-slide-")
-            ]
-
-            self.assertEqual(content_pages, ["slide-s1", "slide-s2"])
-            self.assertEqual(visual_pages, ["visual-slide-s1", "visual-slide-s2"])
-            self.assertEqual(content["gate_status"], {"G0": "passed"})
+            content = ContentReviewProjectionService(kernel).project(
+                content_session["review_session_id"]
+            )
+            visual = VisualReviewService(kernel).project(
+                visual_session["review_session_id"]
+            )
+            self.assertEqual(content["review_type"], "content-full-deck")
             self.assertEqual(
-                visual_projection["gate_status"],
-                {"G1": "passed", "G2": "passed", "G3": "user-reviewable"},
+                [slide["slide_id"] for slide in content["slides"]],
+                ["S01", "S02", "S03", "S04"],
             )
+            self.assertEqual(visual["review_type"], "visual-professional")
+            self.assertEqual(len(visual["anchors"]), 3)
+            self.assertEqual(len(visual["slide_visual_contracts"]), 4)
 
-            saved = reviewer.save_marks(
-                command_id="save-review-flow-mark",
-                expected_revision=published.revision,
-                review_type="content",
-                source_version=content["source_version"],
-                marks=[
-                    {
-                        "mark_id": "m-flow",
-                        "field_anchor": "slide-s1-visible-copy",
-                        "exact_text": "三条断点",
-                        "prefix": "五套系统",
-                        "suffix": "",
-                        "comment": "补充断点来源",
-                    }
-                ],
+            self.assertEqual(
+                kernel.load().artifact_heads["content/reading-blueprint"],
+                _blueprint_ref,
             )
-            refreshed = reviewer.content_projection()
-            self.assertEqual(saved.gate_status["G0"], "passed")
-            self.assertEqual(refreshed["mark_set"]["status"], "pending-governance")
-            self.assertEqual(refreshed["mark_set"]["marks"][0]["mark_id"], "m-flow")
+            self.assertEqual(visual_state.gate_status["G0"], "passed")
+
+            mark = {
+                "mark_id": "review-flow-mark",
+                "target_type": "contract-field",
+                "slide_id": "S01",
+                "deck_section_id": "",
+                "target_key": "composition_intent",
+                "selected_text": "",
+                "context_before": "",
+                "context_after": "",
+                "comment": "构图关系需要更明确",
+                "visual_contract_ref": visual_contract_ref,
+                "source_version": "visual-v1",
+                "revision": kernel.load().revision,
+                "created_at": "2026-08-15T01:00:00+08:00",
+                "created_by": "user",
+            }
+            _marks_ref, marks, final = VisualReviewService(
+                kernel
+            ).save_contract_review_marks(
+                command_id="review-flow-visual-mark",
+                expected_revision=kernel.load().revision,
+                review_session_id=visual_session["review_session_id"],
+                source_version="visual-v1",
+                marks=[mark],
+            )
+            self.assertEqual(marks["marks"][0]["mark_id"], "review-flow-mark")
+            self.assertNotIn("visual/anchor-feedback-batch", final.artifact_heads)
+            self.assertEqual(final.gate_status["G3"], "user-reviewable")
 
 
 if __name__ == "__main__":

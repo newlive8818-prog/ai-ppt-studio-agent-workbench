@@ -11,15 +11,8 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from ai_ppt_studio.application.content_batch_planning_service import (
-    ContentBatchPlanningService,
-)
 from ai_ppt_studio.application.scoped_confirmation import (
     ScopedConfirmationPolicy,
-)
-from ai_ppt_studio.domains.content.review_contracts import (
-    validate_content_review_batch,
-    validate_persisted_page_decision,
 )
 from ai_ppt_studio.errors import (
     ArtifactReferenceError,
@@ -52,6 +45,30 @@ class GateConfirmationPolicy:
         identity = gate.strip()
         if identity not in USER_GATES:
             raise GateBlockedError(identity or "Gate", ("user-gate-invalid",))
+        if identity == "G0":
+            from ai_ppt_studio.application.presales_content_service import (
+                PresalesContentService,
+            )
+
+            scoped = PresalesContentService(self.kernel).gate_confirmation_context()
+        elif identity == "G3":
+            from ai_ppt_studio.application.visual_service import VisualService
+
+            scoped = VisualService(self.kernel).gate_confirmation_context()
+        else:
+            from ai_ppt_studio.application.delivery_service import DeliveryService
+
+            scoped = DeliveryService(self.kernel).gate_confirmation_context()
+        return {
+            **scoped,
+            "gate": identity,
+            "review_summary": "当前 Gate 的可信确认上下文。",
+            "confirmation_mode": "confirm-gate",
+            "legacy_confirmation_ref": "",
+        }
+
+        # The code below is retained only as non-routable migration history. All
+        # callable contexts return through the current schema 3 services above.
         state = self.kernel.load()
         legacy_g0_upgrade = identity == "G0" and self._legacy_g0_upgrade_ref(state)
         if (

@@ -1,4 +1,4 @@
-"""Desktop target-render evidence and policy-parameterized matrices."""
+"""Policy-bound, same-PPTX target-render evidence contract."""
 
 from __future__ import annotations
 
@@ -8,11 +8,9 @@ from datetime import datetime
 from typing import Any
 
 from ai_ppt_studio.errors import GateBlockedError
-from ai_ppt_studio.domains.presentation.release_policy import SUPPORTED_TARGET_IDS
 from ai_ppt_studio.kernel.references import ArtifactReference
+from ai_ppt_studio.domains.presentation.release_policy import SUPPORTED_TARGET_IDS
 
-# Compatibility alias for callers not yet migrated to project-bound policy.
-REQUIRED_TARGET_IDS = SUPPORTED_TARGET_IDS
 TARGET_PROFILES = {
     "macos-powerpoint": ("macOS", "Microsoft PowerPoint"),
     "macos-wps": ("macOS", "WPS Office"),
@@ -55,7 +53,7 @@ def _artifact_refs(payload: dict[str, Any], field: str) -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class TargetRenderEvidence:
-    """Immutable identity and result for one supported desktop target."""
+    """Immutable identity and result for one required desktop target."""
 
     target_id: str
     evidence_identity: str
@@ -235,7 +233,7 @@ class TargetRenderEvidence:
 
 @dataclass(frozen=True)
 class TargetEvidenceMatrix:
-    """A complete policy-required result for one exact PPTX binary."""
+    """A complete current-policy result for one exact PPTX binary."""
 
     pptx_sha256: str
     target_ids: tuple[str, ...]
@@ -243,28 +241,25 @@ class TargetEvidenceMatrix:
 
 def validate_required_targets(
     evidence: list[TargetRenderEvidence],
-    required_target_ids: tuple[str, ...] | None = None,
+    required_target_ids: tuple[str, ...],
 ) -> TargetEvidenceMatrix:
-    """Reject invalid, incomplete, failed, extra, or mixed-hash evidence."""
+    """Reject incomplete, failed, duplicate, or mixed-hash evidence."""
 
-    required = (
-        SUPPORTED_TARGET_IDS
-        if required_target_ids is None
-        else tuple(required_target_ids)
-    )
+    if (
+        not required_target_ids
+        or len(required_target_ids) != len(set(required_target_ids))
+        or set(required_target_ids).difference(SUPPORTED_TARGET_IDS)
+    ):
+        raise GateBlockedError(
+            "target-render-matrix", ("invalid-required-target-policy",)
+        )
+    counts = {target: 0 for target in required_target_ids}
     blockers: list[str] = []
-    if not required:
-        blockers.append("required-targets-empty")
-    if len(required) != len(set(required)):
-        blockers.append("required-targets-duplicate")
-    if set(required).difference(SUPPORTED_TARGET_IDS):
-        blockers.append("required-targets-unsupported")
-    counts = {target: 0 for target in required}
     for item in evidence:
         if item.target_id not in counts:
-            blockers.append(f"extra-target:{item.target_id}")
-            continue
-        counts[item.target_id] += 1
+            blockers.append(f"unexpected-target:{item.target_id}")
+        else:
+            counts[item.target_id] += 1
     blockers.extend(target for target, count in counts.items() if count != 1)
     if any(item.overall_result != "passed" for item in evidence):
         blockers.append("failed-target")
@@ -276,5 +271,5 @@ def validate_required_targets(
             "target-render-matrix", tuple(sorted(set(blockers)))
         )
     return TargetEvidenceMatrix(
-        pptx_sha256=next(iter(hashes)), target_ids=required
+        pptx_sha256=next(iter(hashes)), target_ids=required_target_ids
     )

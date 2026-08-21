@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-
 SUPPORTED_TARGET_IDS = (
     "macos-powerpoint",
     "macos-wps",
@@ -27,7 +26,7 @@ CURRENT_RELEASE_TARGET_POLICY = {
     "compatibility_claim_scope": ["macos-powerpoint"],
     "effective_at": "2026-08-13T00:00:00+08:00",
     "decision_source": "explicit-user-confirmation",
-    "rationale": "v1.6 当前先保证 macOS Microsoft PowerPoint；WPS 和 Windows 延期。",
+    "rationale": "当前先保证 macOS Microsoft PowerPoint；WPS 和 Windows 延期。",
 }
 
 
@@ -38,7 +37,7 @@ def _text(payload: dict[str, Any], field: str) -> str:
     return value.strip()
 
 
-def _target_ids(payload: dict[str, Any], field: str) -> tuple[str, ...]:
+def _targets(payload: dict[str, Any], field: str) -> tuple[str, ...]:
     values = payload.get(field)
     if not isinstance(values, list) or any(
         not isinstance(value, str) or not value for value in values
@@ -67,9 +66,9 @@ class ReleaseTargetPolicy:
             policy_id=_text(payload, "policy_id"),
             policy_version=_text(payload, "policy_version"),
             status=_text(payload, "status"),
-            required_target_ids=_target_ids(payload, "required_target_ids"),
-            deferred_target_ids=_target_ids(payload, "deferred_target_ids"),
-            compatibility_claim_scope=_target_ids(
+            required_target_ids=_targets(payload, "required_target_ids"),
+            deferred_target_ids=_targets(payload, "deferred_target_ids"),
+            compatibility_claim_scope=_targets(
                 payload, "compatibility_claim_scope"
             ),
             effective_at=_text(payload, "effective_at"),
@@ -90,8 +89,7 @@ class ReleaseTargetPolicy:
         ):
             if len(values) != len(set(values)):
                 raise ValueError(f"{field} cannot contain duplicates")
-            unsupported = set(values).difference(SUPPORTED_TARGET_IDS)
-            if unsupported:
+            if set(values).difference(SUPPORTED_TARGET_IDS):
                 raise ValueError(f"{field} contains unsupported target IDs")
         required = set(self.required_target_ids)
         deferred = set(self.deferred_target_ids)
@@ -122,3 +120,10 @@ class ReleaseTargetPolicy:
             "decision_source": self.decision_source,
             "rationale": self.rationale,
         }
+
+
+__all__ = [
+    "CURRENT_RELEASE_TARGET_POLICY",
+    "SUPPORTED_TARGET_IDS",
+    "ReleaseTargetPolicy",
+]

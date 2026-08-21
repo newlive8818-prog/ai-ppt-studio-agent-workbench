@@ -11,7 +11,7 @@ import time
 import uuid
 from typing import Any
 
-from ai_ppt_studio.application.gate_confirmation import (
+from ai_ppt_studio.application.scoped_confirmation import (
     HOST_CONFIRMATION_SECRET_ENV,
 )
 

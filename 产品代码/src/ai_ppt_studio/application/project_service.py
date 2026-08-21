@@ -16,37 +16,24 @@ from pathlib import Path
 from typing import Any
 
 from ai_ppt_studio.config import RuntimeConfig
-from ai_ppt_studio.errors import (
-    ArtifactReferenceError,
-    ContractValidationError,
-    ProjectNotFoundError,
-)
-from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.domains.presentation.release_policy import (
     CURRENT_RELEASE_TARGET_POLICY,
     ReleaseTargetPolicy,
 )
+from ai_ppt_studio.errors import (
+    ArtifactReferenceError,
+    ContractValidationError,
+    GateBlockedError,
+    ProjectNotFoundError,
+)
+from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.state import KernelState
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 from ai_ppt_studio.paths import PathPolicy
 from ai_ppt_studio.kernel.artifacts import canonical_json
-from ai_ppt_studio.application.content_action_policy import (
-    BATCH_APPLY_ACTIONS,
-    BATCH_PLAN_ACTIONS,
-    CONTENT_ACTIONS,
-    FRAMEWORK_ACTIONS,
-    FULL_DECK_CONTENT_ACTIONS,
-    CONTENT_ACTION_CONTRACTS,
-    CONTENT_ACTION_ROLES,
-    CONTENT_RESULT_CONTRACTS,
-    validate_content_action_targets,
-)
-
-
 SAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 ACTION_ROLES = {
-    **CONTENT_ACTION_ROLES,
     "design-deck-system": "deck-designer",
     "design-slide-visuals": "slide-visual-designer",
     "build-native-first": "native-first-engineer",
@@ -54,9 +41,6 @@ ACTION_ROLES = {
     "review-visual-aesthetic": "visual-aesthetic-reviewer",
     "review-visual-engineering": "visual-engineering-reviewer",
     "verify-target-render": "target-render-verifier",
-    "govern-feedback": "feedback-governance-analyst",
-    "curate-experience": "experience-curator",
-    "evaluate-experience": "experience-evaluator",
     "coordinate-delivery": "delivery-coordinator",
 }
 
@@ -82,33 +66,11 @@ NONCONTENT_RESULT_CONTRACTS = {
         ("visual-contract", "visual-review-record"),
     }),
     "verify-target-render": frozenset({("target-render-evidence", "")}),
-    "govern-feedback": frozenset({("feedback", "feedback-governance-record")}),
-    "curate-experience": frozenset({
-        ("experience", "experience-candidate"),
-        ("experience", "qualified-experience-selection"),
-        ("experience", "experience-application"),
-    }),
-    "evaluate-experience": frozenset({
-        ("experience", "experience-application-evaluation"),
-        ("experience", "experience-evolution-decision"),
-    }),
     "coordinate-delivery": frozenset({
         ("delivery", "delivery-package"),
         ("target-render-evidence", ""),
     }),
 }
-
-VISUAL_ACTIONS = frozenset(
-    {
-        "design-deck-system",
-        "design-slide-visuals",
-        "build-native-first",
-        "generate-image-assets",
-        "review-visual-aesthetic",
-        "review-visual-engineering",
-        "verify-target-render",
-    }
-)
 
 
 @dataclass(frozen=True)
@@ -365,6 +327,65 @@ class ProjectCommandService:
     def __init__(self, kernel: ProjectKernel) -> None:
         self.kernel = kernel
 
+    def close_project(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        user_message_ref: str,
+        completed_at: str,
+    ) -> KernelState:
+        if not user_message_ref.startswith("chat://message/"):
+            raise ContractValidationError(
+                "Project close requires an explicit chat message"
+            )
+        from ai_ppt_studio.application.retrospective_service import (
+            RetrospectiveService,
+        )
+        from ai_ppt_studio.application.review_commands import stable_id
+
+        return RetrospectiveService(self.kernel).queue_project_completion(
+            command_id=command_id,
+            expected_revision=expected_revision,
+            completion_kind="closed",
+            completion_identity=stable_id(
+                "project-completion", "closed", user_message_ref
+            ),
+            completion_ref=user_message_ref,
+            completed_at=completed_at,
+        )
+
+    def abort_project(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        user_message_ref: str,
+        reason: str,
+        completed_at: str,
+    ) -> KernelState:
+        clean_reason = reason.strip() if isinstance(reason, str) else ""
+        if not user_message_ref.startswith("chat://message/") or not clean_reason:
+            raise ContractValidationError(
+                "Project abort requires an explicit chat message and reason"
+            )
+        from ai_ppt_studio.application.retrospective_service import (
+            RetrospectiveService,
+        )
+        from ai_ppt_studio.application.review_commands import stable_id
+
+        return RetrospectiveService(self.kernel).queue_project_completion(
+            command_id=command_id,
+            expected_revision=expected_revision,
+            completion_kind="aborted",
+            completion_identity=stable_id(
+                "project-completion", "aborted", user_message_ref
+            ),
+            completion_ref=user_message_ref,
+            completed_at=completed_at,
+            completion_details={"reason": clean_reason},
+        )
+
     def add_material(
         self,
         command_id: str,
@@ -377,7 +398,9 @@ class ProjectCommandService:
         filename: str,
         mime_type: str,
     ) -> tuple[str, KernelState]:
-        from ai_ppt_studio.application.content_service import ContentService
+        from ai_ppt_studio.application.mission_material_service import (
+            MissionMaterialService,
+        )
 
         kind = material_type.strip()
         if kind not in {"text", "url", "bytes"}:
@@ -452,7 +475,7 @@ class ProjectCommandService:
                     **({"mime_type": mime_type.strip()} if mime_type.strip() else {}),
                 }
             )
-        reference = ContentService(self.kernel).register_materials(
+        reference = MissionMaterialService(self.kernel).register_materials(
             command_id,
             expected_revision,
             {"sources": sources},
@@ -476,39 +499,46 @@ class ProjectCommandService:
             )
         if not target_refs:
             raise ContractValidationError("Agent task requires target_refs")
-        content_contract = CONTENT_ACTION_CONTRACTS.get(action)
-        if content_contract is not None and role_id != content_contract.role_id:
-            raise ContractValidationError(
-                "Content action role registry conflicts with the action policy"
-            )
-        if action in FRAMEWORK_ACTIONS:
-            from ai_ppt_studio.application.mission_readiness import (
-                MissionReadinessPolicy,
-            )
+        if len(set(target_refs)) != len(target_refs):
+            raise ContractValidationError("Agent task target_refs must be unique")
+        state = self.kernel.load()
+        if state.revision != expected_revision:
+            from ai_ppt_studio.errors import RevisionConflictError
 
-            MissionReadinessPolicy(self.kernel).require_ready()
-            validate_content_action_targets(
-                action, target_refs, self.kernel.load().artifact_heads
+            raise RevisionConflictError(expected_revision, state.revision)
+        if action in {
+            "design-deck-system",
+            "design-slide-visuals",
+            "build-native-first",
+            "generate-image-assets",
+            "review-visual-aesthetic",
+            "review-visual-engineering",
+            "verify-target-render",
+        } and state.gate_status.get("G2") == "passed":
+            blocker = (
+                "G2-visual-lineage-frozen-until-G3-publication"
+                if state.gate_status.get("G3") == "locked"
+                else "G3-visual-production-frozen-until-formal-reopen"
             )
-        elif action in CONTENT_ACTIONS:
-            from ai_ppt_studio.application.mission_readiness import (
-                MissionReadinessPolicy,
-            )
-            from ai_ppt_studio.application.content_service import (
-                require_full_deck_expansion_authorization,
-            )
-
-            MissionReadinessPolicy(self.kernel).require_ready()
-            require_full_deck_expansion_authorization(self.kernel)
-            validate_content_action_targets(
-                action, target_refs, self.kernel.load().artifact_heads
-            )
-        if action in VISUAL_ACTIONS:
-            from ai_ppt_studio.application.visual_service import VisualService
-
-            VisualService(self.kernel).require_visual_production_open()
+            raise GateBlockedError("visual-production", (blocker,))
+        current_refs = set(state.artifact_heads.values())
         for value in target_refs:
             self.kernel.artifacts.resolve(ArtifactReference.parse(value))
+            if value not in current_refs:
+                raise ArtifactReferenceError(
+                    "Agent task target must be an exact current artifact head"
+                )
+        required_gate = {
+            "design-deck-system": ("G0", "passed"),
+            "design-slide-visuals": ("G0", "passed"),
+            "build-native-first": ("G1", "passed"),
+            "generate-image-assets": ("G1", "passed"),
+            "coordinate-delivery": ("G3", "passed"),
+        }.get(action)
+        if required_gate and state.gate_status.get(required_gate[0]) != required_gate[1]:
+            raise ContractValidationError(
+                f"{action} requires {required_gate[0]} {required_gate[1]}"
+            )
         from ai_ppt_studio.context_compiler import ContextCompiler
 
         task_id = hashlib.sha256(command_id.encode("utf-8")).hexdigest()
@@ -583,207 +613,6 @@ class ProjectCommandService:
         if task.get("task_id") != identity:
             raise ContractValidationError("Agent task receipt identity is invalid")
         return dict(task)
-
-    def preflight_content_agent_result(
-        self,
-        *,
-        task_id: str,
-        request_kind: str,
-        payload: dict[str, Any],
-        expected_revision: int,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Validate task, context, targets, and lineage before result writes."""
-
-        from ai_ppt_studio.application.content_service import (
-            require_full_deck_expansion_authorization,
-        )
-        from ai_ppt_studio.errors import ContentWorkflowError
-
-        state = self.kernel.load()
-        task = self.require_active_agent_task(task_id)
-        expected_action = str(task.get("action_type") or "")
-        try:
-            if state.revision != expected_revision:
-                raise ValueError("result revision is stale")
-            if task.get("status") != "queued":
-                raise ValueError("Agent task is not active")
-            result_contract = CONTENT_RESULT_CONTRACTS.get(expected_action)
-            if result_contract is None:
-                raise ValueError("Agent task does not allow a formal content result")
-            if (
-                request_kind != result_contract.request_kind
-                or payload.get("artifact_type") != result_contract.artifact_type
-                or (
-                    result_contract.reviewer_role
-                    and payload.get("reviewer_role")
-                    != result_contract.reviewer_role
-                )
-            ):
-                raise ValueError("Agent result does not match its task contract")
-            input_revision = task.get("input_revision")
-            if isinstance(input_revision, bool) or not isinstance(input_revision, int):
-                raise ValueError("Agent task input revision is invalid")
-            context_ref = str(task.get("context_pack_ref") or "")
-            context_reference = ArtifactReference.parse(context_ref)
-            if context_reference.kind != "context-pack":
-                raise ValueError("Agent ContextPack kind is invalid")
-            exact_context_ref = state.artifact_heads.get(
-                f"agent/context/{task_id}", ""
-            )
-            if exact_context_ref != context_ref:
-                raise ValueError("Agent ContextPack is not the exact task context")
-            context = dict(
-                self.kernel.artifacts.resolve(context_reference)["payload"]
-            )
-            if (
-                context.get("project_id") != state.project_id
-                or context.get("project_revision") != input_revision
-                or context.get("layers", {}).get("task_contract", {}).get(
-                    "task_type"
-                )
-                != expected_action
-                or context.get("layers", {}).get("task_contract", {}).get(
-                    "target_refs"
-                )
-                != task.get("target_refs")
-                or context.get("artifact_version_refs") != task.get("target_refs")
-            ):
-                raise ValueError("Agent ContextPack task contract is invalid")
-            lineage = require_full_deck_expansion_authorization(self.kernel)
-            workflow = context.get("layers", {}).get("content_workflow")
-            if not isinstance(workflow, dict) or any(
-                workflow.get(field) != value
-                for field, value in lineage.items()
-            ):
-                raise ValueError("Agent ContextPack framework lineage is stale")
-            validate_content_action_targets(
-                expected_action,
-                list(task.get("target_refs") or []),
-                state.artifact_heads,
-            )
-        except (
-            ArtifactReferenceError,
-            KeyError,
-            TypeError,
-            ValueError,
-            ContentWorkflowError,
-        ):
-            raise ContentWorkflowError(
-                "CONTENT_REVIEW_CONFLICT",
-                "Agent result provenance is stale or inconsistent",
-                {
-                    "task_id": task_id,
-                    "expected_action": expected_action,
-                    "revision": state.revision,
-                },
-            ) from None
-        return task, context
-
-    def replay_content_agent_result(
-        self,
-        *,
-        command_id: str,
-        task_id: str,
-        request_kind: str,
-        payload: dict[str, Any],
-        expected_revision: int,
-    ) -> tuple[str, KernelState] | None:
-        """Return an exact completed result replay or reject command collision."""
-
-        from ai_ppt_studio.application.content_action_policy import (
-            CONTENT_RESULT_CONTRACTS,
-        )
-        from ai_ppt_studio.errors import ContentWorkflowError
-
-        state = self.kernel.load()
-        revision = state.processed_commands.get(command_id)
-        if revision is None:
-            return None
-        task_ref = state.artifact_heads.get(f"agent/task/{task_id}", "")
-        try:
-            task_reference = ArtifactReference.parse(task_ref)
-            task = self.kernel.artifacts.resolve(task_reference)["payload"]
-            action = str(task.get("action_type") or "")
-            contract = CONTENT_RESULT_CONTRACTS[action]
-            completion = task.get("completion_result")
-            request_fingerprint = hashlib.sha256(
-                canonical_json({
-                    "request_kind": request_kind,
-                    "payload": payload,
-                    "expected_revision": expected_revision,
-                })
-            ).hexdigest()
-            event = json.loads(
-                (
-                    self.kernel.events_root / f"r{revision:08d}.json"
-                ).read_text(encoding="utf-8")
-            )
-            context_ref = str(task.get("context_pack_ref") or "")
-            context_reference = ArtifactReference.parse(context_ref)
-            context = self.kernel.artifacts.resolve(context_reference)["payload"]
-            if (
-                task_reference.kind != "agent-task"
-                or task.get("task_id") != task_id
-                or task.get("status") != "completed"
-                or task.get("completion_command_id") != command_id
-                or request_kind != contract.request_kind
-                or payload.get("artifact_type") != contract.artifact_type
-                or not isinstance(completion, dict)
-                or completion.get("action_type") != action
-                or completion.get("artifact_slot") != contract.artifact_slot
-                or completion.get("artifact_kind") != contract.artifact_kind
-                or completion.get("request_fingerprint")
-                != request_fingerprint
-                or event.get("command_id") != command_id
-                or event.get("command_fingerprint") != request_fingerprint
-                or event.get("revision") != revision
-                or event.get("artifact_heads", {}).get(contract.artifact_slot)
-                != completion.get("result_ref")
-                or event.get("artifact_heads", {}).get(
-                    f"agent/task/{task_id}"
-                ) != task_ref
-                or context_reference.kind != "context-pack"
-                or state.artifact_heads.get(f"agent/context/{task_id}")
-                != context_ref
-                or context.get("project_id") != state.project_id
-                or context.get("project_revision") != task.get("input_revision")
-                or context.get("artifact_version_refs") != task.get("target_refs")
-                or context.get("layers", {}).get("role_contract", {}).get(
-                    "role_id"
-                ) != task.get("role_id")
-                or context.get("layers", {}).get("task_contract", {}).get(
-                    "task_type"
-                ) != action
-                or context.get("layers", {}).get("task_contract", {}).get(
-                    "target_refs"
-                ) != task.get("target_refs")
-                or (
-                    contract.reviewer_role
-                    and payload.get("reviewer_role") != contract.reviewer_role
-                )
-            ):
-                raise ValueError("Processed command does not match completed task")
-            result_ref = str(completion.get("result_ref") or "")
-            result_reference = ArtifactReference.parse(result_ref)
-            self.kernel.artifacts.resolve(result_reference)
-            if (
-                result_reference.kind != contract.artifact_kind
-            ):
-                raise ValueError("Processed command result payload differs")
-            return result_ref, state
-        except (
-            ArtifactReferenceError,
-            KeyError,
-            OSError,
-            json.JSONDecodeError,
-            TypeError,
-            ValueError,
-        ):
-            raise ContentWorkflowError(
-                "CONTENT_REVIEW_CONFLICT",
-                "Processed content result command has different semantics",
-                {"command_id": command_id, "task_id": task_id, "revision": revision},
-            ) from None
 
     @staticmethod
     def _result_request_fingerprint(
@@ -976,28 +805,14 @@ class ProjectCommandService:
         """Run the established public route against a no-write kernel."""
 
         preparation = _PreparationKernel(self.kernel)
-        from ai_ppt_studio.application.content_service import ContentService
         from ai_ppt_studio.application.visual_service import VisualService
 
-        if request_kind in {
-            "material-findings",
-            "content-blueprint",
-            "content-acceptance",
-            "feedback",
-        }:
-            result_ref = ContentService(preparation).commit_public_artifact(
-                command_id,
-                expected_revision,
-                kind=request_kind,
-                payload=payload,
-            )
-        else:
-            result_ref = VisualService(preparation).commit_public_artifact(
-                command_id,
-                expected_revision,
-                kind=request_kind,
-                payload=payload,
-            )
+        result_ref = VisualService(preparation).commit_public_artifact(
+            command_id,
+            expected_revision,
+            kind=request_kind,
+            payload=payload,
+        )
         if preparation.prepared is None:
             raise ContractValidationError(
                 "Agent result route did not prepare a formal transaction"
@@ -1138,124 +953,6 @@ class ProjectCommandService:
                 f"agent/task/{task_id}": ("agent-task", completed),
             },
         )
-
-    def commit_content_agent_result(
-        self,
-        *,
-        command_id: str,
-        expected_revision: int,
-        task_id: str,
-        request_kind: str,
-        raw_request_payload: dict[str, Any],
-    ) -> tuple[str, KernelState]:
-        """Publish a validated content result and complete its task atomically."""
-
-        from ai_ppt_studio.application.content_action_policy import (
-            CONTENT_RESULT_CONTRACTS,
-        )
-        from ai_ppt_studio.errors import ContentWorkflowError
-
-        replay = self.replay_content_agent_result(
-            command_id=command_id,
-            task_id=task_id,
-            request_kind=request_kind,
-            payload=raw_request_payload,
-            expected_revision=expected_revision,
-        )
-        if replay is not None:
-            return replay
-        task, _context = self.preflight_content_agent_result(
-            task_id=task_id,
-            request_kind=request_kind,
-            payload=raw_request_payload,
-            expected_revision=expected_revision,
-        )
-        action = str(task.get("action_type") or "")
-        contract = CONTENT_RESULT_CONTRACTS.get(action)
-        if (
-            contract is None
-            or request_kind != contract.request_kind
-            or raw_request_payload.get("artifact_type") != contract.artifact_type
-            or (
-                contract.reviewer_role
-                and raw_request_payload.get("reviewer_role") != contract.reviewer_role
-            )
-        ):
-            raise ContentWorkflowError(
-                "CONTENT_REVIEW_CONFLICT",
-                "Prepared content result does not match the active task contract",
-                {"task_id": task_id, "action_type": action},
-            )
-        from ai_ppt_studio.application.content_service import ContentService
-
-        content = ContentService(self.kernel)
-        if contract.stage:
-            artifact_slot, artifact_kind, normalized = (
-                content._prepare_content_stage_update(
-                    contract.stage, raw_request_payload
-                )
-            )
-        else:
-            artifact_slot, artifact_kind, normalized = (
-                content._prepare_review_update(raw_request_payload)
-            )
-        if (
-            artifact_slot != contract.artifact_slot
-            or artifact_kind != contract.artifact_kind
-        ):
-            raise ContentWorkflowError(
-                "CONTENT_REVIEW_CONFLICT",
-                "Prepared content result violates the active task contract",
-                {"task_id": task_id, "action_type": action},
-            )
-        artifact_payload = normalized
-        result_ref = str(
-            self.kernel.artifacts.reference_for(
-                artifact_kind, artifact_payload
-            )
-        )
-        result_refs = list(task.get("result_refs") or [])
-        if result_ref not in result_refs:
-            result_refs.append(result_ref)
-        completed = {
-            **task,
-            "status": "completed",
-            "progress": {"stage": "completed", "done": 1, "total": 1},
-            "result_refs": result_refs,
-            "error": None,
-            "completion_command_id": command_id,
-            "completion_result": {
-                "action_type": action,
-                "artifact_slot": artifact_slot,
-                "artifact_kind": artifact_kind,
-                "result_ref": result_ref,
-                "request_fingerprint": self._result_request_fingerprint(
-                    request_kind, raw_request_payload, expected_revision
-                ),
-            },
-        }
-        request_fingerprint = self._result_request_fingerprint(
-            request_kind, raw_request_payload, expected_revision
-        )
-        try:
-            state = self.kernel.commit(
-                command_id=command_id,
-                expected_revision=expected_revision,
-                event_type="agent.content-result-committed",
-                artifact_updates={
-                    artifact_slot: (artifact_kind, artifact_payload),
-                    "agent/task/active": ("agent-task", completed),
-                    f"agent/task/{task_id}": ("agent-task", completed),
-                },
-                command_fingerprint=request_fingerprint,
-            )
-        except ContractValidationError:
-            raise ContentWorkflowError(
-                "CONTENT_REVIEW_CONFLICT",
-                "Processed content result command has different semantics",
-                {"command_id": command_id, "task_id": task_id},
-            ) from None
-        return state.artifact_heads[artifact_slot], state
 
     def submit_human_decision(
         self,

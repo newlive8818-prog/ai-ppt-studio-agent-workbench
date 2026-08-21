@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.application.v16_bridge import dispatch_v16
+from ai_ppt_studio.errors import GateBlockedError
 from ai_ppt_studio.errors import ContractValidationError
 from ai_ppt_studio.kernel.references import ArtifactReference
 from tests.v16_delivery_fixtures import (
@@ -24,7 +25,7 @@ class V16DeliveryBridgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
             delivery, revision, refs = prepared_delivery_ready(
-                project, slide_count=2
+                project, slide_count=3
             )
             payload = {
                 **valid_package_payload(refs, package_artifacts(delivery, refs)),
@@ -77,7 +78,7 @@ class V16DeliveryBridgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
             delivery, revision, refs = prepared_delivery_ready(
-                project, slide_count=2
+                project, slide_count=3
             )
             package_payload = {
                 **valid_package_payload(
@@ -133,11 +134,10 @@ class V16DeliveryBridgeTests(unittest.TestCase):
                     "targets",
                     "hash_identity",
                     "chat_send",
-                    "release_target_policy",
                 },
             )
             self.assertEqual(projection["phase"], "user-reviewable")
-            self.assertEqual(projection["slides"], {"completed": 2, "total": 2})
+            self.assertEqual(projection["slides"], {"completed": 3, "total": 3})
             self.assertEqual(
                 projection["quality_gates"],
                 {
@@ -150,28 +150,25 @@ class V16DeliveryBridgeTests(unittest.TestCase):
             self.assertIsNone(projection["highest_blocker"])
             self.assertEqual(len(projection["targets"]), 4)
             self.assertEqual(
-                [target["status"] for target in projection["targets"]],
-                ["passed", "deferred", "deferred", "deferred"],
+                {target["status"] for target in projection["targets"]},
+                {"passed", "deferred"},
             )
             self.assertEqual(projection["hash_identity"], refs["pptx_sha256"])
             self.assertEqual(projection["chat_send"]["status"], "sent")
-            self.assertEqual(
-                projection["release_target_policy"],
-                {
-                    "policy_ref": refs["release_target_policy_ref"],
-                    "policy_id": "v1.6-macos-powerpoint",
-                    "required_target_ids": ["macos-powerpoint"],
-                    "deferred_target_ids": [
-                        "macos-wps",
-                        "windows-powerpoint",
-                        "windows-wps",
-                    ],
-                    "compatibility_claim_scope": ["macos-powerpoint"],
-                },
-            )
             self.assertNotIn("page_images", str(projection))
             self.assertNotIn("contact_sheet", str(projection))
             self.assertNotIn("download", str(projection))
+
+            with self.assertRaises(GateBlockedError):
+                dispatch_v16(
+                    {
+                        "operation": "confirm-gate",
+                        "project_root": str(project),
+                        "expected_revision": revision,
+                        "gate": "G4",
+                        "user_message_ref": "chat://message/fabricated-g4",
+                    }
+                )
             context = dispatch_v16(
                 {
                     "operation": "get-gate-confirmation-context",
@@ -179,7 +176,6 @@ class V16DeliveryBridgeTests(unittest.TestCase):
                     "gate": "G4",
                 }
             )["confirmation_context"]
-
             accepted = dispatch_v16(
                 {
                     "operation": "confirm-gate",
@@ -223,7 +219,7 @@ class V16DeliveryBridgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
             delivery, revision, _refs = prepared_delivery_ready(
-                project, slide_count=2
+                project, slide_count=3
             )
             with self.assertRaises(ContractValidationError):
                 dispatch_v16(

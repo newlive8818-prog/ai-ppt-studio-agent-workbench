@@ -2,139 +2,147 @@
 
 from __future__ import annotations
 
-import os
+from copy import deepcopy
 from pathlib import Path
-from unittest.mock import patch
 
-from ai_ppt_studio.application.content_batch_planning_service import (
-    ContentBatchPlanningService,
-)
-from ai_ppt_studio.application.content_review_service import ContentReviewService
-from ai_ppt_studio.application.content_service import ContentService
-from ai_ppt_studio.application.release_policy_service import (
-    ReleaseTargetPolicyService,
-)
+from ai_ppt_studio.application.content_hard_gate_service import ContentHardGateService
+from ai_ppt_studio.application.content_review.batch_service import ContentReviewBatchService
+from ai_ppt_studio.application.content_review.decision_service import ContentDecisionService
+from ai_ppt_studio.application.presales_content_service import PresalesContentService
+from ai_ppt_studio.application.review_session_service import ReviewSessionService
+from ai_ppt_studio.application.release_policy_service import ReleaseTargetPolicyService
 from ai_ppt_studio.application.visual_service import VisualService
-from ai_ppt_studio.application.scoped_confirmation import (
-    HOST_CONFIRMATION_SECRET_ENV,
-)
-from ai_ppt_studio.domains.presentation.release_policy import (
-    CURRENT_RELEASE_TARGET_POLICY,
-)
 from ai_ppt_studio.kernel.references import ArtifactReference
-from tests.test_v16_review_marks import accepted_content
-from tests.test_v16_framework_discussion import TEST_SECRET, signed_assertion
+from ai_ppt_studio.kernel.transactions import ProjectKernel
+from tests.test_v22_content_repair_loop import build_content
 from tests.host_confirmation_fixtures import gate_confirmation_kwargs
 
 
-def apply_all_approved_content_review(
-    content: ContentService, blueprint_ref: str
-) -> None:
-    review = ContentReviewService(content.kernel)
-    blueprint = content.kernel.artifacts.resolve(
-        ArtifactReference.parse(blueprint_ref)
-    )["payload"]
-    batch_id = "visual-fixture-final-content-review"
-    with patch.dict(
-        os.environ,
-        {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET},
-        clear=False,
-    ):
-        for slide in blueprint["slides"]:
-            review.save_page_decision(
-                command_id=f"visual-fixture-review-{slide['slide_id']}",
-                expected_revision=content.kernel.load().revision,
-                source_version=blueprint_ref,
-                review_batch_id=batch_id,
-                slide_id=slide["slide_id"],
-                decision="approved",
-                comment="",
-            )
-        submission = review.submission_context(
-            source_version=blueprint_ref,
-            review_batch_id=batch_id,
+G2_REVIEW_FORGERY_VARIANTS = (
+    "self-review",
+    "empty-checks",
+    "forbidden-score",
+    "forged-hard-failure",
+    "missing-check-evidence",
+    "unresolvable-check-evidence",
+    "unresolvable-wrong-kind-check-evidence",
+    "resolvable-wrong-kind-check-evidence",
+)
+
+
+def forge_g2_visual_review(
+    payload: dict,
+    variant: str,
+    *,
+    resolvable_wrong_kind_ref: str | None = None,
+) -> dict:
+    """Return a raw current-head corruption that the G2 validator must reject."""
+
+    forged = deepcopy(payload)
+    if variant == "self-review":
+        forged["reviewer_role"] = forged["producer_role"]
+    elif variant == "empty-checks":
+        forged["checks"] = []
+    elif variant == "forbidden-score":
+        forged["score"] = 100
+    elif variant == "forged-hard-failure":
+        forged["checks"][0].update(
+            {
+                "result": "failed",
+                "failure_reason": "锨点工程硬检查失败",
+            }
         )
-        batch_ref, _follow_up, _state = review.submit_review_batch(
-            command_id="visual-fixture-submit-content-review",
-            expected_revision=int(submission["challenge_revision"]),
-            source_version=blueprint_ref,
-            review_batch_id=batch_id,
-            challenge_id=str(submission["challenge_id"]),
-            challenge_revision=int(submission["challenge_revision"]),
-            host_confirmation_assertion=signed_assertion(submission),
-        )
-        planning = ContentBatchPlanningService(content.kernel)
-        plan_ref, _lifecycle_ref, _state = planning.save_revision_plan(
-            command_id="visual-fixture-save-no-revision-plan",
-            expected_revision=content.kernel.load().revision,
-            payload={
-                "plan_id": "visual-fixture-no-revision-plan",
-                "plan_version": 1,
-                "review_batch_ref": batch_ref,
-                "review_batch_id": batch_id,
-                "source_version": blueprint_ref,
-                "direct_actions": [],
-                "cross_page_actions": [],
-                "merge_delete_actions": [],
-                "evidence_actions": [],
-                "revised_chapters": [],
-                "estimated_slide_count": len(blueprint["slides"]),
-                "preserve_items": ["已确认的完整内容蓝图"],
-                "conflicts_and_risks": [],
-                "required_user_decisions": [],
-                "re_review_scope": "new-blueprint-full-deck",
-                "requires_blueprint_revision": False,
-                "status": "proposed",
-            },
-        )
-        plan_context = planning.confirmation_context(
-            review_batch_id=batch_id,
-            plan_ref=plan_ref,
-        )
-        confirmation_ref, _lifecycle_ref, _state = (
-            planning.confirm_revision_plan(
-                command_id="visual-fixture-confirm-no-revision-plan",
-                expected_revision=int(plan_context["challenge_revision"]),
-                review_batch_id=batch_id,
-                plan_ref=plan_ref,
-                challenge_id=str(plan_context["challenge_id"]),
-                challenge_revision=int(plan_context["challenge_revision"]),
-                host_confirmation_assertion=signed_assertion(plan_context),
-            )
-        )
-        planning.apply_no_revision_plan(
-            command_id="visual-fixture-apply-no-revision-plan",
-            expected_revision=content.kernel.load().revision,
-            plan_confirmation_ref=confirmation_ref,
-        )
+        forged["overall_result"] = "passed"
+    elif variant == "missing-check-evidence":
+        forged["checks"][0]["evidence_refs"] = []
+    elif variant == "unresolvable-check-evidence":
+        forged["checks"][0]["evidence_refs"] = [
+            "artifact://anchor-slide-set/" + "0" * 64
+        ]
+    elif variant == "unresolvable-wrong-kind-check-evidence":
+        reference = ArtifactReference.parse(forged["checks"][0]["evidence_refs"][0])
+        forged["checks"][0]["evidence_refs"] = [
+            f"artifact://visual-contract-set/{reference.sha256}"
+        ]
+    elif variant == "resolvable-wrong-kind-check-evidence":
+        if not resolvable_wrong_kind_ref:
+            raise AssertionError("Resolvable wrong-kind evidence ref is required")
+        reference = ArtifactReference.parse(resolvable_wrong_kind_ref)
+        if reference.kind == "anchor-slide-set":
+            raise AssertionError("Wrong-kind evidence must not be an AnchorSlideSet")
+        forged["checks"][0]["evidence_refs"] = [str(reference)]
+    else:
+        raise AssertionError(f"Unknown G2 review forgery variant: {variant}")
+    return forged
 
 
 def confirmed_g0(
     project: Path, project_id: str = "p1", slide_count: int = 1
-) -> tuple[ContentService, int, str]:
-    content = ContentService.initialize(project, project_id=project_id)
-    revision, blueprint_ref = accepted_content(content, slide_count)
-    apply_all_approved_content_review(content, blueprint_ref)
-    ReleaseTargetPolicyService(content.kernel).bind_current_policy(
-        "fixture-bind-release-target-policy",
-        content.kernel.load().revision,
+) -> tuple[PresalesContentService, int, str]:
+    kernel = ProjectKernel.initialize(project, project_id=project_id)
+    ReleaseTargetPolicyService(kernel).bind_current_policy(
+        "visual-fixture-release-policy", kernel.load().revision
     )
-    revision = content.kernel.load().revision
-    context = content.gate_confirmation_context("G0")
+    content = PresalesContentService(kernel)
+    blueprint_ref = build_content(kernel, slide_count=slide_count)
+    blueprint_publication_revision = kernel.load().revision
+    gates = ContentHardGateService(kernel)
+    gates.run_evidence_gate(
+        command_id="visual-fixture-evidence-pass",
+        expected_revision=kernel.load().revision,
+        semantic_check_results=[],
+        reviewer_mode="isolated-review-task",
+    )
+    gates.run_presales_reading_gate(
+        command_id="visual-fixture-reading-pass",
+        expected_revision=kernel.load().revision,
+        semantic_check_results=[],
+        reviewer_mode="isolated-review-task",
+    )
+    blueprint = kernel.artifacts.resolve(ArtifactReference.parse(blueprint_ref))["payload"]
+    state = kernel.load()
+    _session_ref, session, state = ReviewSessionService(kernel).open_or_resume(
+        command_id="visual-fixture-open-review",
+        expected_revision=state.revision,
+        review_type="content-full-deck",
+        target_artifact_ref=blueprint_ref,
+        source_version=blueprint["source_version"],
+        source_revision=blueprint_publication_revision,
+        open_policy="foreground-if-waiting",
+    )
+    decisions = ContentDecisionService(kernel)
+    for slide in blueprint["slides"]:
+        _decision_ref, _decision, state = decisions.save(
+            command_id=f"visual-fixture-approve-{slide['slide_id']}",
+            expected_revision=state.revision,
+            review_session_id=session["review_session_id"],
+            source_version=blueprint["source_version"],
+            slide_id=slide["slide_id"],
+            decision="approved",
+            comment="",
+        )
+    _batch_ref, _batch, state = ContentReviewBatchService(kernel).submit(
+        command_id="visual-fixture-submit-review",
+        expected_revision=state.revision,
+        review_session_id=session["review_session_id"],
+        source_version=blueprint["source_version"],
+    )
+    state = content.open_g0_review(
+        command_id="visual-fixture-open-g0",
+        expected_revision=state.revision,
+    )
+    context = content.gate_confirmation_context()
     state = content.confirm_g0(
-        "confirm-g0",
-        revision,
-        **gate_confirmation_kwargs(
-            context,
-            identity_ref=f"test-host-confirmation://{project_id}-g0",
-        ),
+        command_id="visual-fixture-confirm-g0",
+        expected_revision=state.revision,
+        **gate_confirmation_kwargs(context),
     )
     return content, state.revision, blueprint_ref
 
 
 def valid_visual_brief(blueprint_ref: str) -> dict:
     return {
-        "content_blueprint_ref": blueprint_ref,
+        "reading_blueprint_ref": blueprint_ref,
         "production_route": "strict-B",
         "design_proposition": "以经营证据链建立可信决策",
         "audience_fit": "决策者先看结论，评审者可下钻证据",
@@ -142,16 +150,14 @@ def valid_visual_brief(blueprint_ref: str) -> dict:
         "imagery_strategy": "只使用可追溯素材和非语义装饰",
         "diagram_strategy": "关系使用原生可编辑对象",
         "powerpoint_constraints": "事实文字、数字和关系保持原生可编辑",
-        "target_ids": list(
-            CURRENT_RELEASE_TARGET_POLICY["required_target_ids"]
-        ),
+        "target_ids": ["macos-powerpoint"],
     }
 
 
 def valid_design_system(brief_ref: str, blueprint_ref: str) -> dict:
     return {
         "visual_brief_ref": brief_ref,
-        "content_blueprint_ref": blueprint_ref,
+        "reading_blueprint_ref": blueprint_ref,
         "production_route": "strict-B",
         "theme_proposition": "可信的经营证据链",
         "page_families": ["章节页", "证据页", "方案页"],
@@ -183,18 +189,31 @@ def valid_contract_set(
 ) -> dict:
     slides = frozen_slides or [
         {
-            "slide_id": "s1",
-            "communication_goal": "建立紧迫性",
-            "core_claim": "割裂阻碍经营",
-            "title": "为什么现在必须改变",
-            "visible_copy": ["五套系统", "三条断点"],
+            "slide_id": "S01",
+            "page_task": "说明当前已知断点和证据边界",
+            "reading_question": "当前已知什么，仍需验证什么",
+            "neutral_title": "当前流程断点与证据边界",
+            "visible_copy_blocks": [
+                {"block_id": "b1", "text": "材料记录了流程断点", "identity": "来源事实"}
+            ],
+            "identity_labels": ["来源事实"],
+            "evidence_bindings": [],
+            "analysis_or_proposal_blocks": [],
+            "solution_mapping_refs": ["mapping-1"],
+            "previous_relation": "开篇",
+            "next_relation": "进入方案要求",
             "speaker_notes": "解释来源",
-            "source_refs": [],
+            "reading_quality": {
+                "independently_readable": True,
+                "information_density": "moderate",
+                "review_note": "事实与建议分开",
+            },
+            "material_mode": "material-backed",
         }
     ]
     return {
         "deck_design_system_ref": system_ref,
-        "content_blueprint_ref": blueprint_ref,
+        "reading_blueprint_ref": blueprint_ref,
         "production_route": "strict-B",
         "role_runs": [
             {
@@ -217,12 +236,21 @@ def valid_contract_set(
                 "slide_id": frozen["slide_id"],
                 "order": index,
                 "page_family": "证据页",
-                "communication_goal": frozen["communication_goal"],
-                "core_claim": frozen["core_claim"],
-                "title": frozen["title"],
-                "visible_copy": frozen["visible_copy"],
+                "page_task": frozen["page_task"],
+                "reading_question": frozen["reading_question"],
+                "neutral_title": frozen["neutral_title"],
+                "visible_copy_blocks": frozen["visible_copy_blocks"],
+                "identity_labels": frozen["identity_labels"],
+                "evidence_bindings": frozen["evidence_bindings"],
+                "analysis_or_proposal_blocks": frozen[
+                    "analysis_or_proposal_blocks"
+                ],
+                "solution_mapping_refs": frozen["solution_mapping_refs"],
+                "previous_relation": frozen["previous_relation"],
+                "next_relation": frozen["next_relation"],
                 "speaker_notes": frozen["speaker_notes"],
-                "source_refs": frozen["source_refs"],
+                "reading_quality": frozen["reading_quality"],
+                "material_mode": frozen["material_mode"],
                 "information_hierarchy": "结论—事实—因果",
                 "composition_intent": "左事实、右因果链",
                 "regions": [{"region_id": "facts", "purpose": "事实"}],
@@ -306,7 +334,7 @@ def passing_visual_review(
 
 
 def prepared_g1_anchor(
-    project: Path, slide_count: int = 2
+    project: Path, slide_count: int = 3
 ) -> tuple[VisualService, int, dict[str, object]]:
     visual, revision, refs = prepared_visual_contracts(
         project, slide_count=slide_count
@@ -345,13 +373,24 @@ def prepared_g1_anchor(
             "preflight-render", {"identity": "preflight-only"}
         )
     )
-    slide_ids = [f"s{index}" for index in range(1, slide_count + 1)]
+    slide_ids = [f"S{index:02d}" for index in range(1, slide_count + 1)]
     anchor_ref = visual.register_anchor_set(
         "g1-anchor-set",
         g1.revision,
         {
             "visual_contract_set_ref": refs["contracts"],
             "slide_ids": slide_ids,
+            "selection_reason": "覆盖章节、证据和方案三类关键页面家族",
+            "render_assets": [
+                {
+                    "slide_id": slide_id,
+                    "current_asset_ref": (
+                        f"review-assets/anchors/{slide_id}-current.png"
+                    ),
+                    "previous_asset_ref": "",
+                }
+                for slide_id in slide_ids
+            ],
             "native_first_pptx_ref": pptx_ref,
             "pptx_sha256": sha256,
             "native_first_frozen": True,
@@ -457,7 +496,7 @@ def rich_target_payload(
 
 
 def prepared_g2(
-    project: Path, slide_count: int = 2
+    project: Path, slide_count: int = 3
 ) -> tuple[VisualService, int, dict[str, object]]:
     visual, revision, refs = prepared_g1_anchor(project, slide_count=slide_count)
     visual.register_visual_review(
@@ -479,7 +518,8 @@ def prepared_g2(
     )
     current_revision = revision + 2
     target_refs: dict[str, str] = {}
-    for target_id in CURRENT_RELEASE_TARGET_POLICY["required_target_ids"]:
+    _policy_ref, policy = ReleaseTargetPolicyService(visual.kernel).current()
+    for target_id in policy.required_target_ids:
         target_refs[target_id] = visual.register_target_render_evidence(
             f"g2-target-{target_id}",
             current_revision,
