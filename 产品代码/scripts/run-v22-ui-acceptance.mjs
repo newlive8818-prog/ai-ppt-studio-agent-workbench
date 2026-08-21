@@ -72,6 +72,13 @@ function transformPreviewPayload(sourceHtml, label, transform) {
   return `${sourceHtml.slice(0, payloadStart)}${JSON.stringify(data).replaceAll("<", "\\u003c")}${sourceHtml.slice(end)}`;
 }
 
+function mixedContentProjectionHtml(sourceHtml) {
+  return transformPreviewPayload(sourceHtml, "mixed content review", (data) => {
+    assert(data.review.slides.length >= 2, "Mixed content review needs at least two pages");
+    data.review.slides[1].material_views = [];
+  });
+}
+
 function longProjectionHtml(sourceHtml, reviewType, count) {
   return transformPreviewPayload(sourceHtml, reviewType, (data) => {
     if (reviewType === "content") {
@@ -82,6 +89,9 @@ function longProjectionHtml(sourceHtml, reviewType, count) {
         order: index + 1,
         neutral_title: `第 ${index + 1} 页完整内容验收`,
         visible_copy_blocks: [{ block_id: `copy-${index + 1}`, text: `第 ${index + 1} 页完整正文` }],
+        material_views: index % 2 === 0
+          ? structuredClone(template.material_views)
+          : [],
       }));
       data.review.decisions = [];
       data.review.progress = { completed: 0, total: count, remaining: count, unsaved: 0 };
@@ -155,7 +165,20 @@ for (const [reviewType, sessionId] of [
   );
 }
 
-for (const [reviewType, count] of [["content", 60], ["visual", 120]]) {
+const contentPreviewPath = previewPath("ai-ppt-content-review-preview.html");
+const contentPreviewHtml = await readFile(contentPreviewPath, "utf8");
+await writeFile(
+  contentPreviewPath,
+  mixedContentProjectionHtml(contentPreviewHtml),
+  "utf8",
+);
+
+for (const [reviewType, count] of [
+  ["content", 10],
+  ["content", 24],
+  ["content", 60],
+  ["visual", 120],
+]) {
   const source = await readFile(previewPath(`ai-ppt-${reviewType}-review-preview.html`), "utf8");
   await writeFile(
     previewPath(`ai-ppt-${reviewType}-review-long-${count}.html`),
@@ -298,6 +321,7 @@ async function checkReview(reviewType, width, height = 900) {
     let objectCount;
     let evidenceLayer = false;
     let materialSourceCount = 0;
+    let textOnlyPageCount = 0;
     let stickyProof = null;
     let spatialFidelity = null;
     let firstViewportScreenshot = null;
@@ -331,8 +355,49 @@ async function checkReview(reviewType, width, height = 900) {
       }
       objectCount = await page.locator("[data-content-review-vm-slide]").count();
       assert(objectCount === 3, `${identity}: expected 3 content pages, received ${objectCount}`);
+      const textOnlyGrids = page.locator(".content-review-vm-reading-grid--text-only");
+      const visualGrids = page.locator(".content-review-vm-reading-grid--with-visuals");
+      textOnlyPageCount = await textOnlyGrids.count();
+      const visualPageCount = await visualGrids.count();
+      assert(textOnlyPageCount === 1, `${identity}: expected one zero-image page`);
+      assert(
+        textOnlyPageCount + visualPageCount === objectCount,
+        `${identity}: content layout classes do not cover every page`,
+      );
+      assert(
+        await page.locator(".content-review-vm-visuals").count() === visualPageCount,
+        `${identity}: zero-image page rendered a material region`,
+      );
+      assert(
+        await page.getByText("文字与图片材料一起审核", { exact: true }).count()
+          === visualPageCount,
+        `${identity}: material title count does not match image pages`,
+      );
+      assert(
+        await page.getByText("本页暂无可审核的页面画面。", { exact: true }).count() === 0,
+        `${identity}: zero-image empty state returned`,
+      );
+      const textOnlyGeometry = await textOnlyGrids.first().evaluate((grid) => {
+        const text = grid.querySelector(".content-review-vm-text");
+        if (!text) throw new Error("Zero-image page is missing actual text");
+        const style = getComputedStyle(grid);
+        return {
+          availableWidth: grid.clientWidth
+            - Number.parseFloat(style.paddingLeft)
+            - Number.parseFloat(style.paddingRight),
+          textWidth: text.getBoundingClientRect().width,
+        };
+      });
+      assert(
+        Math.abs(textOnlyGeometry.availableWidth - textOnlyGeometry.textWidth) <= 1,
+        `${identity}: zero-image text does not fill the reading row ${JSON.stringify(textOnlyGeometry)}`,
+      );
+
       const materialCards = page.locator(".content-review-vm-image-slot");
-      assert(await materialCards.count() >= objectCount, `${identity}: every content page needs a material image`);
+      assert(
+        await materialCards.count() >= visualPageCount,
+        `${identity}: an image page has no material image`,
+      );
       for (let index = 0; index < await materialCards.count(); index += 1) {
         const card = materialCards.nth(index);
         await card.scrollIntoViewIfNeeded();
@@ -344,8 +409,8 @@ async function checkReview(reviewType, width, height = 900) {
       );
       materialSourceCount = new Set(materialSources).size;
       assert(
-        materialSourceCount >= objectCount,
-        `${identity}: content pages reuse the same rendered material ${JSON.stringify(materialSources)}`,
+        materialSourceCount >= visualPageCount,
+        `${identity}: image pages reuse the same rendered material ${JSON.stringify(materialSources)}`,
       );
       assert(
         await page.locator(".content-review-vm-image-slot .asset-placeholder").count() === 0,
@@ -587,6 +652,7 @@ async function checkReview(reviewType, width, height = 900) {
       objectCount,
       evidenceLayer,
       ...(materialSourceCount ? { materialSourceCount } : {}),
+      ...(textOnlyPageCount ? { textOnlyPageCount } : {}),
       ...(stickyProof ? { stickyProof } : {}),
       ...(spatialFidelity ? { spatialFidelity, firstViewportScreenshot } : {}),
       prototypeFidelity,
@@ -630,6 +696,39 @@ async function checkLongReview(reviewType, count) {
     await page.waitForSelector(selector);
     assert(await page.locator(selector).count() === count, `${reviewType}: incomplete long review`);
     assert((await page.locator("body").textContent()).includes(`第 ${count} 页`), `${reviewType}: final long-review page missing`);
+    if (reviewType === "content") {
+      const textOnlyPages = page.locator(".content-review-vm-reading-grid--text-only");
+      const visualPages = page.locator(".content-review-vm-reading-grid--with-visuals");
+      const textOnlyCount = await textOnlyPages.count();
+      const visualCount = await visualPages.count();
+      assert(textOnlyCount > 0 && visualCount > 0, `${reviewType}-${count}: mixed layouts missing`);
+      assert(
+        textOnlyCount + visualCount === count,
+        `${reviewType}-${count}: layout count mismatch`,
+      );
+      assert(
+        await page.getByText("文字与图片材料一起审核", { exact: true }).count() === visualCount,
+        `${reviewType}-${count}: visual title leaked onto zero-image pages`,
+      );
+      assert(
+        await page.getByText("本页暂无可审核的页面画面。", { exact: true }).count() === 0,
+        `${reviewType}-${count}: zero-image empty state returned`,
+      );
+      const imageSlots = page.locator(".content-review-vm-image-slot");
+      const initialLoadedImages = await page.locator("img.content-review-vm-image").count();
+      assert(await imageSlots.count() >= visualCount, `${reviewType}-${count}: image page missing slot`);
+      assert(
+        initialLoadedImages < await imageSlots.count(),
+        `${reviewType}-${count}: every long-deck image loaded eagerly`,
+      );
+      const finalImageSlot = imageSlots.last();
+      await finalImageSlot.scrollIntoViewIfNeeded();
+      await finalImageSlot.locator("img.content-review-vm-image").waitFor();
+      assert(
+        await page.locator("img.content-review-vm-image").count() > initialLoadedImages,
+        `${reviewType}-${count}: near-viewport image did not load`,
+      );
+    }
     assertNoOverflow(await metrics(page), `${reviewType}-long-${count}`);
     assert(consoleErrors.length === 0, `${reviewType}-long-${count}: ${consoleErrors.join(" | ")}`);
   } finally {
@@ -651,7 +750,7 @@ await completeAcceptanceRun({
           { width: 1440, height: 900 },
         ]) await checkReview(reviewType, viewport.width, viewport.height);
       }
-      await checkLongReview("content", 60);
+      for (const count of [10, 24, 60]) await checkLongReview("content", count);
       await checkLongReview("visual", 120);
       await checkSavedUnverifiedReceipt();
     } finally {

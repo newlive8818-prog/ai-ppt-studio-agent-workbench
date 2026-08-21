@@ -143,3 +143,13 @@ test("browser runner consumes the fidelity contracts and scopes readability to e
   assert.doesNotMatch(runnerSource, /\.visual-contract-title-page code/);
   assert.match(runnerSource, /contract\.locator\(slideReadableSelector\)/);
 });
+
+test("browser runner covers mixed image and zero-image content reviews", () => {
+  assert.match(runnerSource, /mixedContentProjectionHtml/);
+  assert.match(runnerSource, /content-review-vm-reading-grid--text-only/);
+  assert.match(runnerSource, /content-review-vm-reading-grid--with-visuals/);
+  assert.match(runnerSource, /本页暂无可审核的页面画面/);
+  for (const count of [10, 24, 60]) {
+    assert.match(runnerSource, new RegExp(`\\["content", ${count}\\]`));
+  }
+});
