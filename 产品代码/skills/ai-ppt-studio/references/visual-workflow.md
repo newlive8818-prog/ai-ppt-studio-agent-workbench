@@ -18,6 +18,6 @@ Codex Presentations creates the difficult and content-complex anchor pages as na
 
 ## G2 and G3
 
-G2 requires independent aesthetic and PowerPoint engineering reviews plus `macos-powerpoint`, `macos-wps`, `windows-powerpoint`, and `windows-wps` target evidence for the same PPTX SHA-256. Each row must pass semantic, aesthetic, engineering, and target-render doors.
+G2 resolves the current project-bound `ReleaseTargetPolicy`, freezes its artifact ref into the visual lineage, and requires independent aesthetic and PowerPoint engineering reviews plus every `required_target_ids` target record for the same PPTX SHA-256. Current v1.6 requires only `macos-powerpoint`; `macos-wps`, `windows-powerpoint`, and `windows-wps` are deferred. Each required row must pass semantic, aesthetic, engineering, and target-render doors. Do not claim WPS or Windows compatibility, and a preflight-only output cannot replace desktop evidence.
 
 After G2, publish the full visual contract, anchor identity, and target evidence identities to the shared professional review resource. Exact marks never pass a Gate. G3 requires explicit Codex chat confirmation of the current visual source.

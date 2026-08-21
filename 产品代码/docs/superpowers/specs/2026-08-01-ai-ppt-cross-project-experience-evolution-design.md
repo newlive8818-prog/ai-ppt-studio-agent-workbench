@@ -1,7 +1,9 @@
 # AI PPT Studio Cross-Project Experience Evolution Design
 
+> **Document status: historical and superseded.** The candidate/personal/stable progression is no longer the target product contract. The current two-layer content-and-visual experience design is [2026-08-14-presales-chief-agent-content-and-experience-design.md](./2026-08-14-presales-chief-agent-content-and-experience-design.md). Keep this file only for legacy-data migration and provenance.
+
 **Date:** 2026-08-01  
-**Status:** Approved for implementation  
+**Status:** Historical and superseded; not approved for new implementation
 **Scope:** Local personal installation only; no automatic stable-kernel mutation
 
 ## 1. Goal

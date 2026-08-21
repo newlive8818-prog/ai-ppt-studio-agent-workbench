@@ -14,8 +14,8 @@ Add `[Sources]` blocks to speaker notes for non-trivial claims and external asse
 
 ## Anchor build and G2
 
-Build difficult and content-complex native anchors from the full accepted contract. Render and inspect every anchor, fix overlap, clipping, wrapping, crop, font, connector, source-note, object, and editability defects. Then validate the identical anchor PPTX in all four desktop targets defined in `four-target-acceptance.md`; G2 remains blocked until every row passes on the same PPTX SHA-256.
+Build difficult and content-complex native anchors from the full accepted contract. Render and inspect every anchor, fix overlap, clipping, wrapping, crop, font, connector, source-note, object, and editability defects. Then resolve the current `ReleaseTargetPolicy` through `four-target-acceptance.md` and validate the identical anchor PPTX in every required desktop target; G2 remains blocked until every required row passes on the same PPTX SHA-256. Deferred profiles are not Gate rows.
 
 ## Full deck and G4
 
-After G3, build the complete deck, render every page, inspect each page at full size, use a montage only for rhythm, run overflow/structure/source/editability checks, and repair all failures. Validate the identical final PPTX in all four targets again. Register the delivery package and send that exact file through Codex chat before G4 confirmation.
+After G3, build the complete deck, render every page, inspect each page at full size, use a montage only for rhythm, run overflow/structure/source/editability checks, and repair all failures. Resolve the current policy again and validate the identical final PPTX in every required target. G4 requires a new final-PPTX macOS PowerPoint record, not the G2 anchor record. Register the policy-bound delivery package and send that exact file through Codex chat before G4 confirmation.

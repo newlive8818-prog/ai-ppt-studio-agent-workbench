@@ -1,10 +1,14 @@
 # Content Blueprint Sidebar Review Implementation Plan
 
+> **Execution status: partially superseded; do not execute this plan as written.** Keep the PageDecision, immutable batch, whole-deck revision plan, full re-review, evidence-assistance, and G0-hardening work. Remove the framework-confirmation and full-deck-expansion-authorization prerequisites, consume `ReadingDeckBlueprint`, and follow the v2.0 baselines plus [the chief-agent content design](../specs/2026-08-14-presales-chief-agent-content-and-experience-design.md). Regenerate the affected implementation tasks before further execution.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a framework-first, maximum-width content-blueprint sidebar in which the user reads the complete evidence-backed deck, saves one decision per page, submits one frozen review batch, confirms Codex's whole-deck revision plan, re-reviews every new blueprint, and only then confirms G0.
+**Historical goal (superseded):** This plan originally proposed a framework-first flow. That upstream flow is no longer valid.
 
-**Architecture:** Python schema 3 remains the only business writer and gains separate framework, page-decision, review-batch, and batch-plan aggregates. Node MCP remains a thin revision-safe adapter with action-specific host confirmation scopes, while React reads formal framework/full-deck projections and never owns completion or Gate truth. Existing `ReviewMarkSet` and the Browser professional-review contract remain intact for G3 visual review; content Browser use is narrowed to evidence enlargement and comparison.
+**Current execution rule:** Regenerate a new implementation plan that starts from a hard-gate-passing `ReadingDeckBlueprint`; retain the maximum-width full-deck review, page decisions, frozen review batch, whole-deck revision plan, full re-review, and G0 contracts.
+
+**Historical architecture (superseded):** The framework aggregate and expansion authorization described below are migration history, not target contracts. Python schema 3 remains the only business writer; Node MCP remains a thin revision-safe adapter; React never owns business truth; G3 Browser review remains separate from sidebar content review.
 
 **Tech Stack:** Python 3.11+ dataclasses and content-addressed JSON artifacts, schema 3 `ProjectKernel`, Node.js ESM MCP server with Zod, React 19 + TypeScript + Vite, Vitest/Testing Library, `unittest`, scoped loopback Browser bridge.
 
