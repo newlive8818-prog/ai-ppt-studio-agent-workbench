@@ -12,15 +12,15 @@ export interface AnchorRenderAsset {
 }
 
 export interface AnchorIdentity {
-  readonly visual_contract_set_ref: string;
   readonly slide_ids: ReadonlyArray<string>;
   readonly selection_reason: string;
   readonly native_first_frozen: true;
-  readonly native_first_pptx_ref: string;
-  readonly pptx_sha256: string;
-  readonly editability_evidence_refs: ReadonlyArray<string>;
-  readonly preflight_render_refs: ReadonlyArray<string>;
-  readonly render_assets: ReadonlyArray<AnchorRenderAsset>;
+  readonly visual_contract_set_ref?: string;
+  readonly native_first_pptx_ref?: string;
+  readonly pptx_sha256?: string;
+  readonly editability_evidence_refs?: ReadonlyArray<string>;
+  readonly preflight_render_refs?: ReadonlyArray<string>;
+  readonly render_assets?: ReadonlyArray<AnchorRenderAsset>;
 }
 
 export interface AnchorRegionFeedback {
@@ -105,7 +105,7 @@ export interface VisualReviewProjection {
   anchor_feedback_batch: AnchorFeedbackBatch | null;
   contract_review_marks_ref: string | null;
   contract_review_marks: VisualContractReviewMarkSet | null;
-  gate_status: Record<"G1" | "G2" | "G3", string>;
+  gate_status?: Record<"G1" | "G2" | "G3", string>;
   host_submission_capability: "available" | "unavailable" | "unknown";
   ai_receipt_capability: "available" | "unavailable" | "unknown";
 }

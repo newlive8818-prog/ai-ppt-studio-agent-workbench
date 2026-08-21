@@ -8,7 +8,7 @@ import type { HostBridge } from "../types/host";
 import type {
   AnchorFeedbackBatch,
   VisualContractReviewMarkSet,
-  VisualReviewSurfaceData,
+  VisualReviewSurfaceData as VisualReviewProjectionSurfaceData,
 } from "../types/visual-review";
 import { ReviewSurfaceRouter } from "../ReviewSurfaceRouter";
 import {
@@ -23,8 +23,14 @@ import {
 } from "../review-draft/reviewDraftStore";
 import { AnchorResultsView } from "./AnchorResultsView";
 import { REVIEW_WRITE_DEADLINE_MS } from "./review-write-deadline";
-import { VisualContractView, visualConfirmationLabel } from "./VisualContractView";
+import { VisualContractView } from "./VisualContractView";
 import { VisualProfessionalReviewPage } from "./VisualProfessionalReviewPage";
+import {
+  toVisualReviewPageViewModel,
+  type VisualReviewPageViewModel,
+} from "./visual-review-page-view-model";
+
+type VisualReviewSurfaceData = VisualReviewPageViewModel;
 
 const VISUAL_REVIEW_CSS = readFileSync(
   "widget/src/styles/visual-review.css",
@@ -68,7 +74,7 @@ function visualData(
   previousAssets: Record<string, string> = {},
   anchorFeedbackBatch: AnchorFeedbackBatch | null = null,
 ): VisualReviewSurfaceData {
-  return {
+  return toVisualReviewPageViewModel({
     surface: "review",
     selectedProjectRoot: "/managed/project",
     snapshotRevision: 12,
@@ -147,7 +153,7 @@ function visualData(
       host_submission_capability: "unavailable",
       ai_receipt_capability: "unavailable",
     },
-  };
+  });
 }
 
 function secondModalVisualData(): VisualReviewSurfaceData {
@@ -675,8 +681,8 @@ const anchorResultAttacks: Array<[string, AnchorResultAttack]> = [
   }],
 ];
 
-function makeRouterValid(data: VisualReviewSurfaceData): VisualReviewSurfaceData {
-  data.review.review_session = {
+function makeRouterValid(data: VisualReviewSurfaceData): VisualReviewProjectionSurfaceData {
+  const reviewSession = {
     review_session_id: data.review.review_session_id,
     review_type: "visual-professional",
     project_id: data.review.project_id,
@@ -693,32 +699,42 @@ function makeRouterValid(data: VisualReviewSurfaceData): VisualReviewSurfaceData
     last_opened_at: null,
     submitted_at: null,
   };
-  data.review.slide_visual_contracts = data.review.slide_visual_contracts.map((contract, index) => ({
-    ...contract,
-    reading_question: `阅读问题 ${index + 1}`,
-    neutral_title: `当前业务事项 ${index + 1}`,
-    visible_copy_blocks: [{ block_id: `copy-${index + 1}`, text: `完整正文 ${index + 1}` }],
-    identity_labels: ["来源事实"],
-    evidence_bindings: [{ source_ref: `source-${index + 1}` }],
-    analysis_or_proposal_blocks: [{ block_id: `proposal-${index + 1}`, text: `方案建议 ${index + 1}` }],
-    solution_mapping_refs: [],
-    previous_relation: index === 0 ? "" : `S0${index}`,
-    next_relation: index === data.review.slide_visual_contracts.length - 1 ? "" : `S0${index + 2}`,
-    reading_quality: { independently_readable: true },
-    material_mode: "mixed-evidence",
-    image_selection_and_crop: "无图时保持原生结构",
-    typography_application: "标题与正文层级分明",
-    color_application: "中性底色配单一强调色",
-    diagram_chart_table_treatment: "因果关系使用原生形状",
-    editability_requirements: "正文与图形可编辑",
-    acceptance_criteria: [{
-      criterion_id: `criterion-${index + 1}`,
-      level: "must-follow",
-      expected_outcome: "阅读顺序清晰且原生可编辑",
-    }],
-    allowed_exceptions: [],
-  }));
-  return data;
+  return {
+    ...data,
+    review: {
+      ...data.review,
+      review_session: reviewSession,
+      deck_design_system: {
+        theme_proposition: "克制、证据清楚的售前阅读系统",
+        composition_grammar: "正文优先，证据侧置",
+        color_tokens: { ink: "#1D2421", accent: "#234B3D" },
+        typography_tokens: { title: "32pt", body: "16pt" },
+        page_families: ["问题", "方案", "证据"],
+        density_rhythm: "中密度",
+        imagery_strategy: "证据优先",
+        diagram_strategy: "原生图形优先",
+        table_strategy: "少量关键列",
+        editability_rules: ["正文与图形可编辑"],
+        accessibility_rules: ["保持对比度"],
+        forbidden_patterns: ["整页位图"],
+        anchor_specification: "三页锚点覆盖主要页面家族",
+        production_route: "strict-B",
+      },
+      slide_visual_contracts: data.review.slide_visual_contracts.map((contract, index) => ({
+        ...contract,
+        diagram_chart_table_treatment: "关系使用原生形状",
+        image_selection_and_crop: "无图时保持原生结构",
+        color_application: "中性底色配单一强调色",
+        typography_application: "标题与正文层级分明",
+        editability_requirements: "所有正文与图形可编辑",
+        acceptance_criteria: [{
+          criterion_id: `criterion-${index + 1}`,
+          level: "must-follow",
+          expected_outcome: "阅读顺序清晰且原生可编辑",
+        }],
+      })),
+    },
+  } as unknown as VisualReviewProjectionSurfaceData;
 }
 
 function mockVisualLogicalGeometry(options: {
@@ -1333,10 +1349,11 @@ describe("visual professional review surface", () => {
   ])("[7C B] ignores an old pending anchor completion after a $0 change", async (_label, mutate) => {
     const pending = deferred<unknown>();
     const { bridge, callTool } = host(() => pending.promise);
-    const oldData = makeRouterValid(visualData());
-    seedVisualDraft(oldData, visualDraftUi({
+    const oldViewModel = visualData();
+    seedVisualDraft(oldViewModel, visualDraftUi({
       anchor_feedback_drafts: [anchorDraft("旧任务待返回的反馈", "S01", "old-pending-feedback")],
     }));
+    const oldData = makeRouterValid(oldViewModel);
     const rendered = render(<ReviewSurfaceRouter data={oldData} bridge={bridge} />);
     fireEvent.load(await screen.findByRole("img", { name: "S01 锚点页成果" }));
     fireEvent.click(screen.getByRole("button", { name: "统一提交 1 条反馈" }));
@@ -1345,17 +1362,17 @@ describe("visual professional review surface", () => {
 
     const currentData = visualData();
     mutate(currentData);
-    makeRouterValid(currentData);
+    const currentProjection = makeRouterValid(currentData);
     const currentUi = visualDraftUi({
       current_anchor_slide_id: "S03",
       anchor_feedback_drafts: [anchorDraft("新任务必须保留的反馈", "S03", "current-feedback")],
     });
     const currentKey = seedVisualDraft(currentData, currentUi);
-    rendered.rerender(<ReviewSurfaceRouter data={currentData} bridge={bridge} />);
+    rendered.rerender(<ReviewSurfaceRouter data={currentProjection} bridge={bridge} />);
     expect(screen.getByText("新任务必须保留的反馈")).toBeInTheDocument();
 
     await act(async () => {
-      pending.resolve(closedAnchorResult(oldArgs, oldData, "old-completion-batch"));
+      pending.resolve(closedAnchorResult(oldArgs, oldViewModel, "old-completion-batch"));
       await pending.promise;
     });
     fireEvent(window, new PageTransitionEvent("pagehide"));
@@ -1783,11 +1800,12 @@ describe("visual professional review surface", () => {
   ])("[7C C] ignores an old pending contract completion after a $0 change", async (_label, mutate) => {
     const pending = deferred<unknown>();
     const { bridge, callTool } = host(undefined, () => pending.promise);
-    const oldData = makeRouterValid(visualData());
-    seedVisualDraft(oldData, visualDraftUi({
+    const oldViewModel = visualData();
+    seedVisualDraft(oldViewModel, visualDraftUi({
       view: "contract",
       contract_mark_drafts: [contractDraft("旧任务待返回的合同标记", "old-contract-mark")],
     }));
+    const oldData = makeRouterValid(oldViewModel);
     const rendered = render(<ReviewSurfaceRouter data={oldData} bridge={bridge} />);
     fireEvent.click(screen.getByRole("button", { name: "保存 1 条合同标记" }));
     await waitFor(() => expect(callTool.mock.calls.filter(([name]) => name === "save_visual_contract_review_marks")).toHaveLength(1));
@@ -1795,14 +1813,14 @@ describe("visual professional review surface", () => {
 
     const currentData = visualData();
     mutate(currentData);
-    makeRouterValid(currentData);
+    const currentProjection = makeRouterValid(currentData);
     const currentUi = visualDraftUi({
       view: "contract",
       contract_mark_drafts: [contractDraft("新任务必须保留的合同草稿", "current-contract-mark")],
       contract_mark_composer: contractComposer("新任务必须保留的合同输入"),
     });
     const currentKey = seedVisualDraft(currentData, currentUi);
-    rendered.rerender(<ReviewSurfaceRouter data={currentData} bridge={bridge} />);
+    rendered.rerender(<ReviewSurfaceRouter data={currentProjection} bridge={bridge} />);
     expect(screen.getByText("新任务必须保留的合同草稿")).toBeInTheDocument();
     expect(screen.getByLabelText("合同标记意见")).toHaveValue("新任务必须保留的合同输入");
 
@@ -2144,13 +2162,11 @@ describe("visual professional review surface", () => {
     expect(header.querySelector(".visual-professional-status-ledger")).toBeInTheDocument();
     expect(within(header).getByText("测试项目")).toBeInTheDocument();
     expect(within(header).getByText("visual-v1 · revision 12")).toBeInTheDocument();
-    expect(within(header).getByText("G1 passed")).toBeInTheDocument();
-    expect(within(header).getByText("G2 passed")).toBeInTheDocument();
+    expect(within(header).queryByText(/G1|G2|G3/)).not.toBeInTheDocument();
     expect(within(header).getByLabelText("全局未保存状态")).toHaveTextContent("未保存 4");
-    expect(within(header).queryByText(/G3/)).not.toBeInTheDocument();
   });
 
-  it("renders an artifact source and reviewable G3 as user-facing labels only", () => {
+  it("keeps source and Gate identity outside the visible visual-contract document", () => {
     const data = visualData();
     data.review.source_version = VISUAL_CONTRACT_REF;
     const { bridge } = host();
@@ -2161,24 +2177,19 @@ describe("visual professional review surface", () => {
 
     const header = container.querySelector<HTMLElement>(".visual-professional-header")!;
     expect(header).toHaveTextContent("视觉合同 aaaaaaaa · revision 12");
-    expect(header).toHaveTextContent("视觉确认 尚未确认");
+    expect(header).not.toHaveTextContent("视觉确认");
     expect(header).not.toHaveTextContent(VISUAL_CONTRACT_REF);
     expect(header).not.toHaveTextContent("user-reviewable");
 
     fireEvent.click(screen.getByRole("tab", { name: "完整视觉合同" }));
     const titlePage = container.querySelector<HTMLElement>(".visual-contract-title-page")!;
-    expect(within(titlePage).getByText("视觉合同 aaaaaaaa")).toBeInTheDocument();
-    expect(within(titlePage).getByText("G3 尚未确认")).toBeInTheDocument();
+    expect(titlePage).not.toHaveTextContent("视觉合同 aaaaaaaa");
+    expect(titlePage).not.toHaveTextContent(/G1|G2|G3/);
     expect(titlePage).not.toHaveTextContent(VISUAL_CONTRACT_REF);
     expect(titlePage).not.toHaveTextContent("user-reviewable");
+    expect(container.querySelectorAll(".visual-contract-page-state")).toHaveLength(0);
     expect(screen.queryByRole("region", { name: "视觉合同摘要" })).not.toBeInTheDocument();
-
-    const technical = screen.getByText("技术信息").closest("details")!;
-    expect(technical).not.toHaveAttribute("open");
-    expect(within(technical).getByText("视觉 source version / 视觉合同 artifact")).toBeInTheDocument();
-    const rawReferences = screen.getAllByText(VISUAL_CONTRACT_REF);
-    expect(rawReferences.length).toBeGreaterThan(0);
-    expect(rawReferences.every((reference) => technical.contains(reference))).toBe(true);
+    expect(screen.queryByText("技术信息")).not.toBeInTheDocument();
   });
 
   it.each([
@@ -2201,28 +2212,10 @@ describe("visual professional review surface", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "完整视觉合同" }));
     const titlePage = container.querySelector<HTMLElement>(".visual-contract-title-page")!;
-    expect(within(titlePage).getByText(expectedLabel)).toBeInTheDocument();
+    expect(titlePage).not.toHaveTextContent(expectedLabel);
     expect(titlePage).not.toHaveTextContent(artifactSource);
-
-    const technical = screen.getByText("技术信息").closest("details")!;
-    expect(technical).not.toHaveAttribute("open");
-    const sourceItem = within(technical).getByText("视觉 source version").closest("div")!;
-    const contractItem = within(technical).getByText("视觉合同 artifact").closest("div")!;
-    expect(within(sourceItem).getByText(artifactSource)).toBeInTheDocument();
-    expect(within(contractItem).getByText(VISUAL_CONTRACT_REF)).toBeInTheDocument();
-    const rawReferences = screen.getAllByText(artifactSource);
-    expect(rawReferences).toHaveLength(1);
-    expect(technical).toContainElement(rawReferences[0]);
-  });
-
-  it.each([
-    ["passed", "已确认"],
-    ["user-reviewable", "尚未确认"],
-    ["locked", "尚未确认"],
-    ["failed", "尚未确认"],
-    ["future-internal-state", "尚未确认"],
-  ])("maps G3 %s to the user confirmation label %s", (status, expectedLabel) => {
-    expect(visualConfirmationLabel(status)).toBe(expectedLabel);
+    expect(screen.queryByText("技术信息")).not.toBeInTheDocument();
+    expect(screen.queryByText(artifactSource)).not.toBeInTheDocument();
   });
 
   it("keeps an artifact source raw through anchor and contract writes plus receipt recovery", async () => {
@@ -3561,7 +3554,7 @@ describe("visual professional review surface", () => {
     expect(screen.queryByLabelText("合同标记保存事实")).not.toBeInTheDocument();
   });
 
-  it("converges the contract first screen into one document identity and folded technical refs", () => {
+  it("converges the contract first screen without a technical identity module", () => {
     const { bridge } = host();
     render(<VisualProfessionalReviewPage initialData={visualData()} bridge={bridge} />);
     fireEvent.click(screen.getByRole("tab", { name: "完整视觉合同" }));
@@ -3574,18 +3567,13 @@ describe("visual professional review surface", () => {
     expect(within(document).getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(within(document).getByRole("heading", { level: 1, name: "完整视觉合同" })).toBeInTheDocument();
     expect(titlePage).toHaveTextContent("测试项目");
-    expect(titlePage).toHaveTextContent("visual-v1");
+    expect(titlePage).not.toHaveTextContent("visual-v1");
     expect(titlePage).toHaveTextContent("revision 12");
     expect(titlePage).toHaveTextContent("2 页逐页合同");
-    expect(titlePage).toHaveTextContent("G3 尚未确认");
+    expect(titlePage).not.toHaveTextContent(/G1|G2|G3|user-reviewable/);
     expect(screen.queryByRole("region", { name: "视觉合同摘要" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("视觉合同操作").querySelector(".visual-contract-command-status")).toHaveTextContent("所有标记已保存");
-
-    const technical = screen.getByText("技术信息").closest("details");
-    expect(technical).not.toBeNull();
-    expect(technical?.tagName).toBe("DETAILS");
-    expect(technical?.querySelector("summary")).toHaveTextContent("技术信息");
-    expect(technical).not.toHaveAttribute("open");
+    expect(screen.queryByText("技术信息")).not.toBeInTheDocument();
     for (const reference of [
       VISUAL_CONTRACT_REF,
       DECK_DESIGN_SYSTEM_REF,
@@ -3594,9 +3582,7 @@ describe("visual professional review surface", () => {
       "artifact://editability-evidence/" + "c".repeat(64),
       "artifact://preflight-render/" + "d".repeat(64),
     ]) {
-      const occurrences = screen.getAllByText(reference);
-      expect(occurrences).toHaveLength(1);
-      expect(technical).toContainElement(occurrences[0]);
+      expect(screen.queryByText(reference)).not.toBeInTheDocument();
       expect(screen.queryByRole("heading", { name: reference })).not.toBeInTheDocument();
     }
 
@@ -3632,8 +3618,8 @@ describe("visual professional review surface", () => {
       slide_id: `S${String(index + 1).padStart(3, "0")}`,
       order: index + 1,
       neutral_title: `第 ${index + 1} 页视觉合同`,
-      page_task: `页面任务 ${index + 1}`,
-      frozen_copy: `冻结正文 ${index + 1}`,
+      validation_purpose: `页面任务 ${index + 1}`,
+      visible_copy: `冻结正文 ${index + 1}`,
     }));
     let slideFindCalls = 0;
     data.review.slide_visual_contracts = new Proxy(slides, {
@@ -4298,7 +4284,7 @@ describe("visual professional review surface", () => {
     expect(documentChildren.indexOf(titlePage)).toBeLessThan(documentChildren.indexOf(designSystem));
     expect(documentChildren.indexOf(designSystem)).toBeLessThan(documentChildren.indexOf(anchorEvidence));
     expect(documentChildren.indexOf(anchorEvidence)).toBeLessThan(documentChildren.indexOf(slideContracts));
-    expect(document.querySelector(".visual-contract-technical")).not.toBeVisible();
+    expect(document.querySelector(".visual-contract-technical")).not.toBeInTheDocument();
     expect(anchorEvidence.querySelectorAll(".visual-anchor-evidence-item")).toHaveLength(3);
     expect(slideContracts.querySelectorAll(".visual-slide-contract")).toHaveLength(2);
     expect(Array.from(slideContracts.querySelectorAll(".visual-contract-column > h4")).filter((heading) => heading.textContent === "冻结内容")).toHaveLength(2);
@@ -4331,7 +4317,7 @@ describe("visual professional review surface", () => {
   it("keeps a confirmed frontend contract field markable when the backend projection key is missing", () => {
     const { bridge } = host();
     const data = visualData();
-    delete (data.review.slide_visual_contracts[0] as Record<string, unknown>).core_claim;
+    delete (data.review.slide_visual_contracts[0] as unknown as Record<string, unknown>).core_claim;
 
     render(<VisualProfessionalReviewPage initialData={data} bridge={bridge} />);
     fireEvent.click(screen.getByRole("tab", { name: "完整视觉合同" }));

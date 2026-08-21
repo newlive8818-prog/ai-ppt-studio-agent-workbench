@@ -1,7 +1,8 @@
 import { isIsoInstant } from "../lib/iso-instant";
 import { clonePlainData } from "../lib/plain-data";
 import type { ContentReviewSurfaceData } from "../types/content-review";
-import type { NormalizedRegion, VisualReviewSurfaceData } from "../types/visual-review";
+import type { NormalizedRegion } from "../types/visual-review";
+import type { VisualReviewPageViewModel } from "../visual-review/visual-review-page-view-model";
 import { isValidNormalizedRegion } from "../visual-review/normalized-region";
 import {
   DESIGN_SYSTEM_FIELD_ORDER,
@@ -373,8 +374,8 @@ function utf8ByteLength(value: string): number {
 }
 
 export function createReviewDraftContext(data: ContentReviewSurfaceData): ContentReviewDraftContext;
-export function createReviewDraftContext(data: VisualReviewSurfaceData): VisualReviewDraftContext;
-export function createReviewDraftContext(data: ContentReviewSurfaceData | VisualReviewSurfaceData): ReviewDraftContext {
+export function createReviewDraftContext(data: VisualReviewPageViewModel): VisualReviewDraftContext;
+export function createReviewDraftContext(data: ContentReviewSurfaceData | VisualReviewPageViewModel): ReviewDraftContext {
   const { review } = data;
   if (review.review_type === "content-full-deck") {
     return {

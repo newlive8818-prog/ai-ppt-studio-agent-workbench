@@ -9,19 +9,19 @@ import {
 } from "../review-draft/reviewDraftStore";
 import { useReviewDraft } from "../review-draft/useReviewDraft";
 import type { HostBridge } from "../types/host";
-import type { VisualReviewSurfaceData } from "../types/visual-review";
 import "../styles/visual-review.css";
 import { AnchorResultsView } from "./AnchorResultsView";
-import {
-  VisualContractView,
-  visualConfirmationLabel,
-  visualSourceVersionLabel,
-} from "./VisualContractView";
+import { VisualContractView, visualSourceVersionLabel } from "./VisualContractView";
+import type { VisualReviewPageViewModel } from "./visual-review-page-view-model";
 
-interface Props {
-  initialData: VisualReviewSurfaceData;
+interface BaseProps {
   bridge: HostBridge;
 }
+
+type Props = BaseProps & (
+  | { initialViewModel: VisualReviewPageViewModel; initialData?: never }
+  | { initialData: VisualReviewPageViewModel; initialViewModel?: never }
+);
 
 type ReviewView = "anchors" | "contract";
 
@@ -63,12 +63,15 @@ function scrollToVisualLogicalPosition(
   });
 }
 
-interface RootProps extends Props {
+interface RootProps extends BaseProps {
+  initialData: VisualReviewPageViewModel;
   reviewDraftContext: VisualReviewDraftContext;
   pageIdentity: string;
 }
 
-export function VisualProfessionalReviewPage({ initialData, bridge }: Props) {
+export function VisualProfessionalReviewPage(props: Props) {
+  const { bridge } = props;
+  const initialData = props.initialViewModel ?? props.initialData;
   const reviewDraftContext = createReviewDraftContext(initialData);
   const pageIdentity = reviewDraftPageIdentity(reviewDraftContext);
   return (
@@ -255,7 +258,6 @@ function VisualProfessionalReviewRoot({
     + reviewDraft.ui.contract_mark_drafts.length
     + (reviewDraft.ui.contract_mark_composer ? 1 : 0);
   const visibleSourceVersion = visualSourceVersionLabel(initialData.review.source_version);
-  const visibleConfirmation = visualConfirmationLabel(initialData.review.gate_status.G3);
 
   return (
     <main ref={rootRef} className={`visual-professional-page visual-review-view-${view}`}>
@@ -297,9 +299,6 @@ function VisualProfessionalReviewRoot({
         />
         <div className="visual-professional-status-ledger" aria-hidden="true">
           <span>{visibleSourceVersion} · revision {revision}</span>
-          <span>G1 {initialData.review.gate_status.G1}</span>
-          <span>G2 {initialData.review.gate_status.G2}</span>
-          <span>视觉确认 {visibleConfirmation}</span>
           <strong aria-label="全局未保存状态">
             {unsavedCount ? `未保存 ${unsavedCount}` : "已保存"}
           </strong>

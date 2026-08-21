@@ -9,9 +9,6 @@ const DECK_DESIGN_SYSTEM_REF = "artifact://deck-design-system/" + "b".repeat(64)
 const ANCHOR_SLIDE_SET_REF = "artifact://anchor-slide-set/" + "c".repeat(64);
 const VISUAL_MARK_SET_REF = "artifact://visual-contract-review-mark-set/" + "d".repeat(64);
 const VISUAL_ANCHOR_BATCH_REF = "artifact://visual-anchor-feedback-batch/" + "e".repeat(64);
-const NATIVE_PPTX_REF = "artifact://native-pptx/" + "6".repeat(64);
-const EDITABILITY_EVIDENCE_REF = "artifact://editability-evidence/" + "7".repeat(64);
-const PREFLIGHT_RENDER_REF = "artifact://preflight-render/" + "8".repeat(64);
 
 function reviewSession(
   reviewType: "content-full-deck" | "visual-professional",
@@ -78,44 +75,52 @@ function visualSlideContract(overrides: Record<string, unknown> = {}) {
   return {
     slide_id: "S01",
     order: 1,
-    page_task: "问题诊断",
-    reading_question: "为何现在行动",
     neutral_title: "经营协同仍有断点",
-    visible_copy_blocks: [],
-    identity_labels: ["方案建议"],
-    evidence_bindings: [],
-    analysis_or_proposal_blocks: [],
-    solution_mapping_refs: [],
-    previous_relation: "",
-    next_relation: "进入一期方案",
-    speaker_notes: "",
-    reading_quality: {
-      independently_readable: true,
-      information_density: "medium",
-      review_note: "",
-    },
-    material_mode: "proposal-led",
     page_family: "问题诊断页",
-    information_hierarchy: "标题—事实—建议",
+    anchor_title: "经营协同仍有断点",
+    validation_purpose: "说明当前问题",
+    core_claim: "业务断点需要被看见",
+    visible_copy: ["页面可见文案"],
+    speaker_notes: "",
+    source_refs: ["source-1"],
+    communication_goal: "形成问题共识",
     composition_intent: "左侧事实，右侧因果链",
-    image_selection_and_crop: "无图时保持原生结构",
-    typography_application: "标题与正文层级分明",
-    color_application: "中性底色配单一强调色",
-    diagram_chart_table_treatment: "因果关系使用原生形状",
-    native_bitmap_routing: "原生优先",
-    editability_requirements: "所有正文与图形可编辑",
+    information_hierarchy: "标题—事实—建议",
+    reading_order: ["标题", "事实", "建议"],
     regions: ["标题区", "正文区"],
     object_relationships: ["事实支持建议"],
-    reading_order: ["标题", "事实", "建议"],
+    diagram_chart_table_treatment: "因果关系使用原生形状",
+    image_selection_and_crop: "无图时保持原生结构",
+    color_application: "中性底色配单一强调色",
+    typography_application: "标题与正文层级分明",
+    native_bitmap_routing: "原生优先",
+    editability_requirements: "所有正文与图形可编辑",
     fallbacks: ["缺图时保持原生结构"],
     acceptance_criteria: [{
       criterion_id: "criterion-1",
       level: "must-follow",
       expected_outcome: "阅读顺序清晰且原生可编辑",
     }],
-    allowed_exceptions: [],
-    future_extension: { renderer_hint: "native-shapes" },
     ...overrides,
+  };
+}
+
+function deckDesignSystem() {
+  return {
+    theme_proposition: "克制、可信、阅读优先",
+    composition_grammar: "结论先行，证据支撑",
+    color_tokens: { accent: "#3157D5" },
+    typography_tokens: { title_scale: "32pt" },
+    page_families: ["问题诊断页"],
+    density_rhythm: "中密度",
+    imagery_strategy: "证据优先",
+    diagram_strategy: "原生图形优先",
+    table_strategy: "少量关键列",
+    editability_rules: ["正文与图形可编辑"],
+    accessibility_rules: ["保持对比度"],
+    forbidden_patterns: ["装饰性堆叠"],
+    anchor_specification: "三页锚点覆盖主要页面家族",
+    production_route: "strict-B",
   };
 }
 
@@ -141,28 +146,19 @@ function visualReviewProjection(
     authoritative_revision: 7,
     visual_contract_ref: visualContractRef,
     deck_design_system_ref: DECK_DESIGN_SYSTEM_REF,
-    deck_design_system: {
-      typography_tokens: { title_scale: "32pt" },
-    },
+    deck_design_system: deckDesignSystem(),
     anchor_slide_set_ref: ANCHOR_SLIDE_SET_REF,
     anchors,
     anchor_identity: {
-      visual_contract_set_ref: "artifact://visual-contract-set/" + "b".repeat(64),
       slide_ids: anchors.map((anchor) => anchor.slide_id),
       selection_reason: "覆盖问题诊断、证据和方案页面家族",
       native_first_frozen: true,
-      native_first_pptx_ref: NATIVE_PPTX_REF,
-      pptx_sha256: "a".repeat(64),
-      editability_evidence_refs: [EDITABILITY_EVIDENCE_REF],
-      preflight_render_refs: [PREFLIGHT_RENDER_REF],
-      render_assets: anchors.map((anchor) => ({ ...anchor })),
     },
     slide_visual_contracts: [visualSlideContract()],
     anchor_feedback_batch_ref: anchorFeedbackBatch ? VISUAL_ANCHOR_BATCH_REF : null,
     anchor_feedback_batch: anchorFeedbackBatch,
     contract_review_marks_ref: contractReviewMarks ? VISUAL_MARK_SET_REF : null,
     contract_review_marks: contractReviewMarks,
-    gate_status: { G1: "passed", G2: "passed", G3: "user-reviewable" },
     host_submission_capability: "unavailable",
     ai_receipt_capability: "unavailable",
   };
@@ -707,34 +703,32 @@ describe("Browser Review loopback client", () => {
     expect(heartbeat).not.toHaveBeenCalled();
   });
 
-  it("accepts an initial anchor item at the same instant expressed with an offset", async () => {
+  it("rejects an arbitrary future slide-contract extension before opening the host", async () => {
     window.history.replaceState(null, "", "/#token=short-lived-token");
     const batch = initialVisualAnchorBatch({
       createdAt: "2026-08-16T14:31:00.000999+14:30",
       submittedAt: "2026-08-16T00:01:00.000999Z",
     });
-    const fetchMock = vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(new Response(JSON.stringify(reviewEnvelope(
-        visualReviewProjection(initialVisualMarkSet(), batch),
-      )), { status: 200, headers: { "Content-Type": "application/json" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        ok: true,
-        hostOpenStatus: "opened",
-        snapshotRevision: 8,
-      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const projection = visualReviewProjection(initialVisualMarkSet(), batch);
+    Object.assign(projection.slide_visual_contracts[0], {
+      future_extension: { renderer_hint: "native-shapes" },
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(reviewEnvelope(projection)), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
     const received = vi.fn();
 
-    await createBrowserReviewClient().connect(received);
+    const failure = await createBrowserReviewClient().connect(received).then(
+      () => null,
+      (error: unknown) => error,
+    );
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(received).toHaveBeenCalledOnce();
-    expect(received).toHaveBeenCalledWith(expect.objectContaining({
-      review: expect.objectContaining({
-        slide_visual_contracts: [expect.objectContaining({
-          future_extension: { renderer_hint: "native-shapes" },
-        })],
-      }),
-    }));
+    expect(failure).toMatchObject({ code: "REVIEW_CONNECTION_INVALID" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(received).not.toHaveBeenCalled();
   });
 
   it("saves visual-contract marks through the scoped Browser API", async () => {
@@ -1269,8 +1263,6 @@ describe("Browser Review loopback client", () => {
     const projection = visualReviewProjection();
     projection.anchors[0].current_asset_ref = assetRefs[0];
     projection.anchors[0].previous_asset_ref = assetRefs[1];
-    projection.anchor_identity.render_assets[0].current_asset_ref = assetRefs[0];
-    projection.anchor_identity.render_assets[0].previous_asset_ref = assetRefs[1];
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify(reviewEnvelope(projection)), { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({

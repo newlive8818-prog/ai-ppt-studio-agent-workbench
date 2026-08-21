@@ -1,6 +1,7 @@
 import { toContentReviewPageViewModel } from "./content-review/content-review-page-view-model";
 import { ContentReviewViewModelController } from "./content-review/ContentReviewViewModelController";
 import { VisualProfessionalReviewPage } from "./visual-review/VisualProfessionalReviewPage";
+import { toVisualReviewPageViewModel } from "./visual-review/visual-review-page-view-model";
 import type { HostBridge, ReviewSurfaceData } from "./types/host";
 import type { ContentReviewSurfaceData } from "./types/content-review";
 import { validateReviewSurfaceData } from "./review-surface-validation";
@@ -27,8 +28,15 @@ export function ReviewSurfaceRouter({ data, bridge }: Props) {
       />
     );
   }
-  const pageKey = reviewDraftPageIdentity(createReviewDraftContext(validated));
-  return <VisualProfessionalReviewPage key={pageKey} initialData={validated} bridge={bridge} />;
+  const initialViewModel = toVisualReviewPageViewModel(validated);
+  const pageKey = reviewDraftPageIdentity(createReviewDraftContext(initialViewModel));
+  return (
+    <VisualProfessionalReviewPage
+      key={pageKey}
+      initialViewModel={initialViewModel}
+      bridge={bridge}
+    />
+  );
 }
 
 function isContentReviewSurface(data: ReviewSurfaceData): data is ContentReviewSurfaceData {

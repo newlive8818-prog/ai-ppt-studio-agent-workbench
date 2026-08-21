@@ -8,7 +8,7 @@ import type {
 import { parseArtifactReference } from "../lib/artifact-reference";
 import type { HostBridge } from "../types/host";
 import type { ToolContractMap } from "../types/tool-contracts";
-import type { VisualContractReviewMark, VisualContractReviewMarkSet, VisualReviewSurfaceData } from "../types/visual-review";
+import type { VisualContractReviewMark, VisualContractReviewMarkSet } from "../types/visual-review";
 import { ReviewOverlayDrawer } from "./ReviewOverlayDrawer";
 import {
   sameVisualContractMarkSetImmutableAuthority,
@@ -25,9 +25,13 @@ import {
   FROZEN_SLIDE_FIELD_ORDER,
   VISUAL_SLIDE_FIELD_ORDER,
 } from "./visual-contract-field-contract";
+import type {
+  VisualReviewPageSlideContract,
+  VisualReviewPageViewModel,
+} from "./visual-review-page-view-model";
 
 interface Props {
-  data: VisualReviewSurfaceData;
+  data: VisualReviewPageViewModel;
   bridge: HostBridge;
   revision: number;
   onRevision: (revision: number) => void;
@@ -123,10 +127,6 @@ export function visualSourceVersionLabel(sourceVersion: string): string {
   return `${kindLabel} ${digest.slice(0, 8)}`;
 }
 
-export function visualConfirmationLabel(g3Status: string): "已确认" | "尚未确认" {
-  return g3Status === "passed" ? "已确认" : "尚未确认";
-}
-
 function labelFor(key: string, labels: Record<string, string>) {
   return labels[key] || key.replaceAll("_", " ");
 }
@@ -137,37 +137,10 @@ function presentContractValue(value: unknown): unknown {
     : value;
 }
 
-function visibleCopy(slide: Record<string, unknown>): unknown {
-  if (slide.visible_copy !== undefined) return presentContractValue(slide.visible_copy);
-  const copy = Array.isArray(slide.visible_copy_blocks) ? slide.visible_copy_blocks.flatMap((block) => {
-    if (typeof block === "string") return block.trim() ? [block] : [];
-    if (!block || typeof block !== "object") return [];
-    const text = (block as Record<string, unknown>).text;
-    return typeof text === "string" && text.trim() ? [text] : [];
-  }) : [];
-  if (copy.length) return copy;
-  return slide.frozen_copy !== undefined
-    ? presentContractValue(slide.frozen_copy)
-    : MISSING_CONTRACT_VALUE;
-}
-
-function visibleSourceRefs(slide: Record<string, unknown>): unknown {
-  if (slide.source_refs !== undefined) return presentContractValue(slide.source_refs);
-  if (!Array.isArray(slide.evidence_bindings)) return MISSING_CONTRACT_VALUE;
-  const refs = slide.evidence_bindings.flatMap((binding) => {
-    if (!binding || typeof binding !== "object") return [];
-    const record = binding as Record<string, unknown>;
-    if (Array.isArray(record.source_refs)) {
-      return record.source_refs.filter((reference): reference is string => typeof reference === "string" && Boolean(reference.trim()));
-    }
-    return typeof record.source_ref === "string" && record.source_ref.trim() ? [record.source_ref] : [];
-  });
-  return refs.length ? [...new Set(refs)] : MISSING_CONTRACT_VALUE;
-}
-
-function slideFieldValue(slide: Record<string, unknown>, key: string): unknown {
-  if (key === "visible_copy") return visibleCopy(slide);
-  if (key === "source_refs") return visibleSourceRefs(slide);
+function slideFieldValue(
+  slide: VisualReviewPageSlideContract,
+  key: keyof VisualReviewPageSlideContract,
+): unknown {
   return presentContractValue(slide[key]);
 }
 
@@ -248,7 +221,7 @@ function receiptLabel(status: VisualContractReviewMarkSet["ai_receipt_status"]) 
 
 const invalidRevisionMessage = "当前 revision 无效，请重新打开审核页后再保存。";
 
-function validateProjectedMarkSet(data: VisualReviewSurfaceData): VisualContractReviewMarkSet | null {
+function validateProjectedMarkSet(data: VisualReviewPageViewModel): VisualContractReviewMarkSet | null {
   const projected = data.review.contract_review_marks;
   if (projected === null) return null;
   return validateInitialVisualContractMarkSet(projected, data, {
@@ -308,7 +281,6 @@ export function VisualContractView({
   const designSystemId = `${instanceId}-contract-design-system`;
   const anchorIdentityId = `${instanceId}-contract-anchor-identity`;
   const slides = data.review.slide_visual_contracts;
-  const artifactSourceVersion = parseArtifactReference(data.review.source_version);
   const slideById = useMemo(
     () => new Map(slides.map((slide) => [slide.slide_id, slide])),
     [slides],
@@ -319,14 +291,8 @@ export function VisualContractView({
       const pageFamily = typeof slide?.page_family === "string" && slide.page_family.trim()
         ? slide.page_family
         : "锚点视觉证据";
-      const titleCandidate = slide?.anchor_title ?? slide?.neutral_title ?? slide?.title;
-      const title = typeof titleCandidate === "string" && titleCandidate.trim()
-        ? titleCandidate
-        : pageFamily;
-      const purposeCandidate = slide?.validation_purpose ?? slide?.anchor_validation_purpose ?? slide?.page_task;
-      const pageTask = typeof purposeCandidate === "string" && purposeCandidate.trim()
-        ? purposeCandidate
-        : data.review.anchor_identity.selection_reason;
+      const title = slide?.anchor_title || pageFamily;
+      const pageTask = slide?.validation_purpose || data.review.anchor_identity.selection_reason;
       return { slideId, title, pageTask };
     }),
     [data.review.anchor_identity.selection_reason, data.review.anchor_identity.slide_ids, slideById],
@@ -815,10 +781,8 @@ export function VisualContractView({
           <h1>完整视觉合同</h1>
           <p>从整套设计系统到全部逐页视觉合同连续展开。请判断全套视觉需求是否一致，以及每一页是否被 AI 正确理解；目录只负责定位，标记抽屉只在需要时覆盖打开。</p>
           <div className="visual-contract-identity-line">
-            <span><strong>审核对象</strong> {visualSourceVersionLabel(data.review.source_version)}</span>
             <span><strong>范围</strong> {slides.length} 页逐页合同</span>
             <span><strong>生产路线</strong> {String(presentContractValue(data.review.deck_design_system.production_route))}</span>
-            <span><strong>状态</strong> G3 {visualConfirmationLabel(data.review.gate_status.G3)}</span>
             <span className="visual-hidden-technical"><strong>项目</strong> {data.review.project_name}</span>
             <span className="visual-hidden-technical"><strong>revision</strong> {revision}</span>
           </div>
@@ -859,7 +823,7 @@ export function VisualContractView({
           <div className="visual-contract-list">
             {slides.map((slide, index) => {
               const slideId = String(slide.slide_id || `slide-${index + 1}`);
-              const title = String(slide.neutral_title || slide.title || slide.page_task || `${slideId} 视觉合同`);
+              const title = slide.neutral_title || `${slideId} 视觉合同`;
               const articleId = `${instanceId}-visual-contract-${index}`;
               const titleId = `${articleId}-title`;
               return (
@@ -880,7 +844,6 @@ export function VisualContractView({
                       <h3 id={titleId}>{title}</h3>
                       <p><span>{String(slide.page_family || "页面家族待提供")} · 第 {String(slide.order || index + 1)} 页</span></p>
                     </div>
-                    <span className="visual-contract-page-state">user-reviewable</span>
                   </header>
                   <div className="visual-contract-columns">
                     <section className="visual-contract-column">
@@ -901,28 +864,6 @@ export function VisualContractView({
             })}
           </div>
         </section>
-        <details className="visual-contract-technical" hidden aria-hidden="true">
-          <summary>技术信息</summary>
-          <dl>
-            {artifactSourceVersion && data.review.source_version === data.review.visual_contract_ref ? (
-              <div><dt>视觉 source version / 视觉合同 artifact</dt><dd><code>{data.review.source_version}</code></dd></div>
-            ) : (
-              <>
-                {artifactSourceVersion ? <div><dt>视觉 source version</dt><dd><code>{data.review.source_version}</code></dd></div> : null}
-                <div><dt>视觉合同 artifact</dt><dd><code>{data.review.visual_contract_ref}</code></dd></div>
-              </>
-            )}
-            <div><dt>Deck Design System artifact</dt><dd><code>{data.review.deck_design_system_ref}</code></dd></div>
-            <div><dt>锚点集 artifact</dt><dd><code>{data.review.anchor_slide_set_ref}</code></dd></div>
-            <div><dt>原生可编辑 PPTX</dt><dd><code>{data.review.anchor_identity.native_first_pptx_ref}</code></dd></div>
-            {data.review.anchor_identity.editability_evidence_refs.map((reference) => (
-              <div key={reference}><dt>可编辑性证据</dt><dd><code>{reference}</code></dd></div>
-            ))}
-            {data.review.anchor_identity.preflight_render_refs.map((reference) => (
-              <div key={reference}><dt>预检渲染证据</dt><dd><code>{reference}</code></dd></div>
-            ))}
-          </dl>
-        </details>
       </article>
 
       <ReviewOverlayDrawer open={drawer === "outline"} title="视觉合同目录" side="left" onClose={() => setDrawer(null)}>
@@ -931,7 +872,7 @@ export function VisualContractView({
           <button type="button" data-index="00" onClick={() => navigateFromOutline(() => designSystemRef.current)}>Deck Design System</button>
           <button type="button" data-index="A" onClick={() => navigateFromOutline(() => anchorIdentityRef.current)}>Anchor Slide Evidence</button>
           <p className="visual-contract-outline-group">{slides.length} 页页面合同</p>
-          {slides.map((slide) => <button type="button" data-index={String(slide.slide_id)} key={String(slide.slide_id)} onClick={() => navigateFromOutline(() => slideRefs.current.get(String(slide.slide_id)))}>{String(slide.neutral_title || slide.title || slide.page_task || "视觉合同")}</button>)}
+          {slides.map((slide) => <button type="button" data-index={String(slide.slide_id)} key={String(slide.slide_id)} onClick={() => navigateFromOutline(() => slideRefs.current.get(String(slide.slide_id)))}>{slide.neutral_title || "视觉合同"}</button>)}
         </nav>
       </ReviewOverlayDrawer>
       <ReviewOverlayDrawer open={drawer === "marks"} title="合同标记" side="right" onClose={closeMarks}>

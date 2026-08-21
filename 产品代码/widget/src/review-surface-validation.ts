@@ -7,6 +7,7 @@ import { clonePlainData } from "./lib/plain-data";
 import { validateInitialAnchorFeedbackBatch } from "./visual-review/anchor-feedback-validation";
 import { validateInitialVisualContractMarkSet } from "./visual-review/visual-contract-mark-validation";
 import type { VisualReceiptFacts } from "./visual-review/visual-receipt-facts";
+import { toVisualReviewPageViewModel } from "./visual-review/visual-review-page-view-model";
 
 const envelopeFields = [
   "ok", "projectRoot", "reviewType", "sourceVersion", "expectedRevision", "bridgeSessionId", "review",
@@ -32,7 +33,7 @@ const visualFields = [
   "revision", "authoritative_revision", "visual_contract_ref", "deck_design_system_ref",
   "deck_design_system", "anchor_slide_set_ref", "anchors", "anchor_identity", "slide_visual_contracts",
   "anchor_feedback_batch_ref", "anchor_feedback_batch", "contract_review_marks_ref",
-  "contract_review_marks", "gate_status", "host_submission_capability", "ai_receipt_capability",
+  "contract_review_marks", "host_submission_capability", "ai_receipt_capability",
 ] as const;
 const contentSlideFields = [
   "slide_id", "order", "section_id", "page_task", "reading_question", "neutral_title",
@@ -46,16 +47,20 @@ const decisionFields = [
 ] as const;
 const anchorFields = ["slide_id", "current_asset_ref", "previous_asset_ref"] as const;
 const anchorIdentityFields = [
-  "visual_contract_set_ref", "slide_ids", "selection_reason", "native_first_frozen", "native_first_pptx_ref", "pptx_sha256",
-  "editability_evidence_refs", "preflight_render_refs", "render_assets",
+  "slide_ids", "selection_reason", "native_first_frozen",
 ] as const;
-const slideVisualContractRequiredTextFields = [
-  "page_family", "information_hierarchy", "composition_intent", "image_selection_and_crop",
-  "typography_application", "color_application", "diagram_chart_table_treatment",
-  "native_bitmap_routing", "editability_requirements",
+const deckDesignSystemFields = [
+  "theme_proposition", "composition_grammar", "color_tokens", "typography_tokens", "page_families",
+  "density_rhythm", "imagery_strategy", "diagram_strategy", "table_strategy", "editability_rules",
+  "accessibility_rules", "forbidden_patterns", "anchor_specification", "production_route",
 ] as const;
-const slideVisualContractNonemptyFields = [
-  "regions", "object_relationships", "reading_order", "fallbacks", "acceptance_criteria",
+const slideVisualContractFields = [
+  "slide_id", "order", "neutral_title", "page_family", "anchor_title", "validation_purpose",
+  "core_claim", "visible_copy", "speaker_notes", "source_refs", "communication_goal",
+  "composition_intent", "information_hierarchy", "reading_order", "regions",
+  "object_relationships", "diagram_chart_table_treatment", "image_selection_and_crop",
+  "color_application", "typography_application", "native_bitmap_routing",
+  "editability_requirements", "fallbacks", "acceptance_criteria",
 ] as const;
 
 type PlainRecord = Record<string, unknown>;
@@ -343,35 +348,30 @@ function validateAnchors(value: unknown): value is Array<{ slide_id: string; cur
 
 function validateAnchorIdentity(value: unknown, anchors: Array<{ slide_id: string; current_asset_ref: string; previous_asset_ref: string }>): boolean {
   return hasExactDataFields(value, anchorIdentityFields)
-    && isArtifactReference(value.visual_contract_set_ref, "visual-contract-set")
     && isStringArray(value.slide_ids)
     && value.slide_ids.length === anchors.length
     && value.slide_ids.every((id, index) => id === anchors[index].slide_id)
     && isText(value.selection_reason)
-    && value.native_first_frozen === true
-    && isText(value.native_first_pptx_ref)
-    && typeof value.pptx_sha256 === "string" && /^[0-9a-f]{64}$/i.test(value.pptx_sha256)
-    && isStringArray(value.editability_evidence_refs)
-    && isStringArray(value.preflight_render_refs)
-    && validateAnchors(value.render_assets)
-    && value.render_assets.every((asset, index) => (
-      asset.slide_id === anchors[index].slide_id
-      && asset.current_asset_ref === anchors[index].current_asset_ref
-      && asset.previous_asset_ref === anchors[index].previous_asset_ref
-    ));
+    && value.native_first_frozen === true;
 }
 
-function isNonemptyContractValue(value: unknown): boolean {
-  if (typeof value === "string") return isText(value);
-  if (Array.isArray(value)) return value.length > 0;
-  return isPlainRecord(value) && Reflect.ownKeys(value).length > 0;
+function validateDeckDesignSystem(value: unknown): boolean {
+  if (!isPlainRecord(value)) return false;
+  const allowed = new Set<string>([...deckDesignSystemFields, "fallback_fonts"]);
+  const keys = Reflect.ownKeys(value);
+  if (keys.some((key) => typeof key !== "string" || !allowed.has(key))) return false;
+  if (deckDesignSystemFields.some((field) => !keys.includes(field))) return false;
+  return keys.every((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return Boolean(descriptor && "value" in descriptor && descriptor.enumerable);
+  });
 }
 
 function validateVisualAcceptanceCriteria(value: unknown): boolean {
   return Array.isArray(value)
     && value.length > 0
     && value.every((criterion) => (
-      isPlainRecord(criterion)
+      hasExactDataFields(criterion, ["criterion_id", "level", "expected_outcome"])
       && isText(criterion.criterion_id)
       && ["must-follow", "minimum-aesthetic", "reference-implementation"].includes(String(criterion.level))
       && isText(criterion.expected_outcome)
@@ -384,30 +384,16 @@ function validateSlideVisualContracts(value: unknown): value is Array<PlainRecor
   for (let index = 0; index < value.length; index += 1) {
     const contract = value[index];
     if (
-      !isPlainRecord(contract)
+      !hasExactDataFields(contract, slideVisualContractFields)
       || !isText(contract.slide_id)
       || ids.has(contract.slide_id)
       || contract.order !== index + 1
-      || !isText(contract.page_task)
-      || !isText(contract.reading_question)
       || !isText(contract.neutral_title)
-      || !Array.isArray(contract.visible_copy_blocks)
-      || !contract.visible_copy_blocks.every(isPlainRecord)
-      || !isStringArray(contract.identity_labels)
-      || !Array.isArray(contract.evidence_bindings)
-      || !contract.evidence_bindings.every(isPlainRecord)
-      || !Array.isArray(contract.analysis_or_proposal_blocks)
-      || !contract.analysis_or_proposal_blocks.every(isPlainRecord)
-      || !isStringArray(contract.solution_mapping_refs, false)
-      || !isText(contract.previous_relation, true)
-      || !isText(contract.next_relation, true)
+      || !isText(contract.anchor_title)
+      || !isText(contract.validation_purpose)
+      || !isText(contract.page_family)
       || !isText(contract.speaker_notes, true)
-      || !isPlainRecord(contract.reading_quality)
-      || !["material-backed", "mixed-evidence", "proposal-led"].includes(String(contract.material_mode))
-      || slideVisualContractRequiredTextFields.some((field) => !isText(contract[field]))
-      || slideVisualContractNonemptyFields.some((field) => !isNonemptyContractValue(contract[field]))
       || !validateVisualAcceptanceCriteria(contract.acceptance_criteria)
-      || !Array.isArray(contract.allowed_exceptions)
     ) return false;
     ids.add(contract.slide_id);
   }
@@ -424,12 +410,10 @@ function validateVisualProjection(value: unknown, expectedRevision?: number): Vi
     || (expectedRevision !== undefined && value.authoritative_revision !== expectedRevision)
     || !isArtifactReference(value.visual_contract_ref, "visual-contract")
     || !isArtifactReference(value.deck_design_system_ref, "deck-design-system")
-    || !isPlainRecord(value.deck_design_system)
+    || !validateDeckDesignSystem(value.deck_design_system)
     || !isArtifactReference(value.anchor_slide_set_ref, "anchor-slide-set")
     || !validateAnchors(value.anchors) || !validateAnchorIdentity(value.anchor_identity, value.anchors)
     || !validateSlideVisualContracts(value.slide_visual_contracts)
-    || !hasExactDataFields(value.gate_status, ["G1", "G2", "G3"])
-    || ![value.gate_status.G1, value.gate_status.G2, value.gate_status.G3].every((status) => isText(status))
     || !["available", "unavailable", "unknown"].includes(String(value.host_submission_capability))
     || !["available", "unavailable", "unknown"].includes(String(value.ai_receipt_capability))
   ) return null;
@@ -470,12 +454,12 @@ function validateVisualProjection(value: unknown, expectedRevision?: number): Vi
         ? "received"
         : "unverified",
   });
-  const provisional: VisualReviewSurfaceData = {
+  const provisional = toVisualReviewPageViewModel({
     surface: "review",
     selectedProjectRoot: "validated-projection",
     snapshotRevision: value.authoritative_revision,
     review: { ...value, contract_review_marks: null } as unknown as VisualReviewProjection,
-  };
+  });
   const marks = validateInitialVisualContractMarkSet(
     value.contract_review_marks,
     provisional,

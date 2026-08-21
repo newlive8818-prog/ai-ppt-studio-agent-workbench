@@ -134,6 +134,11 @@ class V22SourceShapeTests(unittest.TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, main)
 
+    def test_visual_route_uses_the_closed_page_view_model(self) -> None:
+        router = (WIDGET / "ReviewSurfaceRouter.tsx").read_text(encoding="utf-8")
+        self.assertIn("toVisualReviewPageViewModel", router)
+        self.assertIn("initialViewModel={toVisualReviewPageViewModel(validated)}", router)
+
 
 if __name__ == "__main__":
     unittest.main()

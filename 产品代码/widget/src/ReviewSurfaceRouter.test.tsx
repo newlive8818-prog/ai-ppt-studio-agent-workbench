@@ -18,44 +18,52 @@ function visualSlideContract(overrides: Record<string, unknown> = {}) {
   return {
     slide_id: "S01",
     order: 1,
-    page_task: "问题诊断",
-    reading_question: "为何现在行动",
     neutral_title: "经营协同仍有断点",
-    visible_copy_blocks: [],
-    identity_labels: ["方案建议"],
-    evidence_bindings: [],
-    analysis_or_proposal_blocks: [],
-    solution_mapping_refs: [],
-    previous_relation: "",
-    next_relation: "进入一期方案",
-    speaker_notes: "",
-    reading_quality: {
-      independently_readable: true,
-      information_density: "medium",
-      review_note: "",
-    },
-    material_mode: "proposal-led",
     page_family: "问题诊断页",
-    information_hierarchy: "标题—事实—建议",
+    anchor_title: "经营协同仍有断点",
+    validation_purpose: "说明当前问题",
+    core_claim: "业务断点需要被看见",
+    visible_copy: ["页面可见文案"],
+    speaker_notes: "",
+    source_refs: ["source-1"],
+    communication_goal: "形成问题共识",
     composition_intent: "左侧事实，右侧因果链",
-    image_selection_and_crop: "无图时保持原生结构",
-    typography_application: "标题与正文层级分明",
-    color_application: "中性底色配单一强调色",
-    diagram_chart_table_treatment: "因果关系使用原生形状",
-    native_bitmap_routing: "原生优先",
-    editability_requirements: "所有正文与图形可编辑",
+    information_hierarchy: "标题—事实—建议",
+    reading_order: ["标题", "事实", "建议"],
     regions: ["标题区", "正文区"],
     object_relationships: ["事实支持建议"],
-    reading_order: ["标题", "事实", "建议"],
+    diagram_chart_table_treatment: "因果关系使用原生形状",
+    image_selection_and_crop: "无图时保持原生结构",
+    color_application: "中性底色配单一强调色",
+    typography_application: "标题与正文层级分明",
+    native_bitmap_routing: "原生优先",
+    editability_requirements: "所有正文与图形可编辑",
     fallbacks: ["缺图时保持原生结构"],
     acceptance_criteria: [{
       criterion_id: "criterion-1",
       level: "must-follow",
       expected_outcome: "阅读顺序清晰且原生可编辑",
     }],
-    allowed_exceptions: [],
-    future_extension: { renderer_hint: "native-shapes" },
     ...overrides,
+  };
+}
+
+function deckDesignSystem() {
+  return {
+    theme_proposition: "克制、可信、阅读优先",
+    composition_grammar: "结论先行，证据支撑",
+    color_tokens: { accent: "#3157D5" },
+    typography_tokens: { title_scale: "32pt" },
+    page_families: ["问题诊断页"],
+    density_rhythm: "中密度",
+    imagery_strategy: "证据优先",
+    diagram_strategy: "原生图形优先",
+    table_strategy: "少量关键列",
+    editability_rules: ["正文与图形可编辑"],
+    accessibility_rules: ["保持对比度"],
+    forbidden_patterns: ["装饰性堆叠"],
+    anchor_specification: "三页锚点覆盖主要页面家族",
+    production_route: "strict-B",
   };
 }
 
@@ -96,26 +104,19 @@ function visualReviewSurface(anchorCount = 3): VisualReviewSurfaceData {
       authoritative_revision: 9,
       visual_contract_ref: "artifact://visual-contract/" + "a".repeat(64),
       deck_design_system_ref: "artifact://deck-design-system/" + "b".repeat(64),
-      deck_design_system: {},
+      deck_design_system: deckDesignSystem(),
       anchor_slide_set_ref: "artifact://anchor-slide-set/" + "c".repeat(64),
       anchors,
       anchor_identity: {
-        visual_contract_set_ref: "artifact://visual-contract-set/" + "9".repeat(64),
         slide_ids: anchors.map((anchor) => anchor.slide_id),
         selection_reason: "覆盖章节、证据和方案页面家族",
         native_first_frozen: true,
-        native_first_pptx_ref: "artifact://native-pptx/" + "d".repeat(64),
-        pptx_sha256: "e".repeat(64),
-        editability_evidence_refs: ["artifact://editability-evidence/" + "f".repeat(64)],
-        preflight_render_refs: ["artifact://preflight-render/" + "1".repeat(64)],
-        render_assets: anchors.map((anchor) => ({ ...anchor })),
       },
       slide_visual_contracts: [visualSlideContract()],
       anchor_feedback_batch_ref: null,
       anchor_feedback_batch: null,
       contract_review_marks_ref: null,
       contract_review_marks: null,
-      gate_status: { G1: "passed", G2: "passed", G3: "user-reviewable" },
       host_submission_capability: "unavailable",
       ai_receipt_capability: "unavailable",
     },
@@ -347,7 +348,7 @@ describe("on-demand professional-review routing", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("accepts the closed Python anchor identity with its visual-contract-set lineage", () => {
+  it("accepts the closed Python anchor identity", () => {
     const visual = visualReviewSurface();
 
     render(<ReviewSurfaceRouter data={visual} bridge={bridge} />);
@@ -434,12 +435,11 @@ describe("on-demand professional-review routing", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/审核数据无效.*重新打开/);
   });
 
-  it.each([
-    ["wrong kind", "artifact://anchor-slide-set/" + "9".repeat(64)],
-    ["malformed reference", "artifact://visual-contract-set/not-a-digest"],
-  ])("rejects a Python anchor identity with a %s visual-contract-set lineage", (_label, reference) => {
+  it("rejects an extra field in the closed Python anchor identity", () => {
     const visual = visualReviewSurface();
-    Object.assign(visual.review.anchor_identity, { visual_contract_set_ref: reference });
+    Object.assign(visual.review.anchor_identity, {
+      visual_contract_set_ref: "artifact://visual-contract-set/" + "9".repeat(64),
+    });
 
     render(<ReviewSurfaceRouter data={visual} bridge={bridge} />);
 
@@ -515,6 +515,19 @@ describe("on-demand professional-review routing", () => {
     expect(screen.queryByRole("tab", { name: "完整视觉合同" })).not.toBeInTheDocument();
   });
 
+  it("rejects an extra field inside a visual acceptance criterion", () => {
+    const visual = visualReviewSurface();
+    const contract = visual.review.slide_visual_contracts[0] as Record<string, unknown>;
+    const criterion = (contract.acceptance_criteria as Array<Record<string, unknown>>)[0];
+    Object.assign(criterion, {
+      future_backend_governance: "must be handled by the backend",
+    });
+
+    render(<ReviewSurfaceRouter data={visual} bridge={bridge} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/审核数据无效.*重新打开/);
+  });
+
   it("fails closed for a typed-looking but open review projection", () => {
     const spoofed = {
       surface: "review",
@@ -531,7 +544,7 @@ describe("on-demand professional-review routing", () => {
         authoritative_revision: 9,
         visual_contract_ref: "visual-contract:v1",
         deck_design_system_ref: "deck-design-system:v1",
-        deck_design_system: {},
+        deck_design_system: deckDesignSystem(),
         anchor_slide_set_ref: "anchor-slide-set:v1",
         anchors: [],
         anchor_identity: {},
@@ -540,7 +553,6 @@ describe("on-demand professional-review routing", () => {
         anchor_feedback_batch: null,
         contract_review_marks_ref: null,
         contract_review_marks: null,
-        gate_status: { G1: "passed", G2: "passed", G3: "user-reviewable" },
         host_submission_capability: "unavailable",
         ai_receipt_capability: "unavailable",
         unexpected: true,
@@ -579,9 +591,7 @@ describe("on-demand professional-review routing", () => {
 
   it("rejects a projection with an extra field deep inside a closed nested record", () => {
     const visual = visualReviewSurface();
-    Object.assign(visual.review.gate_status, {
-      unexpected: { nested: { value: true } },
-    });
+    Object.assign(visual.review, { unexpected: { nested: { value: true } } });
 
     render(<ReviewSurfaceRouter data={visual} bridge={bridge} />);
 

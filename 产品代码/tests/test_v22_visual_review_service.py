@@ -545,6 +545,43 @@ class VisualReviewServiceTests(unittest.TestCase):
             self.assertEqual(projection["host_submission_capability"], "unknown")
             self.assertEqual(projection["ai_receipt_capability"], "unknown")
             self.assertEqual(projection["project_name"], "p1")
+            self.assertNotIn("gate_status", projection)
+            self.assertEqual(
+                set(projection["anchor_identity"]),
+                {"slide_ids", "selection_reason", "native_first_frozen"},
+            )
+            self.assertNotIn(
+                "identity_labels", projection["slide_visual_contracts"][0]
+            )
+            self.assertNotIn(
+                "analysis_or_proposal_blocks",
+                projection["slide_visual_contracts"][0],
+            )
+            self.assertIn("visible_copy", projection["slide_visual_contracts"][0])
+            self.assertIn("source_refs", projection["slide_visual_contracts"][0])
+
+    def test_projection_keeps_explicit_empty_visible_copy_ahead_of_legacy_fallback(self) -> None:
+        projected = VisualReviewService._project_slide_contract(
+            {
+                "slide_id": "S01",
+                "visible_copy": [],
+                "visible_copy_blocks": [{"text": "legacy block"}],
+                "frozen_copy": "legacy frozen copy",
+            }
+        )
+
+        self.assertEqual(projected["visible_copy"], [])
+
+    def test_projection_keeps_explicit_empty_visible_copy_blocks_ahead_of_legacy_fallback(self) -> None:
+        projected = VisualReviewService._project_slide_contract(
+            {
+                "slide_id": "S01",
+                "visible_copy_blocks": [],
+                "frozen_copy": ["legacy"],
+            }
+        )
+
+        self.assertEqual(projected["visible_copy"], [])
 
     def test_projection_project_name_prefers_current_mission_topic(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

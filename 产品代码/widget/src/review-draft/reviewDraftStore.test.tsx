@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ContentReviewSurfaceData } from "../types/content-review";
-import type { VisualReviewSurfaceData } from "../types/visual-review";
+import type { VisualReviewPageViewModel } from "../visual-review/visual-review-page-view-model";
 import {
   DESIGN_SYSTEM_FIELD_ORDER,
   REVIEWABLE_SLIDE_FIELD_KEYS,
@@ -631,7 +631,7 @@ describe("review draft store", () => {
         slide_visual_contracts: [{ slide_id: "S01", composition_intent: "intent" }],
         deck_design_system: { typography_tokens: {} },
       },
-    } as unknown as VisualReviewSurfaceData;
+    } as unknown as VisualReviewPageViewModel;
 
     expect(createReviewDraftContext(data)).toEqual(expect.objectContaining({
       reviewType: "visual",

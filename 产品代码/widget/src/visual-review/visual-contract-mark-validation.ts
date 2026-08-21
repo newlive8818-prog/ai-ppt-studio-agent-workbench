@@ -1,8 +1,8 @@
 import type {
   VisualContractReviewMark,
   VisualContractReviewMarkSet,
-  VisualReviewSurfaceData,
 } from "../types/visual-review";
+import type { VisualReviewPageViewModel } from "./visual-review-page-view-model";
 import { isArtifactReference } from "../lib/artifact-reference";
 import { isIsoInstant, parseIsoInstantMicros } from "../lib/iso-instant";
 import {
@@ -90,9 +90,9 @@ function isAiReceiptStatus(value: unknown): value is VisualContractReviewMarkSet
   return value === "pending" || value === "received" || value === "rejected" || value === "unverified";
 }
 
-type SlideVisualContract = VisualReviewSurfaceData["review"]["slide_visual_contracts"][number];
+type SlideVisualContract = VisualReviewPageViewModel["review"]["slide_visual_contracts"][number];
 
-function currentSlideTargets(data: VisualReviewSurfaceData) {
+function currentSlideTargets(data: VisualReviewPageViewModel) {
   const targets = new Map<string, SlideVisualContract>();
   for (const slide of data.review.slide_visual_contracts) {
     if (!targets.has(slide.slide_id)) targets.set(slide.slide_id, slide);
@@ -102,7 +102,7 @@ function currentSlideTargets(data: VisualReviewSurfaceData) {
 
 function hasCurrentTarget(
   mark: Record<string, unknown>,
-  data: VisualReviewSurfaceData,
+  data: VisualReviewPageViewModel,
   slideTargets: ReadonlyMap<string, SlideVisualContract>,
 ) {
   const slideId = mark.slide_id as string;
@@ -119,7 +119,7 @@ function hasCurrentTarget(
 
 function isValidMark(
   value: unknown,
-  data: VisualReviewSurfaceData,
+  data: VisualReviewPageViewModel,
   maximumRevision: number,
   savedAt: string,
   slideTargets: ReadonlyMap<string, SlideVisualContract>,
@@ -191,7 +191,7 @@ function copyMark(mark: VisualContractReviewMark): VisualContractReviewMark {
 
 export function validateInitialVisualContractMarkSet(
   value: unknown,
-  data: VisualReviewSurfaceData,
+  data: VisualReviewPageViewModel,
   facts: VisualReceiptFacts,
 ): ValidatedInitialVisualContractMarkSet | null {
   if (value === null) return { markSet: null };
@@ -244,7 +244,7 @@ export function validateInitialVisualContractMarkSet(
 
 export function validateVisualContractMarkToolResult(
   value: unknown,
-  data: VisualReviewSurfaceData,
+  data: VisualReviewPageViewModel,
   submittedMarks: ReadonlyArray<VisualContractReviewMark>,
   commandRevision: number,
 ): ValidatedVisualContractMarkResult | null {

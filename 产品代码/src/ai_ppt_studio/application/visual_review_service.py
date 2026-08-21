@@ -116,6 +116,7 @@ class VisualReviewService:
         contract_review_marks_ref = state.artifact_heads.get(
             "visual/contract-review-marks", ""
         )
+        anchor_identity = contract.get("anchor_identity") or {}
         return {
             "project_id": state.project_id,
             "project_name": self._project_name(state),
@@ -127,11 +128,25 @@ class VisualReviewService:
             "authoritative_revision": state.revision,
             "visual_contract_ref": contract_ref,
             "deck_design_system_ref": design_ref,
-            "deck_design_system": copy.deepcopy(design),
+            "deck_design_system": self._project_deck_design_system(
+                design, anchor_identity
+            ),
             "anchor_slide_set_ref": anchor_ref,
             "anchors": copy.deepcopy(anchors["render_assets"]),
-            "anchor_identity": copy.deepcopy(contract.get("anchor_identity") or {}),
-            "slide_visual_contracts": copy.deepcopy(contract.get("slide_contracts") or []),
+            "anchor_identity": {
+                "slide_ids": copy.deepcopy(anchor_identity.get("slide_ids") or []),
+                "selection_reason": str(
+                    anchor_identity.get("selection_reason") or ""
+                ),
+                "native_first_frozen": anchor_identity.get(
+                    "native_first_frozen"
+                )
+                is True,
+            },
+            "slide_visual_contracts": [
+                self._project_slide_contract(slide)
+                for slide in contract.get("slide_contracts") or []
+            ],
             "anchor_feedback_batch": self._with_receipt_facts(
                 session,
                 anchor_feedback_batch_ref,
@@ -154,7 +169,6 @@ class VisualReviewService:
                 ),
             ),
             "contract_review_marks_ref": contract_review_marks_ref or None,
-            "gate_status": {gate: state.gate_status.get(gate, "locked") for gate in ("G1", "G2", "G3")},
             "host_submission_capability": "unknown",
             "ai_receipt_capability": "unknown",
         }
@@ -443,15 +457,16 @@ class VisualReviewService:
 
     @staticmethod
     def _project_slide_contract(slide: dict[str, Any]) -> dict[str, Any]:
-        visible_copy = copy.deepcopy(slide.get("visible_copy"))
-        if visible_copy is None:
+        if "visible_copy" in slide:
+            visible_copy = copy.deepcopy(slide["visible_copy"])
+        elif "visible_copy_blocks" in slide:
             blocks = slide.get("visible_copy_blocks") or []
             visible_copy = [
                 str(block.get("text") or "").strip()
                 for block in blocks
                 if isinstance(block, dict) and str(block.get("text") or "").strip()
             ]
-        if not visible_copy and slide.get("frozen_copy") is not None:
+        else:
             visible_copy = copy.deepcopy(slide.get("frozen_copy"))
         source_refs = copy.deepcopy(slide.get("source_refs"))
         if source_refs is None:

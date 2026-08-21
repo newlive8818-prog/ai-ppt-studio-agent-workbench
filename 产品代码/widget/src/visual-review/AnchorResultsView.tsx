@@ -9,8 +9,8 @@ import type { ToolContractMap } from "../types/tool-contracts";
 import type {
   AnchorFeedbackBatch,
   AnchorRegionFeedback,
-  VisualReviewSurfaceData,
 } from "../types/visual-review";
+import type { VisualReviewPageViewModel } from "./visual-review-page-view-model";
 import { AnchorComparisonDialog } from "./AnchorComparisonDialog";
 import {
   sameAnchorFeedbackBatchImmutableAuthority,
@@ -25,7 +25,7 @@ import {
 import { VisualReceiptRecoveryControls } from "./VisualReceiptRecoveryControls";
 
 interface Props {
-  data: VisualReviewSurfaceData;
+  data: VisualReviewPageViewModel;
   bridge: HostBridge;
   revision: number;
   onRevision: (revision: number) => void;

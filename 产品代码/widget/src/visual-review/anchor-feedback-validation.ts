@@ -2,8 +2,8 @@ import type {
   AnchorFeedbackBatch,
   AnchorRegionFeedback,
   NormalizedRegion,
-  VisualReviewSurfaceData,
 } from "../types/visual-review";
+import type { VisualReviewPageViewModel } from "./visual-review-page-view-model";
 import { isIsoInstant, parseIsoInstantMicros } from "../lib/iso-instant";
 import { isArtifactReference } from "../lib/artifact-reference";
 import { clonePlainData, hasExactDataFields } from "../review-draft/reviewDraftStore";
@@ -88,7 +88,7 @@ function isAiReceiptStatus(value: unknown): value is AnchorFeedbackBatch["ai_rec
 
 export function validateAnchorFeedbackBatch(
   value: unknown,
-  data: VisualReviewSurfaceData,
+  data: VisualReviewPageViewModel,
   expectedItems?: ReadonlyArray<AnchorRegionFeedback>,
   expectedRevision?: number,
 ): AnchorFeedbackBatch | null {
@@ -177,7 +177,7 @@ export function validateAnchorFeedbackBatch(
 
 export function validateInitialAnchorFeedbackBatch(
   value: unknown,
-  data: VisualReviewSurfaceData,
+  data: VisualReviewPageViewModel,
   facts: VisualReceiptFacts,
 ): AnchorFeedbackBatch | null {
   const batch = validateAnchorFeedbackBatch(value, data);
@@ -190,7 +190,7 @@ export function validateInitialAnchorFeedbackBatch(
 
 export function validateAnchorFeedbackToolResult(
   value: unknown,
-  data: VisualReviewSurfaceData,
+  data: VisualReviewPageViewModel,
   expectedItems: ReadonlyArray<AnchorRegionFeedback>,
   expectedRevision: number,
 ): ValidatedAnchorBatchResult | null {

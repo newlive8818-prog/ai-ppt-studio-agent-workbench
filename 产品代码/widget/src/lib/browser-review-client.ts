@@ -18,6 +18,7 @@ import { parseToolOutput } from "../types/tool-contracts";
 import type { ToolContractMap } from "../types/tool-contracts";
 import { validateAnchorFeedbackToolResult } from "../visual-review/anchor-feedback-validation";
 import { validateVisualContractMarkToolResult } from "../visual-review/visual-contract-mark-validation";
+import { toVisualReviewPageViewModel } from "../visual-review/visual-review-page-view-model";
 
 interface BrowserReviewClientOptions {
   navigate?: (url: string) => void;
@@ -547,7 +548,12 @@ export function createBrowserReviewClient(
           },
           snapshot: { revision: payload.snapshotRevision },
         };
-        const validated = validateAnchorFeedbackToolResult(candidate, visualData, input.feedback, input.expectedRevision);
+        const validated = validateAnchorFeedbackToolResult(
+          candidate,
+          toVisualReviewPageViewModel(visualData),
+          input.feedback,
+          input.expectedRevision,
+        );
         if (!validated) {
           const error = new Error("提交结果未闭合，请刷新/重新打开核对权威批次") as Error & { code?: string };
           error.code = "VISUAL_ANCHOR_FEEDBACK_RESULT_UNCLOSED";
@@ -626,7 +632,7 @@ export function createBrowserReviewClient(
       };
       const validated = validateVisualContractMarkToolResult(
         candidate,
-        visualData,
+        toVisualReviewPageViewModel(visualData),
         input.marks,
         input.expectedRevision,
       );
