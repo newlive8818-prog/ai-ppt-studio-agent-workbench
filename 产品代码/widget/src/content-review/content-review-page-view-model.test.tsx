@@ -115,8 +115,13 @@ it("projects only the accepted content review frontend contract", () => {
 });
 
 it("maps empty material views to normal zero-image ViewModel state", () => {
-  const input = projection();
-  input.slides[0].material_views = [];
+  const base = projection();
+  const input = {
+    ...base,
+    slides: base.slides.map((slide, index) => index === 0
+      ? { ...slide, material_views: [] }
+      : slide),
+  } satisfies ContentReviewProjection;
 
   const viewModel = toContentReviewPageViewModel(input);
 
