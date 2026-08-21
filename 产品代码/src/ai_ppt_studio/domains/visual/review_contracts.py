@@ -149,7 +149,11 @@ def _status(value: object, field: str, allowed: set[str]) -> str:
     return status
 
 
-def validate_visual_contract_review_mark(payload: dict[str, Any]) -> dict[str, Any]:
+def validate_visual_contract_review_mark(
+    payload: dict[str, Any],
+    *,
+    created_not_after: datetime | None = None,
+) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ContractValidationError("VisualContractReviewMark must be an object")
     target_type = _status(payload.get("target_type"), "target_type", {"contract-field", "text-range"})
@@ -159,8 +163,22 @@ def validate_visual_contract_review_mark(payload: dict[str, Any]) -> dict[str, A
         raise ContractValidationError("text-range marks require selected_text")
     slide_id = _text(payload.get("slide_id"), "slide_id", optional=True)
     deck_section_id = _text(payload.get("deck_section_id"), "deck_section_id", optional=True)
-    if not slide_id and not deck_section_id:
-        raise ContractValidationError("A contract mark needs a slide or deck section")
+    if bool(slide_id) == bool(deck_section_id):
+        raise ContractValidationError(
+            "A contract mark needs exactly one slide or deck section"
+        )
+    created_at, created_at_value = _timestamp(payload.get("created_at"), "created_at")
+    created_by = _text(payload.get("created_by"), "created_by")
+    if created_by != "user":
+        raise ContractValidationError("created_by must be user")
+    if created_not_after is not None:
+        if (
+            created_not_after.tzinfo is None
+            or created_not_after.utcoffset() is None
+        ):
+            raise ContractValidationError("created_not_after must include a timezone")
+        if created_at_value > created_not_after:
+            raise ContractValidationError("created_at cannot be in the future")
     return {
         "mark_id": _text(payload.get("mark_id"), "mark_id"),
         "target_type": target_type,
@@ -174,8 +192,8 @@ def validate_visual_contract_review_mark(payload: dict[str, Any]) -> dict[str, A
         "visual_contract_ref": _text(payload.get("visual_contract_ref"), "visual_contract_ref"),
         "source_version": _text(payload.get("source_version"), "source_version"),
         "revision": _revision(payload.get("revision")),
-        "created_at": _text(payload.get("created_at"), "created_at"),
-        "created_by": _text(payload.get("created_by"), "created_by"),
+        "created_at": created_at,
+        "created_by": created_by,
     }
 
 
@@ -185,7 +203,14 @@ def validate_visual_contract_review_mark_set(payload: dict[str, Any]) -> dict[st
     raw_marks = payload.get("marks")
     if not isinstance(raw_marks, list) or not raw_marks:
         raise ContractValidationError("VisualContractReviewMarkSet cannot be empty")
-    marks = [validate_visual_contract_review_mark(mark) for mark in raw_marks]
+    saved_at, saved_at_value = _timestamp(payload.get("saved_at"), "saved_at")
+    marks = [
+        validate_visual_contract_review_mark(
+            mark,
+            created_not_after=saved_at_value,
+        )
+        for mark in raw_marks
+    ]
     if len({mark["mark_id"] for mark in marks}) != len(marks):
         raise ContractValidationError("Visual contract mark ids must be unique")
     return {
@@ -199,7 +224,7 @@ def validate_visual_contract_review_mark_set(payload: dict[str, Any]) -> dict[st
         "persistence_status": _status(payload.get("persistence_status"), "persistence_status", {"saved"}),
         "host_notification_status": _status(payload.get("host_notification_status"), "host_notification_status", {"not-requested", "pending", "sent", "failed", "unavailable"}),
         "ai_receipt_status": _status(payload.get("ai_receipt_status"), "ai_receipt_status", {"pending", "received", "rejected", "unverified"}),
-        "saved_at": _text(payload.get("saved_at"), "saved_at"),
+        "saved_at": saved_at,
     }
 
 

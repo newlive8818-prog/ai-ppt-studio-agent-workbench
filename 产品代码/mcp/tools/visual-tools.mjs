@@ -48,11 +48,11 @@ const mark = z.object({
   visual_contract_ref: z.string().trim().min(1),
   source_version: z.string().trim().min(1),
   revision: z.number().int().nonnegative(),
-  created_at: z.string().trim().min(1),
-  created_by: z.string().trim().min(1),
+  created_at: z.string().datetime({ offset: true }),
+  created_by: z.literal("user"),
 }).strict().superRefine((value, issue) => {
-  if (!value.slide_id.trim() && !value.deck_section_id.trim()) {
-    issue.addIssue({ code: "custom", message: "A mark needs a slide or deck section" });
+  if (Boolean(value.slide_id.trim()) === Boolean(value.deck_section_id.trim())) {
+    issue.addIssue({ code: "custom", message: "A mark needs exactly one slide or deck section" });
   }
   if (value.target_type === "text-range" && !value.selected_text.trim()) {
     issue.addIssue({ code: "custom", message: "Text-range marks need selected text" });

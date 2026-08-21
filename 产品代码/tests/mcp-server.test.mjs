@@ -210,6 +210,14 @@ test("MCP exposes data contracts without rendering a Widget in chat", async () =
       ["contract-field", "text-range"],
     );
     assert.equal("field_anchor" in saveTool.inputSchema.properties.marks.items.properties, false);
+    assert.equal(
+      saveTool.inputSchema.properties.marks.items.properties.created_by.const,
+      "user",
+    );
+    assert.equal(
+      saveTool.inputSchema.properties.marks.items.properties.created_at.format,
+      "date-time",
+    );
     const anchorTool = tools.tools.find(
       (tool) => tool.name === "submit_visual_anchor_feedback_batch",
     );
@@ -1290,6 +1298,51 @@ test("visual anchor feedback rejects forged authorship and malformed timestamps 
       assert.equal(accepted.isError, undefined);
       assert.equal(calls.length, callCount + 1);
       assert.equal(calls.at(-1).feedback[0].created_at, createdAt);
+    }
+  } finally {
+    await client.close();
+  }
+});
+
+test("visual contract marks reject dual targets, forged authorship, and malformed timestamps before the bridge", async () => {
+  const { client, calls } = await connectedClient();
+  const mark = {
+    mark_id: "m1",
+    target_type: "contract-field",
+    slide_id: "S01",
+    deck_section_id: "",
+    target_key: "composition_intent",
+    selected_text: "",
+    context_before: "",
+    context_after: "",
+    comment: "调整构图",
+    visual_contract_ref: "visual-contract:v0001:abc123",
+    source_version: "visual-v0001-abc123",
+    revision: 3,
+    created_at: "2026-08-15T00:00:00Z",
+    created_by: "user",
+  };
+  const save = (item) => client.callTool({
+    name: "save_visual_contract_review_marks",
+    arguments: {
+      projectRoot: "/managed/project",
+      expectedRevision: 3,
+      reviewSessionId: "visual-review-session-1",
+      sourceVersion: "visual-v0001-abc123",
+      marks: [item],
+    },
+  });
+  try {
+    for (const invalid of [
+      { ...mark, deck_section_id: "deck-design-system" },
+      { ...mark, created_by: "agent" },
+      { ...mark, created_at: "not-a-timestamp" },
+      { ...mark, created_at: "2026-08-15T00:00:00" },
+    ]) {
+      const callCount = calls.length;
+      const rejected = await save(invalid);
+      assert.equal(rejected.isError, true);
+      assert.equal(calls.length, callCount);
     }
   } finally {
     await client.close();

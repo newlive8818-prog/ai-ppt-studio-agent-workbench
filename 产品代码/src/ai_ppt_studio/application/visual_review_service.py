@@ -66,6 +66,41 @@ REVIEWABLE_SLIDE_OPTIONAL_LIST_FIELDS = (
 MATERIAL_MODES = frozenset(
     {"material-backed", "mixed-evidence", "proposal-led"}
 )
+REVIEWABLE_DESIGN_SYSTEM_FIELDS = (
+    "theme_proposition",
+    "composition_grammar",
+    "color_tokens",
+    "typography_tokens",
+    "page_families",
+    "density_rhythm",
+    "imagery_strategy",
+    "diagram_strategy",
+    "table_strategy",
+    "editability_rules",
+    "accessibility_rules",
+    "forbidden_patterns",
+    "anchor_specification",
+)
+REVIEWABLE_VISUAL_SLIDE_FIELDS = (
+    "core_claim",
+    "visible_copy",
+    "speaker_notes",
+    "source_refs",
+    "communication_goal",
+    "composition_intent",
+    "information_hierarchy",
+    "reading_order",
+    "regions",
+    "object_relationships",
+    "diagram_chart_table_treatment",
+    "image_selection_and_crop",
+    "color_application",
+    "typography_application",
+    "native_bitmap_routing",
+    "editability_requirements",
+    "fallbacks",
+    "acceptance_criteria",
+)
 
 
 class VisualReviewService:
@@ -220,7 +255,14 @@ class VisualReviewService:
     ):
         if not isinstance(marks, list) or not marks:
             raise ContractValidationError("VisualContractReviewMarkSet cannot be empty")
-        normalized = [validate_visual_contract_review_mark(mark) for mark in marks]
+        created_not_after = datetime.now(timezone.utc)
+        normalized = [
+            validate_visual_contract_review_mark(
+                mark,
+                created_not_after=created_not_after,
+            )
+            for mark in marks
+        ]
         values = {
             "review_session_id": review_session_id,
             "source_version": source_version,
@@ -239,7 +281,7 @@ class VisualReviewService:
             source_version=source_version,
             expected_revision=expected_revision,
         )
-        state, contract_ref, contract, _design_ref, _design, _anchor_ref, _anchors, _session = context
+        state, contract_ref, contract, _design_ref, design, _anchor_ref, _anchors, _session = context
         valid_slides = {item.get("slide_id") for item in contract.get("slide_contracts") or []}
         for mark in normalized:
             if (
@@ -249,6 +291,13 @@ class VisualReviewService:
                 or (mark["slide_id"] and mark["slide_id"] not in valid_slides)
             ):
                 raise ReviewSourceStaleError(source_version, str(mark.get("source_version") or ""))
+            target_value = self._contract_mark_target_value(
+                mark=mark,
+                contract=contract,
+                design=design,
+            )
+            if mark["target_type"] == "text-range":
+                self._validate_text_anchor(mark, target_value)
         current = self._optional(
             state, "visual/contract-review-marks", "visual-contract-review-mark-set"
         )
@@ -289,6 +338,172 @@ class VisualReviewService:
         if committed.gate_status != gates:
             raise RuntimeError("Visual marks unexpectedly changed G3")
         return committed.artifact_heads[slot], mark_set, committed
+
+    @classmethod
+    def _contract_mark_target_value(
+        cls,
+        *,
+        mark: dict[str, Any],
+        contract: dict[str, Any],
+        design: dict[str, Any],
+    ) -> Any:
+        target_key = mark["target_key"]
+        slide_id = mark["slide_id"]
+        if slide_id:
+            if target_key not in REVIEWABLE_VISUAL_SLIDE_FIELDS:
+                raise ContractValidationError(
+                    "Visual contract mark target_key is not reviewable"
+                )
+            slide = next(
+                (
+                    item
+                    for item in contract.get("slide_contracts") or []
+                    if item.get("slide_id") == slide_id
+                ),
+                None,
+            )
+            if slide is None:
+                raise ReviewSourceStaleError(slide_id, "")
+            return cls._project_slide_contract(slide)[target_key]
+        if mark["deck_section_id"] != "deck-design-system":
+            raise ContractValidationError(
+                "Visual contract mark deck_section_id is not reviewable"
+            )
+        if target_key not in REVIEWABLE_DESIGN_SYSTEM_FIELDS:
+            raise ContractValidationError(
+                "Deck design system mark target_key is not reviewable"
+            )
+        return cls._project_deck_design_system(design, {})[target_key]
+
+    @staticmethod
+    def _contract_text(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, dict):
+            return "".join(
+                VisualReviewService._contract_text(item)
+                for item in value.values()
+            )
+        if isinstance(value, (list, tuple)):
+            return "".join(
+                VisualReviewService._contract_text(item) for item in value
+            )
+        return str(value)
+
+    @staticmethod
+    def _normalized_contract_text(value: str) -> str:
+        return " ".join(value.split())
+
+    @classmethod
+    def _validate_text_anchor(
+        cls,
+        mark: dict[str, Any],
+        target_value: Any,
+    ) -> None:
+        target_text = cls._normalized_contract_text(
+            cls._contract_text(target_value)
+        )
+        selected_text = cls._normalized_contract_text(mark["selected_text"])
+        context_before = cls._normalized_contract_text(mark["context_before"])
+        context_after = cls._normalized_contract_text(mark["context_after"])
+        anchored = f"{context_before}{selected_text}{context_after}"
+        if not target_text or not selected_text or anchored not in target_text:
+            raise ContractValidationError(
+                "Text-range mark does not match the current contract target"
+            )
+
+    @staticmethod
+    def _project_deck_design_system(
+        design: dict[str, Any],
+        anchor_identity: dict[str, Any],
+    ) -> dict[str, Any]:
+        projected = {
+            key: copy.deepcopy(design.get(key))
+            for key in REVIEWABLE_DESIGN_SYSTEM_FIELDS
+        }
+        projected["production_route"] = copy.deepcopy(
+            design.get("production_route")
+        )
+        if design.get("fallback_fonts") is not None:
+            projected["fallback_fonts"] = copy.deepcopy(
+                design["fallback_fonts"]
+            )
+        if projected["anchor_specification"] is None and anchor_identity:
+            projected["anchor_specification"] = {
+                "slide_ids": copy.deepcopy(anchor_identity.get("slide_ids") or []),
+                "selection_reason": str(
+                    anchor_identity.get("selection_reason") or ""
+                ),
+                "native_first_frozen": anchor_identity.get(
+                    "native_first_frozen"
+                )
+                is True,
+            }
+        return projected
+
+    @staticmethod
+    def _project_slide_contract(slide: dict[str, Any]) -> dict[str, Any]:
+        visible_copy = copy.deepcopy(slide.get("visible_copy"))
+        if visible_copy is None:
+            blocks = slide.get("visible_copy_blocks") or []
+            visible_copy = [
+                str(block.get("text") or "").strip()
+                for block in blocks
+                if isinstance(block, dict) and str(block.get("text") or "").strip()
+            ]
+        if not visible_copy and slide.get("frozen_copy") is not None:
+            visible_copy = copy.deepcopy(slide.get("frozen_copy"))
+        source_refs = copy.deepcopy(slide.get("source_refs"))
+        if source_refs is None:
+            source_refs = []
+            for binding in slide.get("evidence_bindings") or []:
+                if not isinstance(binding, dict):
+                    continue
+                refs = binding.get("source_refs")
+                if isinstance(refs, list):
+                    source_refs.extend(
+                        str(reference).strip()
+                        for reference in refs
+                        if str(reference).strip()
+                    )
+                elif str(binding.get("source_ref") or "").strip():
+                    source_refs.append(
+                        str(binding["source_ref"]).strip()
+                    )
+            source_refs = list(dict.fromkeys(source_refs))
+        return {
+            "slide_id": str(slide.get("slide_id") or ""),
+            "order": slide.get("order"),
+            "neutral_title": str(
+                slide.get("neutral_title")
+                or slide.get("title")
+                or slide.get("page_task")
+                or ""
+            ),
+            "page_family": copy.deepcopy(slide.get("page_family")),
+            "anchor_title": str(
+                slide.get("anchor_title")
+                or slide.get("neutral_title")
+                or slide.get("title")
+                or ""
+            ),
+            "validation_purpose": str(
+                slide.get("validation_purpose")
+                or slide.get("anchor_validation_purpose")
+                or slide.get("page_task")
+                or ""
+            ),
+            **{
+                key: copy.deepcopy(
+                    visible_copy
+                    if key == "visible_copy"
+                    else source_refs
+                    if key == "source_refs"
+                    else slide.get(key)
+                )
+                for key in REVIEWABLE_VISUAL_SLIDE_FIELDS
+            },
+        }
 
     def _context(
         self,

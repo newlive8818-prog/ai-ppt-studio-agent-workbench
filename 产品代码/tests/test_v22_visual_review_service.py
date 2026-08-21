@@ -1528,6 +1528,82 @@ class VisualReviewServiceTests(unittest.TestCase):
                 )
             self.assertEqual(kernel.load(), frozen)
 
+    def test_invalid_contract_marks_are_zero_write_and_do_not_consume_command_identity(self) -> None:
+        variants = {
+            "dual-target": {"deck_section_id": "deck-design-system"},
+            "unknown-slide": {"slide_id": "S99"},
+            "unknown-slide-field": {"target_key": "future_backend_field"},
+            "unknown-deck-field": {
+                "slide_id": "",
+                "deck_section_id": "deck-design-system",
+                "target_key": "future_backend_field",
+            },
+            "forged-author": {"created_by": "agent"},
+            "invalid-time": {"created_at": "not-a-timestamp"},
+            "future-time": {"created_at": "2999-01-01T00:00:00Z"},
+            "fabricated-text-anchor": {
+                "target_type": "text-range",
+                "selected_text": "不存在于当前构图意图",
+                "context_before": "伪造前文",
+                "context_after": "伪造后文",
+            },
+        }
+        for name, updates in variants.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as folder:
+                kernel = ProjectKernel.initialize(Path(folder), project_id="p1")
+                _design_ref, _anchor_ref, contract_ref, _session_ref, session, state = seed_visual_review(kernel)
+                service = VisualReviewService(kernel)
+                command_id = f"invalid-contract-mark-{name}"
+                base = {
+                    "mark_id": "mark-invalid",
+                    "target_type": "contract-field",
+                    "slide_id": "S01",
+                    "deck_section_id": "",
+                    "target_key": "composition_intent",
+                    "selected_text": "",
+                    "context_before": "",
+                    "context_after": "",
+                    "comment": "需要修改",
+                    "visual_contract_ref": contract_ref,
+                    "source_version": "visual-v1",
+                    "revision": state.revision,
+                    "created_at": "2026-08-15T01:00:00+08:00",
+                    "created_by": "user",
+                }
+                invalid = {**base, **updates}
+                before = kernel.load()
+
+                with self.assertRaises((ContractValidationError, ReviewSourceStaleError)):
+                    service.save_contract_review_marks(
+                        command_id=command_id,
+                        expected_revision=before.revision,
+                        review_session_id=session["review_session_id"],
+                        source_version="visual-v1",
+                        marks=[invalid],
+                    )
+
+                rejected = kernel.load()
+                self.assertEqual(rejected, before)
+                self.assertNotIn(command_id, rejected.processed_commands)
+                self.assertNotIn("visual/contract-review-marks", rejected.artifact_heads)
+
+                valid = {
+                    **base,
+                    "target_type": "text-range",
+                    "selected_text": "右因果链",
+                    "context_before": "左事实、",
+                    "context_after": "",
+                }
+                _ref, mark_set, committed = service.save_contract_review_marks(
+                    command_id=command_id,
+                    expected_revision=before.revision,
+                    review_session_id=session["review_session_id"],
+                    source_version="visual-v1",
+                    marks=[valid],
+                )
+                self.assertEqual(committed.revision, before.revision + 1)
+                self.assertEqual(mark_set["marks"][0]["created_by"], "user")
+
 
 if __name__ == "__main__":
     unittest.main()

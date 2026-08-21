@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import sys
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -152,9 +153,19 @@ class VisualReviewContractTests(unittest.TestCase):
             {**field, "target_type": "point"},
             {**text, "selected_text": ""},
             {**field, "target_key": ""},
+            {**field, "slide_id": "S01", "deck_section_id": "deck-design-system"},
+            {**field, "created_by": "agent"},
+            {**field, "created_at": "not-a-timestamp"},
+            {**field, "created_at": "2026-08-15T01:00:00"},
         ):
             with self.assertRaises(ContractValidationError):
                 validate_visual_contract_review_mark(invalid)
+
+        with self.assertRaises(ContractValidationError):
+            validate_visual_contract_review_mark(
+                {**field, "created_at": "2999-01-01T00:00:00Z"},
+                created_not_after=datetime.now(timezone.utc),
+            )
 
 
 if __name__ == "__main__":
