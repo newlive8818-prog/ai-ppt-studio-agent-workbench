@@ -318,7 +318,7 @@
       "source_file": "01-产品需求基线-v1.0.md",
       "source_section": "内容与审核",
       "status": "unproven",
-      "text": "左栏显示“页面实际文字”，右栏显示“文字与图片材料一起审核”；"
+      "text": "每页显示“页面实际文字”；存在至少一个真实可审核画面时显示“文字与图片材料一起审核”及画面；"
     },
     {
       "missing_evidence": [
@@ -334,7 +334,39 @@
       "source_file": "01-产品需求基线-v1.0.md",
       "source_section": "内容与审核",
       "status": "unproven",
-      "text": "恢复上述四项不得带回演讲备注、证据身份/来源入口、映射、跨页关系、阅读质量或材料元数据目录。"
+      "text": "零图片页面不显示图片区、图片区标题、大面积空状态或补图提示，“页面实际文字”扩展到整行；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-017",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "所有材料模式均允许单页 `material_views = []`，零图片不自动产生证据不足；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "PRD-ACC-CONTENT-018",
+      "source_file": "01-产品需求基线-v1.0.md",
+      "source_section": "内容与审核",
+      "status": "unproven",
+      "text": "上述可见内容不得带回演讲备注、证据身份/来源入口、映射、跨页关系、阅读质量或材料元数据目录。"
     },
     {
       "missing_evidence": [
@@ -958,7 +990,7 @@
       "source_file": "02-系统详细设计-v1.0.md",
       "source_section": "集成测试",
       "status": "unproven",
-      "text": "每页 DOM 同时存在“这一页的目标”“希望客户形成的判断”“页面实际文字”“文字与图片材料一起审核”，并有对应内容或画面；"
+      "text": "每页 DOM 存在“这一页的目标”“希望客户形成的判断”和“页面实际文字”；仅有图片页存在“文字与图片材料一起审核”及画面；"
     },
     {
       "missing_evidence": [
@@ -1055,6 +1087,22 @@
       "source_section": "集成测试",
       "status": "unproven",
       "text": "文字范围标记只在同一可审核字段内真实选中文字后出现，字段评论入口与文字范围草稿均进入独立合同标记集合。"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence"
+      ],
+      "requirement_id": "SDD-ACC-INTEGRATION-025",
+      "source_file": "02-系统详细设计-v1.0.md",
+      "source_section": "集成测试",
+      "status": "unproven",
+      "text": "三种材料模式均允许单页 `material_views = []`；零图片页不触发资源读取、不自动产生证据不足，正文占满可用宽度。"
     },
     {
       "missing_evidence": [
@@ -1230,7 +1278,7 @@
       "source_file": "02-系统详细设计-v1.0.md",
       "source_section": "回归测试",
       "status": "unproven",
-      "text": "实际成稿标题、段落、要点、材料/页面画面、四类 PageDecision 和页内意见完整保留；"
+      "text": "实际成稿标题、段落、要点、可选材料/页面画面、四类 PageDecision 和页内意见完整保留；零图片页不显示空图片区；"
     },
     {
       "missing_evidence": [
@@ -1566,7 +1614,7 @@
       "source_file": "03-UI设计与交互规范-v1.0.md",
       "source_section": "内容审核",
       "status": "unproven",
-      "text": "所有实际成稿标题、段落和要点完整存在，并与真实材料或页面画面处于同一审核上下文；"
+      "text": "所有实际成稿标题、段落和要点完整存在；存在真实材料或页面画面时与正文处于同一审核上下文；"
     },
     {
       "missing_evidence": [
@@ -1944,7 +1992,7 @@
       "source_file": "03-UI设计与交互规范-v1.0.md",
       "source_section": "内容审核",
       "status": "unproven",
-      "text": "每页同时显示“这一页的目标”“希望客户形成的判断”“页面实际文字”“文字与图片材料一起审核”；"
+      "text": "每页显示“这一页的目标”“希望客户形成的判断”和“页面实际文字”；"
     },
     {
       "missing_evidence": [
@@ -1962,7 +2010,7 @@
       "source_file": "03-UI设计与交互规范-v1.0.md",
       "source_section": "内容审核",
       "status": "unproven",
-      "text": "前两项显示真实内容，后两项分别标识实际成稿栏和材料/页面画面栏；"
+      "text": "仅有图片页显示“文字与图片材料一起审核”及真实画面；"
     },
     {
       "missing_evidence": [
@@ -1980,7 +2028,43 @@
       "source_file": "03-UI设计与交互规范-v1.0.md",
       "source_section": "内容审核",
       "status": "unproven",
-      "text": "恢复四项不带回其他已删除后台模块。"
+      "text": "零图片页不显示图片区、图片区标题、空状态框或补图提示，实际文字占满整行；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-026",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "零图片不会自动产生“证据不足”，所有材料模式均允许单页无图；"
+    },
+    {
+      "missing_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "proof_refs": [],
+      "required_evidence": [
+        "automated-test",
+        "runtime-evidence",
+        "viewport-evidence"
+      ],
+      "requirement_id": "UI-ACC-CONTENT-027",
+      "source_file": "03-UI设计与交互规范-v1.0.md",
+      "source_section": "内容审核",
+      "status": "unproven",
+      "text": "上述呈现不带回其他已删除后台模块。"
     },
     {
       "missing_evidence": [
