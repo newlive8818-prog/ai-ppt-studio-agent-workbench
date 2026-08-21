@@ -493,11 +493,8 @@ def validate_reading_deck_blueprint(payload: dict[str, Any]) -> dict[str, Any]:
                 raise ContractValidationError("proposal-led slides require hypothesis, recommendation, and validation identities")
             if slide["evidence_bindings"]:
                 raise ContractValidationError("proposal-led slides cannot cite project evidence")
-        else:
-            if not slide["evidence_bindings"]:
-                raise ContractValidationError(f"{mode} slides require evidence bindings")
-            if not slide["material_views"]:
-                raise ContractValidationError(f"{mode} slides require material views")
+        elif not slide["evidence_bindings"]:
+            raise ContractValidationError(f"{mode} slides require evidence bindings")
         slides.append(slide)
     orders = [slide["order"] for slide in slides]
     if sorted(orders) != list(range(1, len(slides) + 1)):

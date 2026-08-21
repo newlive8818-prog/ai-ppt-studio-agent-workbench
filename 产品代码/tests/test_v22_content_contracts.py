@@ -269,20 +269,19 @@ class V22ContentContractTests(unittest.TestCase):
         with self.assertRaises(ContractValidationError):
             validate_presales_evidence_book(invalid)
 
-    def test_material_modes_require_closed_material_views_and_preserve_them(self) -> None:
+    def test_all_material_modes_allow_empty_material_views_and_preserve_closed_views(self) -> None:
         expected = material_view()
+        for mode in ("material-backed", "mixed-evidence", "proposal-led"):
+            with self.subTest(mode=mode, material_views="empty"):
+                without_views = blueprint(mode)
+                without_views["slides"][0]["material_views"] = []
+                validated = validate_reading_deck_blueprint(without_views)
+                self.assertEqual(validated["slides"][0]["material_views"], [])
+
         for mode in ("material-backed", "mixed-evidence"):
-            with self.subTest(mode=mode):
+            with self.subTest(mode=mode, material_views="present"):
                 validated = validate_reading_deck_blueprint(blueprint(mode))
                 self.assertEqual(validated["slides"][0]["material_views"], [expected])
-
-                missing_views = blueprint(mode)
-                missing_views["slides"][0]["material_views"] = []
-                with self.assertRaises(ContractValidationError):
-                    validate_reading_deck_blueprint(missing_views)
-
-        proposal = validate_reading_deck_blueprint(blueprint("proposal-led"))
-        self.assertEqual(proposal["slides"][0]["material_views"], [])
 
         for field in expected:
             with self.subTest(missing_field=field):
@@ -295,6 +294,18 @@ class V22ContentContractTests(unittest.TestCase):
         invalid["slides"][0]["material_views"][0]["unexpected"] = "not closed"
         with self.assertRaises(ContractValidationError):
             validate_reading_deck_blueprint(invalid)
+
+    def test_material_modes_still_require_evidence_bindings_when_views_are_empty(self) -> None:
+        for mode in ("material-backed", "mixed-evidence"):
+            with self.subTest(mode=mode):
+                invalid = blueprint(mode)
+                invalid["slides"][0]["material_views"] = []
+                invalid["slides"][0]["evidence_bindings"] = []
+                with self.assertRaisesRegex(
+                    ContractValidationError,
+                    rf"{mode} slides require evidence bindings",
+                ):
+                    validate_reading_deck_blueprint(invalid)
 
     def test_material_view_asset_ref_must_be_a_safe_project_relative_posix_path(self) -> None:
         for asset_ref in (
