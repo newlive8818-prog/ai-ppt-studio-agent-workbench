@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import importlib
+import pkgutil
 import unittest
 from pathlib import Path
+
+import ai_ppt_studio
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +19,7 @@ class V22SourceShapeTests(unittest.TestCase):
             SRC / "application" / "workspace_projection.py",
             SRC / "application" / "framework_discussion_service.py",
             SRC / "application" / "content_action_policy.py",
+            SRC / "application" / "content_batch_planning_service.py",
             SRC / "application" / "content_service.py",
             SRC / "application" / "content_review_service.py",
             SRC / "domains" / "content" / "framework.py",
@@ -30,6 +35,8 @@ class V22SourceShapeTests(unittest.TestCase):
         for forbidden in (
             "application.content_service",
             "application.content_action_policy",
+            "content_batch_planning_service",
+            "ContentBatchPlanningService",
             "framework_discussion_service",
             "domains.content.framework",
             "content/framework-confirmation",
@@ -53,6 +60,24 @@ class V22SourceShapeTests(unittest.TestCase):
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, formal + content_contracts)
+
+    def test_formal_python_modules_import_without_retired_dependencies(self) -> None:
+        executable_entrypoints = {"ai_ppt_studio.__main__"}
+        modules = sorted(
+            module.name
+            for module in pkgutil.walk_packages(
+                ai_ppt_studio.__path__,
+                f"{ai_ppt_studio.__name__}.",
+            )
+            if module.name not in executable_entrypoints
+        )
+        failures: dict[str, str] = {}
+        for module_name in modules:
+            try:
+                importlib.import_module(module_name)
+            except Exception as error:  # noqa: BLE001 - report the exact import debt
+                failures[module_name] = f"{type(error).__name__}: {error}"
+        self.assertEqual(failures, {})
 
     def test_formal_bridge_has_no_sidebar_framework_expansion_or_generic_write(self) -> None:
         sources = "\n".join(
