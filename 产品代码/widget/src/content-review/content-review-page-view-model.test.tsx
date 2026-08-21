@@ -114,6 +114,28 @@ it("projects only the accepted content review frontend contract", () => {
   });
 });
 
+it("maps empty material views to normal zero-image ViewModel state", () => {
+  const input = projection();
+  input.slides[0].material_views = [];
+
+  const viewModel = toContentReviewPageViewModel(input);
+
+  expect(viewModel.slides[0].materialVisuals).toEqual([]);
+  expect(viewModel.slides[0]).toMatchObject({
+    pageGoal: "确认当前流程断点及证据边界",
+    customerJudgment: "客户确认现状边界后，再判断是否进入联合方案验证。",
+    readingQuestion: "现有材料能否支撑当前判断？",
+    draftContent: {
+      title: "当前流程断点与证据边界",
+      blocks: [{
+        blockId: "copy-1",
+        type: "paragraph",
+        text: "当前流程存在三个待核实断点。",
+      }],
+    },
+  });
+});
+
 it("does not expose rejected governance or material metadata fields", () => {
   const keys = collectKeys(toContentReviewPageViewModel(projection()));
   for (const field of [
