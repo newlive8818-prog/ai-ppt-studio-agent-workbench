@@ -90,6 +90,47 @@ describe("Browser Review loopback client", () => {
     expect(result.snapshot.revision).toBe(8);
   });
 
+  it("surfaces a stable save-capability error when the scoped Bridge session expired", async () => {
+    window.history.replaceState(null, "", "/#token=short-lived-token");
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            projectRoot: "/managed/project",
+            expectedRevision: 7,
+            review: {
+              review_type: "content",
+              project_id: "p1",
+              project_name: "测试项目",
+              source_version: "content-v1",
+              sections: [],
+              outline: [],
+              mark_set: { marks: [] },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: false,
+            error: { code: "REVIEW_SESSION_EXPIRED", message: "Review session expired." },
+          }),
+          { status: 410, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const client = createBrowserReviewClient();
+    await client.connect();
+
+    await expect(client.callTool("save_review_marks", {
+      expectedRevision: 7,
+      sourceVersion: "content-v1",
+      marks: [],
+    })).rejects.toMatchObject({ code: "BROWSER_REVIEW_SAVE_UNAVAILABLE" });
+  });
+
   it("switches through the authenticated Bridge endpoint and navigates to the new scoped session", async () => {
     window.history.replaceState(null, "", "/#token=short-lived-token");
     const navigate = vi.fn();

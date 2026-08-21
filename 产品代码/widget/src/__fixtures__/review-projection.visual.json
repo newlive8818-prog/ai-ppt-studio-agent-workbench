@@ -4,12 +4,27 @@
   "project_id": "p1",
   "project_name": "经营一体化方案",
   "title": "可信的经营证据链",
-  "revision": 28,
-  "source_version": "artifact://visual-contract/74cfa2a8a2ba9b8c3194ad8a80eb5c02845b53bee35a32b0acfd8754de4987d2",
+  "revision": 27,
+  "source_version": "artifact://visual-contract/649616d8d6a647129ab6b7fb539f1ac5078a81df1721fff94eca4eb8beccc65d",
   "source_refs": [
-    "artifact://visual-contract/74cfa2a8a2ba9b8c3194ad8a80eb5c02845b53bee35a32b0acfd8754de4987d2"
+    "artifact://visual-contract/649616d8d6a647129ab6b7fb539f1ac5078a81df1721fff94eca4eb8beccc65d"
   ],
   "status": "user-reviewable",
+  "release_target_policy": {
+    "policy_ref": "artifact://release-target-policy/d9dce456f059dbf4c72d20825d02864ddc9b9fcbb21bee88d77310f0b3bb8384",
+    "policy_id": "v1.6-macos-powerpoint",
+    "required_target_ids": [
+      "macos-powerpoint"
+    ],
+    "deferred_target_ids": [
+      "macos-wps",
+      "windows-powerpoint",
+      "windows-wps"
+    ],
+    "compatibility_claim_scope": [
+      "macos-powerpoint"
+    ]
+  },
   "gate_status": {
     "G1": "passed",
     "G2": "passed",
@@ -37,23 +52,23 @@
               "s1",
               "s2"
             ],
-            "visual_contract_set_ref": "artifact://visual-contract-set/844c9eb22a01b2a8898811678f6cf967ebc8dfcef2510d96c4bed33c7fc79841"
+            "visual_contract_set_ref": "artifact://visual-contract-set/50f31a5ef61f0353a8255257ce61cd6b58d6d90fde2faa9c80ee8cfd04646550"
           }
         },
         {
           "anchor": "visual-framework-anchor-slide-set-ref",
           "label": "anchor_slide_set_ref",
-          "value": "artifact://anchor-slide-set/8bba18dcbbe926e706df7cce93f939831bbd0845e6eca25358a1fc9c39511fd0"
+          "value": "artifact://anchor-slide-set/dd8fbffc01b801491a513d36de7079b935193bccdefefbe8aec8a13be057e260"
         },
         {
           "anchor": "visual-framework-content-blueprint-ref",
           "label": "content_blueprint_ref",
-          "value": "artifact://content-blueprint/9bc7b41c18a89619b047814d2412803539e78753a1e7305b66301795e3683820"
+          "value": "artifact://content-blueprint/d26b810155a7fac4fdbc11fefd1bed9fbbe748b30611bdc4a119c4816eefe631"
         },
         {
           "anchor": "visual-framework-deck-design-system-ref",
           "label": "deck_design_system_ref",
-          "value": "artifact://deck-design-system/2ba93b0624a741672653e59a9dcff7cc2adcebdbfe9f98ef256863c3f581055d"
+          "value": "artifact://deck-design-system/70d6bfc21f7fd280411e97bfe9736994684e11011277d896945871338ef72b35"
         },
         {
           "anchor": "visual-framework-deck-framework",
@@ -66,8 +81,10 @@
                   "task": "建立问题共识"
                 }
               ],
-              "claim_evidence_map_ref": "artifact://claim-evidence-map/ff020079340329d6ea04ea1083215a4d00ad40102643c9316745654e9b843b7f",
-              "strategy_ref": "artifact://presales-content-strategy/6e8bc5c2e61c3d8d18b0ab7a5aa46b27a49da0bfbc788395538c8e3267877288"
+              "claim_evidence_map_ref": "artifact://claim-evidence-map/89b15f81b15574e41d2be9857bcf5eec87c0d1b4b0973a6b1b3e415ce6e8757f",
+              "content_identity_mode": "material-backed",
+              "mission_confirmation_ref": "artifact://mission-confirmation/707b2b66d593d8374cd339158bf2d4f25e61439de5196e8f034b49dbff73a4e2",
+              "strategy_ref": "artifact://presales-content-strategy/6bfa1198c8115e06a81148e5e8ca6e15eeb0e522b8cbcd7d1e9cd8a12042b949"
             },
             "slides": [
               {
@@ -99,25 +116,54 @@
               }
             ],
             "strategy": {
+              "content_identity_mode": "material-backed",
               "core_tension": "系统割裂",
               "decision_stage": "立项",
               "material_inventory_ref": "artifact://material-inventory/55840994c3d4e395c46ac9d7ecc0697adde099dd443b28da7cb5dd77ac952b20",
-              "mission_ref": "artifact://mission-draft/1ae58399e0cf5233ce148541e8b6c930d611b6cc33f178632961df89d9d8b98a"
+              "mission_confirmation_ref": "artifact://mission-confirmation/707b2b66d593d8374cd339158bf2d4f25e61439de5196e8f034b49dbff73a4e2",
+              "mission_ref": "artifact://mission-draft/32f8fc17ae8e84703bc6fa6454466f3bc36fc0dcee028c6fa9c1aa923980ac44"
             }
           }
+        },
+        {
+          "anchor": "visual-framework-deferred-target-ids",
+          "label": "deferred_target_ids",
+          "value": [
+            "macos-wps",
+            "windows-powerpoint",
+            "windows-wps"
+          ]
+        },
+        {
+          "anchor": "visual-framework-g2-reviewed-lineage-ref",
+          "label": "g2_reviewed_lineage_ref",
+          "value": "artifact://g2-visual-lineage/5968b8d322284b2b16c373223ed91105d4fce7201e606f5b20f340bc0ac224f8"
         },
         {
           "anchor": "visual-framework-internal-review-refs",
           "label": "internal_review_refs",
           "value": [
-            "artifact://visual-review-record/ea07a1665d782ecfd2c1891556e780a2944e9ab94c8d8baf6e9e334cf3e7a29a",
-            "artifact://visual-review-record/3a1ec31da01c14359677f5a8ad8efb439ee08a015db8dacb7e38916759e26dde"
+            "artifact://visual-review-record/8a5bd5682c8cea44e84976cf27fc72ab8c314af97c794b75681d9890d4e83ea2",
+            "artifact://visual-review-record/af8621cc44da6e6dcaf23ada4a8b72c019c754d2f1845aca39ba5d047cb6e973",
+            "artifact://visual-review-record/d36dfab5f0d58e3bc2b24148b83c8a5c93af87165762a78b895592440d5503bb"
           ]
         },
         {
           "anchor": "visual-framework-production-route",
           "label": "production_route",
           "value": "strict-B"
+        },
+        {
+          "anchor": "visual-framework-release-target-policy-ref",
+          "label": "release_target_policy_ref",
+          "value": "artifact://release-target-policy/d9dce456f059dbf4c72d20825d02864ddc9b9fcbb21bee88d77310f0b3bb8384"
+        },
+        {
+          "anchor": "visual-framework-required-target-ids",
+          "label": "required_target_ids",
+          "value": [
+            "macos-powerpoint"
+          ]
         },
         {
           "anchor": "visual-framework-role-runs",
@@ -160,45 +206,6 @@
               "pptx_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
               "overall_result": "passed",
               "evidence_ref": "artifact://target-render-capture/0c7b04ce270a474ac6393499ab1175c24a8737a9433afdc7414890e305c97de0"
-            },
-            {
-              "target_id": "macos-wps",
-              "operating_system": "macOS",
-              "operating_system_version": "15.6",
-              "application": "WPS Office",
-              "application_version": "macos_wps/test-version",
-              "font_inventory_ref": "artifact://font-inventory/01e7853698d87beebe149d6af868a5689dfdc3a0c604920c7c6e7547b858e282",
-              "font_substitution_plan_ref": "artifact://font-plan/75282ec268351087bf79ee2805d7f4f38f6458b3ab8f469e0b4846f79f7dde13",
-              "source_pptx_ref": "artifact://native-pptx/0d2a92a9a6b2468af2ca0ae73c889ea758d1e54cf7eabe9f4284554328c1eac7",
-              "pptx_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-              "overall_result": "passed",
-              "evidence_ref": "artifact://target-render-capture/4f832a15403d1a1a011f10e88accab3f7c6773b6dc0112fe042b1fbcb9b82fc7"
-            },
-            {
-              "target_id": "windows-powerpoint",
-              "operating_system": "Windows 11",
-              "operating_system_version": "24H2",
-              "application": "Microsoft PowerPoint",
-              "application_version": "windows_powerpoint/test-version",
-              "font_inventory_ref": "artifact://font-inventory/8afce276da77580b10f18cd9ed862f4b61c421bcec8c067f009836fda90e89dd",
-              "font_substitution_plan_ref": "artifact://font-plan/cbd5a2fafb5c3a9de68014ab31f8a4d9a4d146e0f029700479bd390e3eddc8f0",
-              "source_pptx_ref": "artifact://native-pptx/0d2a92a9a6b2468af2ca0ae73c889ea758d1e54cf7eabe9f4284554328c1eac7",
-              "pptx_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-              "overall_result": "passed",
-              "evidence_ref": "artifact://target-render-capture/c1009d1403804f147915248c47ad3b94a392aecdb226d5d0cc867ae7a8506795"
-            },
-            {
-              "target_id": "windows-wps",
-              "operating_system": "Windows 11",
-              "operating_system_version": "24H2",
-              "application": "WPS Office",
-              "application_version": "windows_wps/test-version",
-              "font_inventory_ref": "artifact://font-inventory/9f4ca7f65f71c965f13437efc1d4bf3c5979444fa5d56b985e975087d82e602b",
-              "font_substitution_plan_ref": "artifact://font-plan/9d60cab1399b11d05e3157c792b5c989fb4132a0ee72fef4e967f9957d68420d",
-              "source_pptx_ref": "artifact://native-pptx/0d2a92a9a6b2468af2ca0ae73c889ea758d1e54cf7eabe9f4284554328c1eac7",
-              "pptx_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-              "overall_result": "passed",
-              "evidence_ref": "artifact://target-render-capture/6c1c96ebcb2cdec695c5340055211df04d27097f05b9b811ca91e569bdc162b4"
             }
           ]
         },
@@ -206,16 +213,23 @@
           "anchor": "visual-framework-target-evidence-refs",
           "label": "target_evidence_refs",
           "value": [
-            "artifact://target-render-evidence/e93b63d09de556c2ca7a3e50ff6b49be2f411f032b10c1e57775fc08a1b2a23d",
-            "artifact://target-render-evidence/f62e84953f623083a10c1e071b33cc6e49ac597f6d9d03dd800bdf7a4a362e36",
-            "artifact://target-render-evidence/cde723b85b662e283a20d35255b7cf58beda392432fa32d734a1b54a7eb263c3",
-            "artifact://target-render-evidence/5a86fef98b2b11d70c7efc9dea19fb1a2392e63bd0316c8540dc5bfdfd986562"
+            "artifact://target-render-evidence/a75ee78e64e8b6d0afaa6b3f38651a292fe0bbd8b3049df5a765f3d0fd160c7b"
           ]
+        },
+        {
+          "anchor": "visual-framework-visual-brief-ref",
+          "label": "visual_brief_ref",
+          "value": "artifact://visual-brief/1ff2e6512f40521d79a05d212389753365301dc54b75cc080bf7f387e0acabbe"
         },
         {
           "anchor": "visual-framework-visual-contract-set-ref",
           "label": "visual_contract_set_ref",
-          "value": "artifact://visual-contract-set/844c9eb22a01b2a8898811678f6cf967ebc8dfcef2510d96c4bed33c7fc79841"
+          "value": "artifact://visual-contract-set/50f31a5ef61f0353a8255257ce61cd6b58d6d90fde2faa9c80ee8cfd04646550"
+        },
+        {
+          "anchor": "visual-framework-visual-convergence-ref",
+          "label": "visual_convergence_ref",
+          "value": "artifact://visual-convergence/83eaa3c4f623e3a19b24f20bf5449ff6e7faa968a0a6f66b3df97a3c51a140de"
         }
       ]
     },
@@ -239,7 +253,7 @@
         {
           "anchor": "deck-design-system-content-blueprint-ref",
           "label": "content_blueprint_ref",
-          "value": "artifact://content-blueprint/9bc7b41c18a89619b047814d2412803539e78753a1e7305b66301795e3683820"
+          "value": "artifact://content-blueprint/d26b810155a7fac4fdbc11fefd1bed9fbbe748b30611bdc4a119c4816eefe631"
         },
         {
           "anchor": "deck-design-system-diagram-strategy",
@@ -320,7 +334,7 @@
         {
           "anchor": "deck-design-system-visual-brief-ref",
           "label": "visual_brief_ref",
-          "value": "artifact://visual-brief/f5fe93964b4471d50c54fb0e3ec60dc891012db594a34e7390edab59355ae29a"
+          "value": "artifact://visual-brief/1ff2e6512f40521d79a05d212389753365301dc54b75cc080bf7f387e0acabbe"
         }
       ]
     },
@@ -635,7 +649,7 @@
   "mark_set": {
     "project_id": "p1",
     "review_type": "visual",
-    "source_version": "artifact://visual-contract/74cfa2a8a2ba9b8c3194ad8a80eb5c02845b53bee35a32b0acfd8754de4987d2",
+    "source_version": "artifact://visual-contract/649616d8d6a647129ab6b7fb539f1ac5078a81df1721fff94eca4eb8beccc65d",
     "revision": 0,
     "status": "draft",
     "marks": []

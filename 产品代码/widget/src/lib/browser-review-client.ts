@@ -89,9 +89,21 @@ export function createBrowserReviewClient(
           marks: args.marks,
         }),
       });
-      const payload = (await jsonOrError(response)) as {
-        snapshotRevision: number;
-      };
+      let payload: { snapshotRevision: number };
+      try {
+        payload = (await jsonOrError(response)) as { snapshotRevision: number };
+      } catch (cause) {
+        const original = cause as Error & { code?: string };
+        if (original.code === "REVIEW_SESSION_EXPIRED") {
+          const error = new Error(
+            "Browser Review save session expired; reopen the review and retry.",
+          ) as Error & { code?: string; cause?: unknown };
+          error.code = "BROWSER_REVIEW_SAVE_UNAVAILABLE";
+          error.cause = cause;
+          throw error;
+        }
+        throw cause;
+      }
       data = { ...data, snapshotRevision: payload.snapshotRevision };
       return {
         snapshot: { revision: payload.snapshotRevision },

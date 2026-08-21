@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArgumentMapSection,
   ContentSheet,
+  ReleaseTargetEvidenceSection,
   StrategySection,
   VisualContractSheet,
   statusLabel,
@@ -12,6 +13,7 @@ import type {
   DecisionResult,
   HostBridge,
   ReviewMark,
+  ReviewProjection,
   ReviewWidgetData,
 } from "./types";
 
@@ -45,6 +47,64 @@ function occurrenceCount(haystack: string, needle: string) {
     count += 1;
     cursor = found + needle.length;
   }
+}
+
+function ContentEvidenceSurface({ review }: { review: ReviewProjection }) {
+  const view = review.evidence_view;
+  if (!view) {
+    return (
+      <main className="content-evidence-review missing">
+        <h1>材料证据不可用</h1>
+        <p>当前只读会话没有绑定可展示的页面与材料。</p>
+      </main>
+    );
+  }
+  const { slide, evidence, adjacent, asset } = view;
+  const visibleCopy = Array.isArray(slide.visible_copy) ? slide.visible_copy : [];
+  const imageSource = asset ? `data:${asset.mimeType};base64,${asset.dataBase64}` : "";
+  return (
+    <div className="content-evidence-review">
+      <header className="content-evidence-review-header">
+        <div>
+          <p>只读证据会话 · 不保存页面判断或审阅标记</p>
+          <strong>{review.project_name}</strong>
+        </div>
+        <code>{review.source_version}</code>
+      </header>
+      <main>
+        <section className="content-evidence-title">
+          <div><span>{String(slide.order).padStart(2, "0")}</span><small>{slide.slide_id}</small></div>
+          <div><p>当前内容页</p><h1>{slide.neutral_title}</h1><strong>{slide.page_task}</strong></div>
+        </section>
+
+        <div className="content-evidence-compare-grid">
+          <section className="content-evidence-source-card">
+            <header><span>原始材料与使用区域</span><small>{evidence.source_page_or_region}</small></header>
+            {imageSource ? <img src={imageSource} alt={`${evidence.source_file} ${evidence.source_page_or_region}`} /> : <div className="content-evidence-asset-missing">原始材料预览暂不可读</div>}
+            <dl>
+              <div><dt>来源文件</dt><dd>{evidence.source_file}</dd></div>
+              <div><dt>材料身份</dt><dd>{evidence.material_ref}</dd></div>
+              <div><dt>裁切 / 使用区域</dt><dd>{evidence.used_region}</dd></div>
+              <div><dt>处理方式</dt><dd>{evidence.treatment}</dd></div>
+            </dl>
+          </section>
+
+          <section className="content-evidence-slide-card">
+            <header><span>当前页如何使用这份材料</span><small>来源页 ↔ 当前内容页</small></header>
+            {slide.reading_question ? <div><b>阅读问题</b><p>{slide.reading_question}</p></div> : null}
+            <div><b>支持事项</b><p>{evidence.supports_claim}</p></div>
+            <div><b>当前页文字</b>{visibleCopy.map((copy, index) => <p key={copy.copy_id || index}>{copy.text}</p>)}</div>
+            {evidence.evidence_gap ? <div className="gap"><b>仍存在的证据缺口</b><p>{evidence.evidence_gap}</p></div> : null}
+          </section>
+        </div>
+
+        <section className="content-evidence-adjacent" aria-label="相邻页面比较">
+          <div><span>上一页</span>{adjacent.previous ? <><strong>{adjacent.previous.neutral_title}</strong><p>{adjacent.previous.page_task}</p></> : <p>当前是本稿第一页。</p>}</div>
+          <div><span>下一页</span>{adjacent.next ? <><strong>{adjacent.next.neutral_title}</strong><p>{adjacent.next.page_task}</p></> : <p>当前是本稿最后一页。</p>}</div>
+        </section>
+      </main>
+    </div>
+  );
 }
 
 /* ── Main App ── */
@@ -347,6 +407,10 @@ export function ProfessionalReviewApp({ initialData, bridge, managedConnection =
     );
   }
 
+  if (data.review.review_type === "content-evidence") {
+    return <ContentEvidenceSurface review={data.review} />;
+  }
+
   const review = data.review;
   const isContent = review.review_type === "content";
   const sections = review.sections;
@@ -369,9 +433,16 @@ export function ProfessionalReviewApp({ initialData, bridge, managedConnection =
   const targetEvidenceRows = Array.isArray(targetEvidenceField?.value)
     ? targetEvidenceField.value.filter((item) => Boolean(item) && typeof item === "object")
     : [];
+  const releaseTargetPolicy = review.release_target_policy;
   const currentTargetEvidenceCount = targetEvidenceRows.filter((item) =>
-    String((item as Record<string, unknown>).overall_result || "") === "passed"
+    releaseTargetPolicy?.required_target_ids.some(
+      (targetId) => targetId === String((item as Record<string, unknown>).target_id || ""),
+    ) && String((item as Record<string, unknown>).overall_result || "") === "passed"
   ).length;
+  const requiredTargetCount = releaseTargetPolicy?.required_target_ids.length || 0;
+  const visualFrameworkFields = (overviewSection?.fields || []).filter(
+    (field) => !["target_evidence_identities", "target_evidence_refs"].includes(field.label),
+  );
   const contentStatus = review.status;
   const g1Status = review.gate_status.G1 || "locked";
   const g2Status = review.gate_status.G2 || "locked";
@@ -397,15 +468,16 @@ export function ProfessionalReviewApp({ initialData, bridge, managedConnection =
         </div>
 
         <div className="review-mode-switch" aria-label="审阅文档切换">
-          <button
-            className={isContent ? "active" : ""}
-            type="button"
-            aria-pressed={isContent}
-            disabled={switching}
-            onClick={() => void switchReview("content")}
-          >
-            内容审阅
-          </button>
+          {isContent && (
+            <button
+              className="active"
+              type="button"
+              aria-pressed="true"
+              disabled={switching}
+            >
+              内容审阅
+            </button>
+          )}
           <button
             className={!isContent ? "active" : ""}
             type="button"
@@ -549,7 +621,7 @@ export function ProfessionalReviewApp({ initialData, bridge, managedConnection =
                   ? "内容蓝图已形成用户可审版本。用户看到的版本已经过售前策略、证据、叙事、表达和独立总编审查。"
                   : `当前内容审阅状态：${statusLabel(contentStatus)}。上一份有效结果与全部字段仍保留。`
                 : g2Status === "passed"
-                  ? "整套 PPT 框架、Deck Design System、逐页合同与四目标证据身份已经齐备；视觉样张仍由聊天发送。"
+                  ? "整套 PPT 框架、Deck Design System、逐页合同与当前发布目标证据已经齐备；视觉样张仍由聊天发送。"
                   : `当前 G2 工程与实机验证${statusLabel(g2Status)}。合同字段保持完整，不能据此确认视觉合同。`}
             </p>
             <div className="review-status-row">
@@ -633,7 +705,13 @@ export function ProfessionalReviewApp({ initialData, bridge, managedConnection =
                   <span className="review-legend-item reference"><i />参考实现，可被更优秀方案替代</span>
                 </div>
               </div>
-              <StrategySection fields={overviewSection.fields} onMark={startFieldMark} />
+              {releaseTargetPolicy && (
+                <ReleaseTargetEvidenceSection
+                  value={targetEvidenceField?.value}
+                  policy={releaseTargetPolicy}
+                />
+              )}
+              <StrategySection fields={visualFrameworkFields} onMark={startFieldMark} />
             </section>
           )}
           {!isContent && designSystemSection && (
@@ -676,6 +754,7 @@ export function ProfessionalReviewApp({ initialData, bridge, managedConnection =
                     onMark={startFieldMark}
                     status={g2Status}
                     targetEvidenceCount={currentTargetEvidenceCount}
+                    requiredTargetCount={requiredTargetCount}
                   />
                 )
               )}

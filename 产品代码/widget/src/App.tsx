@@ -11,6 +11,14 @@ interface Props {
   managedConnection?: boolean;
 }
 
+interface BrowserReviewOpenResult {
+  status?: "opened" | "review-session-ready";
+  opened?: boolean;
+  openMode?: "host-adapter" | "agent-browser";
+  browserAction?: "open-scoped-url";
+  url?: string;
+}
+
 export function App({ initialData, bridge, managedConnection = false }: Props) {
   const [data, setData] = useState<WidgetData | undefined>(initialData);
   const [activeSpace, setActiveSpace] = useState<SpaceId>(
@@ -53,12 +61,25 @@ export function App({ initialData, bridge, managedConnection = false }: Props) {
       const sourceVersion = reviewType === "content"
         ? snapshot.workspace.blueprint.source_version
         : snapshot.workspace.visual.source_version;
-      await bridge.callTool("open_ai_ppt_browser_review", {
+      const result = await bridge.callTool<BrowserReviewOpenResult>("open_ai_ppt_browser_review", {
         projectRoot: snapshot.project.project_root,
         reviewType,
         sourceVersion,
       });
-      setNotice(`已在 Codex 内置 Browser 打开${reviewType === "content" ? "内容审阅" : "视觉合同"}。`);
+      const label = reviewType === "content" ? "内容审阅" : "视觉合同";
+      if (result.status === "opened" && result.opened === true) {
+        setNotice(`已在 Codex 内置 Browser 打开${label}。`);
+      } else if (
+        result.status === "review-session-ready" &&
+        result.opened === false &&
+        result.openMode === "agent-browser" &&
+        result.browserAction === "open-scoped-url" &&
+        result.url
+      ) {
+        setNotice(`专业审阅会话已准备，正在交给 Codex Agent 使用内置 Browser 打开${label}；Browser 导航成功前不会显示为已打开。`);
+      } else {
+        throw new Error("Browser review returned an invalid open result");
+      }
     } catch (error) {
       const code = (error as Error & { code?: string }).code;
       setNotice(

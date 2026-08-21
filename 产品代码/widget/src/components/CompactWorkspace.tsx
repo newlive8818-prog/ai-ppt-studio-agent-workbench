@@ -34,8 +34,7 @@ function PrimaryAction({ action, busy, focus, onOpenReview, onContinueChat, onCo
   if (action.kind === "none") return null;
 
   const handleClick = () => {
-    if (action.kind === "open-content-review") onOpenReview("content");
-    else if (action.kind === "open-visual-review") onOpenReview("visual");
+    if (action.kind === "open-visual-review") onOpenReview("visual");
     else if (action.kind === "confirm-mission") onConfirmMission();
     else onContinueChat(focus);
   };
@@ -201,7 +200,8 @@ function Blueprint({ snapshot, ...actions }: Omit<Props, "activeSpace">) {
     >
       <div className="compact-facts">
         <strong>{projection.slide_count} 页内容已形成</strong>
-        <strong>已保存 {projection.saved_mark_count} 条标记</strong>
+        <strong>已判断 {projection.completed_page_count} 页</strong>
+        <strong>剩余 {projection.remaining_page_count} 页</strong>
       </div>
     </CompactCognitionLine>
   );
@@ -261,15 +261,24 @@ function Delivery({ snapshot, ...actions }: Omit<Props, "activeSpace">) {
       <p className="delivery-blocker" data-testid="delivery-blocker">
         <CircleAlert size={15} />{projection.highest_blocker || projection.risk}
       </p>
-      <div className="delivery-targets" aria-label="四个必验目标">
+      <h3>当前发布目标证据</h3>
+      <div className="delivery-targets" aria-label="当前发布目标证据">
         {projection.targets.map((target) => (
           <div
             key={target.target_id}
             data-testid={`target-${target.target_id}`}
-            data-pptx-sha256={target.pptx_sha256}
+            data-pptx-sha256={target.pptx_sha256 || undefined}
           >
             <span>{targetLabels[target.target_id]}</span>
-            <strong>{target.status === "passed" ? "通过" : "未通过"}</strong>
+            <strong>
+              {target.status === "deferred"
+                ? "延期 · 当前版本不验收"
+                : target.status === "passed"
+                  ? target.target_id === "macos-powerpoint"
+                    ? "已验证：macOS Microsoft PowerPoint"
+                    : `已验证：${targetLabels[target.target_id]}`
+                  : "未通过"}
+            </strong>
           </div>
         ))}
       </div>

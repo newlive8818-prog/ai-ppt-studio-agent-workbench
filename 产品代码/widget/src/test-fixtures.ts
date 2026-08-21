@@ -71,11 +71,13 @@ export function compactWidgetData(initialSpace: WidgetData["initialSpace"] = "ov
           risk: "当前没有需要用户处理的内容审阅动作。",
           affected_artifacts: ["artifact://content-blueprint/content"],
           high_impact_count: 0,
-          primary_action: { kind: "open-content-review", label: "打开内容审阅", enabled: true },
-          phase: "passed",
+          primary_action: { kind: "review-complete-deck", label: "审核完整内容", enabled: true },
+          phase: "full-deck-review-ready",
           internal_status: "passed",
           slide_count: 12,
-          saved_mark_count: 2,
+          completed_page_count: 2,
+          remaining_page_count: 10,
+          current_batch_status: "draft",
           review_available: true,
           source_version: "artifact://content-blueprint/content",
         },
@@ -83,7 +85,7 @@ export function compactWidgetData(initialSpace: WidgetData["initialSpace"] = "ov
           status: "passed",
           conclusion: "整套视觉合同和锚点页已通过 G1 / G2 内部门。",
           focus: "可信的经营证据链。",
-          risk: "任一内部硬门或四目标证据不完整时不会开放确认。",
+          risk: "任一内部硬门或必需目标证据不完整时不会开放确认。",
           affected_artifacts: ["artifact://visual-contract/visual"],
           high_impact_count: 0,
           primary_action: { kind: "open-visual-review", label: "打开视觉合同", enabled: true },
@@ -109,10 +111,17 @@ export function compactWidgetData(initialSpace: WidgetData["initialSpace"] = "ov
           highest_blocker: null,
           targets: [
             { target_id: "macos-powerpoint", status: "passed", pptx_sha256: "7".repeat(64) },
-            { target_id: "macos-wps", status: "passed", pptx_sha256: "7".repeat(64) },
-            { target_id: "windows-powerpoint", status: "passed", pptx_sha256: "7".repeat(64) },
-            { target_id: "windows-wps", status: "passed", pptx_sha256: "7".repeat(64) },
+            { target_id: "macos-wps", status: "deferred", pptx_sha256: "" },
+            { target_id: "windows-powerpoint", status: "deferred", pptx_sha256: "" },
+            { target_id: "windows-wps", status: "deferred", pptx_sha256: "" },
           ],
+          release_target_policy: {
+            policy_ref: "artifact://release-target-policy/current",
+            policy_id: "v1.6-macos-powerpoint",
+            required_target_ids: ["macos-powerpoint"],
+            deferred_target_ids: ["macos-wps", "windows-powerpoint", "windows-wps"],
+            compatibility_claim_scope: ["macos-powerpoint"],
+          },
           hash_identity: "7".repeat(64),
           chat_send: { status: "sent", message_ref: "chat://message/pptx-1", sent_at: "2026-08-09T20:00:00+08:00" },
         },
@@ -223,6 +232,15 @@ export function reviewWidgetData(reviewType: "content" | "visual" = "content"): 
       title: reviewType === "content" ? "智慧园区内容蓝图" : "可信的经营证据链",
       revision: 12,
       status: "user-reviewable",
+      ...(reviewType === "visual" ? {
+        release_target_policy: {
+          policy_ref: "artifact://release-target-policy/current",
+          policy_id: "v1.6-macos-powerpoint",
+          required_target_ids: ["macos-powerpoint" as const],
+          deferred_target_ids: ["macos-wps" as const, "windows-powerpoint" as const, "windows-wps" as const],
+          compatibility_claim_scope: ["macos-powerpoint" as const],
+        },
+      } : {}),
       gate_status: reviewType === "content"
         ? { G0: "user-reviewable" }
         : { G1: "passed", G2: "passed", G3: "user-reviewable" },
@@ -250,7 +268,7 @@ export function hostBridge(
   initial: WidgetData | ReviewWidgetData,
   environment: HostEnvironment = DEFAULT_HOST_ENVIRONMENT,
 ) {
-  const callTool = vi.fn(async (name: string) => {
+  const callTool = vi.fn(async (name: string): Promise<unknown> => {
     const widget = "snapshot" in initial ? initial : compactWidgetData();
     return {
       decision: { operation: name, status: "saved" },

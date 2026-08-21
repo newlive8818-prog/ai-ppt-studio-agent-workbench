@@ -6,18 +6,28 @@ import { compactWidgetData, hostBridge } from "./test-fixtures";
 
 afterEach(cleanup);
 
-describe("Codex Browser professional-review routing", () => {
-  it("opens the exact content source through the Browser tool", async () => {
+describe("content sidebar and visual Browser routing", () => {
+  it("loads content through its sidebar projection rather than professional Browser", async () => {
     const initial = compactWidgetData("blueprint");
-    const { bridge, callTool } = hostBridge(initial);
-    render(<App initialData={initial} bridge={bridge} />);
+    const host = hostBridge(initial);
+    host.callTool.mockResolvedValue({
+      display_policy: "content-sidebar-progress",
+      phase: "content-producing",
+      project_id: "p1",
+      revision: 12,
+      mission_summary: {},
+      next_action: "continue-content-production",
+    });
+    render(<App initialData={initial} bridge={host.bridge} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "打开内容审阅" }));
-    await waitFor(() => expect(callTool).toHaveBeenCalledWith("open_ai_ppt_browser_review", {
-      projectRoot: "/managed/project",
-      reviewType: "content",
-      sourceVersion: "artifact://content-blueprint/content",
-    }));
+    await waitFor(() => expect(host.callTool).toHaveBeenCalledWith(
+      "get_content_sidebar_review_projection",
+      { projectRoot: "/managed/project" },
+    ));
+    expect(host.callTool).not.toHaveBeenCalledWith(
+      "open_ai_ppt_browser_review",
+      expect.anything(),
+    );
   });
 
   it("opens the exact visual source through the Browser tool", async () => {
@@ -33,18 +43,16 @@ describe("Codex Browser professional-review routing", () => {
     }));
   });
 
-  it("keeps project state unchanged when Browser open fails", async () => {
+  it("keeps the current snapshot when the content projection cannot load", async () => {
     const initial = compactWidgetData("blueprint");
-    const { bridge, callTool } = hostBridge(initial);
-    callTool.mockRejectedValueOnce(Object.assign(new Error("unavailable"), {
-      code: "BROWSER_REVIEW_UNAVAILABLE",
+    const host = hostBridge(initial);
+    host.callTool.mockRejectedValue(Object.assign(new Error("unavailable"), {
+      code: "CONTENT_REVIEW_CONFLICT",
     }));
-    render(<App initialData={initial} bridge={bridge} />);
+    render(<App initialData={initial} bridge={host.bridge} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "打开内容审阅" }));
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Codex 内置 Browser 专业审阅暂未打开"));
-    expect(callTool).toHaveBeenCalledOnce();
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("内容审核数据未能加载"));
+    expect(host.callTool).toHaveBeenCalledOnce();
     expect(screen.getByText("revision 12")).toBeInTheDocument();
-    expect(screen.queryByText("返回聊天")).not.toBeInTheDocument();
   });
 });

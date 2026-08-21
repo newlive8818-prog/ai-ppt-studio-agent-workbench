@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import { compactWidgetData, hostBridge } from "./test-fixtures";
@@ -23,5 +23,23 @@ describe("v1.6 schema 3 compact content projection", () => {
       reviewType: "content",
       sourceVersion: "artifact://content-blueprint/content",
     }));
+  });
+
+  it("does not claim the Browser opened when MCP only prepared an Agent handoff", async () => {
+    const initial = compactWidgetData("blueprint");
+    const { bridge } = hostBridge(initial);
+    bridge.callTool = vi.fn(async () => ({
+      status: "review-session-ready",
+      opened: false,
+      openMode: "agent-browser",
+      browserAction: "open-scoped-url",
+      url: "http://127.0.0.1:43124/#token=short-lived-token",
+    }));
+    render(<App initialData={initial} bridge={bridge} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "打开内容审阅" }));
+
+    await waitFor(() => expect(screen.getByText(/专业审阅会话已准备/)).toBeInTheDocument());
+    expect(screen.queryByText(/已在 Codex 内置 Browser 打开内容审阅/)).not.toBeInTheDocument();
   });
 });

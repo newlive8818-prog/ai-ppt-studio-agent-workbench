@@ -1,0 +1,122 @@
+{
+  "display_policy": "content-sidebar-full-deck",
+  "phase": "full-deck-review-ready",
+  "project_id": "content-review-real-case",
+  "revision": 42,
+  "source_version": "artifact://reading-deck-blueprint/content-v3",
+  "material_mode": "mixed-evidence",
+  "mission_summary": {
+    "topic": "重庆机电智能制造全域数字化解决方案",
+    "primary_audience": "集团管理层、业务负责人与数字化决策团队",
+    "decision_question_or_next_action": "确认一期建设范围与联合验证方式"
+  },
+  "chapters": [
+    { "section_id": "C01", "title": "业务事项与现状", "first_slide_id": "S01" },
+    { "section_id": "C02", "title": "问题与方案适配", "first_slide_id": "S02" }
+  ],
+  "slides": [
+    {
+      "slide_id": "S01",
+      "order": 1,
+      "section_id": "C01",
+      "neutral_title": "智能制造业务范围与系统现状",
+      "page_task": "说明当前业务事项、系统范围和经营协同边界。",
+      "reading_question": "当前制造与经营协同主要涉及哪些业务环节与系统？",
+      "visible_copy": [
+        { "copy_id": "S01-C01", "role": "lead", "text": "集团已覆盖计划、生产、质量、设备与数据管理等核心环节，当前审核重点是跨环节经营协同。" },
+        { "copy_id": "S01-C02", "role": "body", "text": "已有系统分别承载局部业务，但同一经营事项在系统间的口径、责任与处理进度尚需联合核对。" },
+        { "copy_id": "S01-C03", "role": "boundary", "text": "本页不对断点数量、损失规模或建设收益作未经验证的定量承诺。" }
+      ],
+      "identity_labels": ["来源事实", "材料推断", "待联合验证"],
+      "evidence_items": [
+        {
+          "evidence_id": "EV-S01-01",
+          "evidence_kind": "source-page",
+          "fact_identity": "source-fact",
+          "material_ref": "artifact://material/chongqing-electromechanical-v5",
+          "asset_ref": "project-asset://renders/chongqing-electromechanical-v5/page-03.png",
+          "source_file": "重庆机电全域数字化解决方案-v5.pptx",
+          "source_page_or_region": "P03 · 业务范围图",
+          "used_region": "页面中部业务环节和系统边界",
+          "supports_claim": "支持本页对业务范围与现有系统覆盖的说明",
+          "treatment": "保留原页主体，裁切非必要页脚",
+          "evidence_gap": "跨系统交接频次和重复核对工作量待联合调研"
+        }
+      ],
+      "analysis_or_proposal_blocks": [
+        { "identity": "AI 分析", "text": "当前可先把各系统覆盖事项与经营协同责任放在一张图中核对，再决定一期范围。" },
+        { "identity": "待联合验证", "text": "各业务环节的实际责任人、数据口径和处理时效需与客户共同确认。" }
+      ],
+      "solution_mapping_refs": ["现状-S01 → 要求-R01：统一业务事项口径 → 方案-C01：经营协同视图"],
+      "source_refs": ["artifact://material/chongqing-electromechanical-v5#page=3"],
+      "speaker_notes": "逐字稿：这一页先不急着得出建设结论。我们先对齐当前制造与经营协同所覆盖的业务环节，再核对系统边界、责任和数据口径。材料能够证明已有系统覆盖，但跨系统工作量仍要联合验证。",
+      "reading_quality": {
+        "independently_readable": true,
+        "information_density": "moderate",
+        "evidence_boundary_complete": true,
+        "review_note": "正文可独立理解，没有依赖逐字稿补全核心逻辑。"
+      },
+      "previous_relation": "从封面与任务进入客户当前业务事项。",
+      "next_relation": "在现状边界上进一步识别跨系统协同问题。",
+      "decision_state": { "selected": "", "comment": "", "completed": false, "saved": false, "frozen": false }
+    },
+    {
+      "slide_id": "S02",
+      "order": 2,
+      "section_id": "C02",
+      "neutral_title": "跨系统协同问题与联合验证事项",
+      "page_task": "把已知现象、诊断假设与待验证事项分开。",
+      "reading_question": "哪些问题已有材料依据，哪些仍需联合验证？",
+      "visible_copy": [
+        { "copy_id": "S02-C01", "role": "body", "text": "材料观察：各业务环节已有分项系统承载，经营事项需跨系统跟踪。" },
+        { "copy_id": "S02-C02", "role": "body", "text": "诊断假设：数据口径与处理责任未完全对齐，可能导致重复核对和进度不透明。" },
+        { "copy_id": "S02-C03", "role": "body", "text": "联合验证：以三类典型经营事项复盘交接节点、责任人、输入输出和处理时效。" }
+      ],
+      "identity_labels": ["材料观察", "诊断假设", "待联合验证"],
+      "evidence_items": [
+        {
+          "evidence_id": "EV-S02-GAP",
+          "evidence_kind": "planned-gap",
+          "fact_identity": "joint-validation-required",
+          "material_ref": "",
+          "asset_ref": "",
+          "source_file": "待补充：典型经营事项跟踪记录",
+          "source_page_or_region": "待联合确认",
+          "used_region": "问题诊断与一期范围判断",
+          "supports_claim": "验证重复核对、交接等待与进度不透明是否实际存在",
+          "treatment": "补材料前保持为诊断假设，不写成客户事实",
+          "evidence_gap": "缺少端到端事项的实际流转记录和客户确认"
+        }
+      ],
+      "analysis_or_proposal_blocks": [
+        { "identity": "诊断假设", "text": "当前矛盾可能不是单个系统缺少功能，而是跨系统经营事项缺少统一责任与闭环视图。" },
+        { "identity": "方案建议", "text": "一期范围应从高频、跨部门、可验证的经营事项中选择，不先假定整个集团一次性改造。" }
+      ],
+      "solution_mapping_refs": ["问题-P01 → 要求-R02：经营事项端到端跟踪 → 方案-C02：事项闭环与责任协同"],
+      "source_refs": [],
+      "speaker_notes": "逐字稿：这一页故意把材料观察、诊断假设和联合验证拆开。我们现在能确认的是业务需要跨系统跟踪；不能直接确认的是问题程度和定量影响。因此建议用典型事项复盘来验证，再冻结一期范围。",
+      "reading_quality": {
+        "independently_readable": true,
+        "information_density": "moderate",
+        "identity_separation": true,
+        "review_note": "观察、假设和验证动作分层清楚。"
+      },
+      "previous_relation": "承接现状边界，区分已知事实与待验证问题。",
+      "next_relation": "将问题转换为可检查的方案要求与一期组件。",
+      "decision_state": { "selected": "", "comment": "", "completed": false, "saved": false, "frozen": false }
+    }
+  ],
+  "review_progress": {
+    "total": 2,
+    "completed": 0,
+    "remaining": 2,
+    "saved_comment_count": 0,
+    "next_incomplete_slide_id": "S01",
+    "counts": { "approved": 0, "modify": 0, "evidence": 0, "merge_or_delete": 0 }
+  },
+  "decision_set": { "decision_set_id": "decision-set-v3", "review_batch_id": "review-batch-v3", "status": "draft" },
+  "current_batch": { "batch_ref": "artifact://content-review-batch/draft-v3", "review_batch_id": "review-batch-v3", "status": "draft" },
+  "current_plan": { "plan_ref": "", "confirmation_ref": "", "status": "", "requires_blueprint_revision": false },
+  "previous_round": null,
+  "next_action": "review-complete-deck"
+}

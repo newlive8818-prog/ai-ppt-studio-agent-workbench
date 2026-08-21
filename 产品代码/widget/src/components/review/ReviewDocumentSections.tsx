@@ -1,6 +1,11 @@
 import { Bookmark } from "lucide-react";
 
-import type { GateStatus, ReviewField, ReviewMark } from "../../types";
+import type {
+  GateStatus,
+  ReleaseTargetPolicyProjection,
+  ReviewField,
+  ReviewMark,
+} from "../../types";
 
 const FIELD_LABELS: Record<string, string> = {
   title: "标题", audience: "听众", audiences: "听众", goal: "目标", purpose: "页面任务", claim: "核心主张",
@@ -17,7 +22,7 @@ const FIELD_LABELS: Record<string, string> = {
   status: "当前状态", production_route: "正式生产路线", content_blueprint_ref: "内容蓝图引用",
   deck_design_system_ref: "Deck Design System 引用", visual_contract_set_ref: "逐页视觉合同引用",
   anchor_slide_set_ref: "锚点页集合引用", anchor_identity: "锚点页证据身份", deck_framework: "整套 PPT 框架",
-  target_evidence_refs: "四目标证据引用", target_evidence_identities: "四目标证据身份",
+  target_evidence_refs: "当前发布目标证据引用", target_evidence_identities: "当前发布目标证据身份",
   internal_review_refs: "内部审查引用", role_runs: "视觉角色运行身份", acceptance_ref: "内容内部通过证据",
   claim_evidence_map: "主张—证据地图", claim_evidence_map_ref: "主张—证据地图引用", draft_ref: "逐页内容版本引用",
   strategy: "售前内容策略", strategy_ref: "售前内容策略引用", argument_map: "整套论证结构",
@@ -57,10 +62,6 @@ function isArtifactReference(value: string) {
   return value.startsWith("artifact://");
 }
 
-function targetTitle(row: Record<string, unknown>) {
-  return `${String(row.operating_system || row.target_id || "未知目标")} · ${String(row.application || "未知应用")}`;
-}
-
 function ReviewValue({ value, valueKey = "" }: { value: unknown; valueKey?: string }) {
   if (value === null || value === undefined || value === "") {
     return <p className="review-empty-value">未填写</p>;
@@ -97,40 +98,73 @@ function ReviewValue({ value, valueKey = "" }: { value: unknown; valueKey?: stri
   return <p className="review-value-text">{text}</p>;
 }
 
-function TargetEvidenceMatrix({ value }: { value: unknown }) {
-  if (!Array.isArray(value)) return <ReviewValue value={value} />;
-  const rows = value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item));
+const RELEASE_TARGET_LABELS = {
+  "macos-powerpoint": "macOS Microsoft PowerPoint",
+  "macos-wps": "macOS WPS",
+  "windows-powerpoint": "Windows Microsoft PowerPoint",
+  "windows-wps": "Windows WPS",
+} as const;
+
+export function ReleaseTargetEvidenceSection({
+  value,
+  policy,
+}: {
+  value: unknown;
+  policy: ReleaseTargetPolicyProjection;
+}) {
+  const evidenceRows = Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> =>
+        Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+  const evidenceByTarget = new Map(
+    evidenceRows.map((row) => [String(row.target_id || ""), row]),
+  );
+  const targetIds = [
+    ...policy.required_target_ids,
+    ...policy.deferred_target_ids,
+  ];
+
   return (
-    <section className="review-target-evidence" aria-labelledby="target-evidence-title">
+    <section className="review-target-evidence" aria-labelledby="release-target-evidence-title">
       <header>
-        <span>同一 PPTX · 四个独立目标</span>
-        <h3 id="target-evidence-title">四目标桌面实机证据</h3>
-        <p>每个目标分别显示操作系统、桌面应用、字体策略、同一 PPTX 哈希和不可变证据身份；目标之间不做兼容性外推。</p>
+        <span>RELEASE TARGET EVIDENCE</span>
+        <h3 id="release-target-evidence-title">当前发布目标证据</h3>
+        <p>当前 Gate 只聚合发布策略中的必需目标；延期 profile 保留未来扩展能力，不构成通过、失败或兼容声明。</p>
       </header>
       <div className="review-target-grid">
-        {rows.map((row, index) => {
-          const result = String(row.overall_result || "missing");
-          const detailKeys = ["target_id", "operating_system_version", "application_version", "font_inventory_ref", "font_substitution_plan_ref", "source_pptx_ref", "evidence_ref"];
+        {targetIds.map((targetId, index) => {
+          const deferred = policy.deferred_target_ids.includes(targetId);
+          const row = evidenceByTarget.get(targetId);
+          const result = deferred ? "deferred" : String(row?.overall_result || "missing");
           return (
-            <article className={`review-target-card result-${result}`} key={String(row.target_id || index)}>
+            <article className={`review-target-card result-${result}`} key={targetId}>
               <div className="review-target-card-head">
-                <div><small>目标 {String(index + 1).padStart(2, "0")}</small><strong>{targetTitle(row)}</strong></div>
-                <span>{statusLabel(result)}</span>
+                <div>
+                  <small>目标 {String(index + 1).padStart(2, "0")}</small>
+                  <strong>{RELEASE_TARGET_LABELS[targetId]}</strong>
+                </div>
+                <span>{deferred ? "延期 · 当前版本不验收" : statusLabel(result)}</span>
               </div>
-              <div className="review-target-hash"><small>PPTX SHA-256</small><code>{String(row.pptx_sha256 || "未提供")}</code></div>
-              <dl className="review-target-details">
-                {detailKeys.map((key) => <div key={key}><dt>{readableLabel(key)}</dt><dd><ReviewValue value={row[key]} valueKey={key} /></dd></div>)}
-              </dl>
+              {!deferred && row && (
+                <>
+                  <div className="review-target-hash"><small>PPTX SHA-256</small><code>{String(row.pptx_sha256 || "未提供")}</code></div>
+                  <dl className="review-target-details">
+                    {["operating_system_version", "application_version", "font_inventory_ref", "font_substitution_plan_ref", "source_pptx_ref", "evidence_ref"].map((key) => (
+                      <div key={key}><dt>{readableLabel(key)}</dt><dd><ReviewValue value={row[key]} valueKey={key} /></dd></div>
+                    ))}
+                  </dl>
+                </>
+              )}
             </article>
           );
         })}
       </div>
+      <p><code>{policy.policy_ref}</code></p>
     </section>
   );
 }
 
 function StrategyFieldValue({ field }: { field: ReviewField }) {
-  if (field.label === "target_evidence_identities") return <TargetEvidenceMatrix value={field.value} />;
   if (field.label === "deck_framework") {
     return <section className="review-framework-block"><span>DECK FRAMEWORK</span><h3>整套 PPT 框架</h3><ReviewValue value={field.value} valueKey={field.label} /></section>;
   }
@@ -155,6 +189,7 @@ interface SheetProps {
   onMark: (anchor: string) => void;
   status?: GateStatus | string;
   targetEvidenceCount?: number;
+  requiredTargetCount?: number;
 }
 
 export function ContentSheet({ section, index, marks, onMark, status = "open" }: SheetProps) {
@@ -204,7 +239,7 @@ export function ContentSheet({ section, index, marks, onMark, status = "open" }:
   );
 }
 
-export function VisualContractSheet({ section, index, onMark, status = "open", targetEvidenceCount = 0 }: SheetProps) {
+export function VisualContractSheet({ section, index, onMark, status = "open", targetEvidenceCount = 0, requiredTargetCount = 0 }: SheetProps) {
   const contentLabels = new Set(["title", "visible_content", "visible_copy", "frozen_text", "speaker_notes", "source_refs", "material_refs"]);
   const contractLabels = new Set([
     "page_family", "composition_intent", "information_hierarchy", "reading_order", "regions", "object_relationships",
@@ -235,8 +270,8 @@ export function VisualContractSheet({ section, index, onMark, status = "open", t
         <section className="review-contract-column"><h4>视觉实现合同</h4>{contractFields.map(renderField)}</section>
       </div>
       <div className="review-contract-state">
-        <span>G2 四重硬门：{statusLabel(status)}</span>
-        <span>{targetEvidenceCount}/4 个桌面目标具有当前证据身份 · 同一 PPTX</span>
+        <span>G2 硬门：{statusLabel(status)}</span>
+        <span>当前必需目标证据 {targetEvidenceCount}/{requiredTargetCount} · 同一 PPTX</span>
       </div>
     </article>
   );

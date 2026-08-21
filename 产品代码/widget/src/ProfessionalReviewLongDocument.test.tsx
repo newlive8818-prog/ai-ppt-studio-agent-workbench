@@ -27,7 +27,7 @@ function pageSection(type: "content" | "visual", index: number): ReviewSection {
           ...common,
           { anchor: `${prefix}-page-family`, label: "page_family", value: "阅读优先证据页" },
           { anchor: `${prefix}-composition-intent`, label: "composition_intent", value: `${LONG_CHINESE}${LONG_UNBROKEN}` },
-          { anchor: `${prefix}-acceptance-criteria`, label: "acceptance_criteria", value: ["业务关系完整", "文字原生可编辑", "四目标同一哈希"] },
+          { anchor: `${prefix}-acceptance-criteria`, label: "acceptance_criteria", value: ["业务关系完整", "文字原生可编辑", "当前必需目标同一哈希"] },
         ],
   };
 }

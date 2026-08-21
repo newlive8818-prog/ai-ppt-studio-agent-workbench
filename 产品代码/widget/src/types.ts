@@ -6,7 +6,7 @@ export type WorkspaceStatus = GateStatus | "ready" | "needs-input" | "pending";
 export type WorkspaceActionKind =
   | "continue-chat"
   | "confirm-mission"
-  | "open-content-review"
+  | "review-complete-deck"
   | "open-visual-review"
   | "none";
 
@@ -58,10 +58,12 @@ export interface MaterialsWorkspaceProjection extends CognitionSpaceProjection {
 }
 
 export interface BlueprintWorkspaceProjection extends CognitionSpaceProjection {
-  phase: GateStatus;
+  phase: ContentWorkflowPhase;
   internal_status: DeliveryStatusProjection;
   slide_count: number;
-  saved_mark_count: number;
+  completed_page_count: number;
+  remaining_page_count: number;
+  current_batch_status: string;
   review_available: boolean;
   source_version: string;
 }
@@ -76,7 +78,13 @@ export interface VisualWorkspaceProjection extends CognitionSpaceProjection {
   production_route: string;
 }
 
-export type DeliveryStatusProjection = "passed" | "failed" | "pending" | "locked";
+export type DeliveryStatusProjection =
+  | "passed"
+  | "failed"
+  | "pending"
+  | "locked"
+  | "stale"
+  | "deferred";
 
 export type DeliveryTargetId =
   | "macos-powerpoint"
@@ -91,6 +99,14 @@ export interface TargetStatusProjection {
   [key: string]: unknown;
 }
 
+export interface ReleaseTargetPolicyProjection {
+  policy_ref: string;
+  policy_id: string;
+  required_target_ids: DeliveryTargetId[];
+  deferred_target_ids: DeliveryTargetId[];
+  compatibility_claim_scope: DeliveryTargetId[];
+}
+
 export interface DeliveryWorkspaceProjection extends CognitionSpaceProjection {
   phase: GateStatus;
   slides: { completed: number; total: number };
@@ -102,6 +118,7 @@ export interface DeliveryWorkspaceProjection extends CognitionSpaceProjection {
   };
   highest_blocker: string | null;
   targets: TargetStatusProjection[];
+  release_target_policy: ReleaseTargetPolicyProjection;
   hash_identity: string;
   chat_send: {
     status: "pending" | "sent" | "failed";
@@ -156,9 +173,10 @@ export interface WidgetData {
 }
 
 export interface PreviewEvidence {
-  evidenceScope: "local-development-preview";
+  evidenceScope: "local-development-preview" | "deterministic-contract-fixture";
   proofEligible: false;
   realHostEvidence: false;
+  evidenceIdentity?: "deterministic-contract-fixture-not-real-project-proof";
 }
 
 export interface ReviewMark {
@@ -183,13 +201,14 @@ export interface ReviewSection {
 }
 
 export interface ReviewProjection {
-  review_type: "content" | "visual";
-  display_policy: "professional-review";
+  review_type: "content" | "visual" | "content-evidence";
+  display_policy: "professional-review" | "content-evidence-read-only";
   project_id: string;
   project_name: string;
   title: string;
   revision: number;
   status: string;
+  release_target_policy?: ReleaseTargetPolicyProjection;
   gate_status: Partial<Record<"G0" | "G1" | "G2" | "G3" | "G4", GateStatus>>;
   source_version: string;
   source_refs: string[];
@@ -205,6 +224,43 @@ export interface ReviewProjection {
     status?: string;
     saved_at?: string;
     marks: ReviewMark[];
+  };
+  capabilities?: {
+    canSavePageDecision: boolean;
+    canSaveReviewMarks: boolean;
+    canCompareSourceAndSlide: boolean;
+    canCompareAdjacentSlides: boolean;
+  };
+  evidence_view?: {
+    slide: {
+      slide_id: string;
+      order: number;
+      neutral_title: string;
+      page_task: string;
+      reading_question?: string;
+      visible_copy?: Array<{ copy_id?: string; role?: string; text: string }>;
+    };
+    evidence: {
+      evidence_id: string;
+      material_ref: string;
+      asset_ref: string;
+      source_file: string;
+      source_page_or_region: string;
+      used_region: string;
+      supports_claim: string;
+      treatment: string;
+      evidence_gap?: string;
+    };
+    asset: {
+      assetRef: string;
+      mimeType: string;
+      bytes: number;
+      dataBase64: string;
+    } | null;
+    adjacent: {
+      previous: { slide_id: string; order: number; neutral_title: string; page_task: string } | null;
+      next: { slide_id: string; order: number; neutral_title: string; page_task: string } | null;
+    };
   };
 }
 
@@ -245,6 +301,163 @@ export interface MissionConfirmationResult {
   snapshot: ProjectSnapshot;
 }
 
+export type ContentWorkflowPhase =
+  | "content-producing"
+  | "content-hard-gate-review"
+  | "full-deck-review-ready"
+  | "review-batch-submitted"
+  | "batch-plan-proposed"
+  | "batch-plan-confirmed";
+
+export type ContentMaterialMode =
+  | "material-backed"
+  | "mixed-evidence"
+  | "proposal-led";
+
+export type ContentPageDecision =
+  | "approved"
+  | "modify"
+  | "evidence"
+  | "merge-or-delete";
+
+export interface ContentMissionSummary {
+  topic: string;
+  primary_audience: string;
+  decision_question_or_next_action: string;
+}
+
+export interface ContentReviewChapter {
+  section_id: string;
+  title: string;
+  first_slide_id: string;
+}
+
+export interface ContentVisibleCopyBlock {
+  copy_id: string;
+  role: string;
+  text: string;
+}
+
+export interface ContentEvidenceItem {
+  evidence_id: string;
+  evidence_kind: string;
+  fact_identity: string;
+  material_ref: string;
+  asset_ref: string;
+  source_file: string;
+  source_page_or_region: string;
+  used_region: string;
+  supports_claim: string;
+  treatment: string;
+  evidence_gap: string;
+  [key: string]: unknown;
+}
+
+export interface ContentAnalysisBlock {
+  identity: string;
+  text: string;
+  [key: string]: unknown;
+}
+
+export interface ContentDecisionState {
+  selected: ContentPageDecision | "";
+  comment: string;
+  completed: boolean;
+  saved: boolean;
+  frozen: boolean;
+}
+
+export type ContentDecisionSaveStatus =
+  | "idle"
+  | "pending"
+  | "saved"
+  | "failed"
+  | "conflict";
+
+export interface ContentReviewSlide {
+  slide_id: string;
+  order: number;
+  section_id: string;
+  neutral_title: string;
+  page_task: string;
+  reading_question: string;
+  visible_copy: ContentVisibleCopyBlock[];
+  identity_labels: string[];
+  evidence_items: ContentEvidenceItem[];
+  analysis_or_proposal_blocks: ContentAnalysisBlock[];
+  solution_mapping_refs: string[];
+  source_refs: string[];
+  speaker_notes: string;
+  reading_quality: Record<string, unknown>;
+  previous_relation: string;
+  next_relation: string;
+  decision_state: ContentDecisionState;
+}
+
+export interface ContentReviewProgress {
+  total: number;
+  completed: number;
+  remaining: number;
+  saved_comment_count: number;
+  next_incomplete_slide_id: string;
+  counts: {
+    approved: number;
+    modify: number;
+    evidence: number;
+    merge_or_delete: number;
+  };
+}
+
+export interface ContentProgressProjection {
+  display_policy: "content-sidebar-progress";
+  phase: "content-producing" | "content-hard-gate-review";
+  project_id: string;
+  revision: number;
+  mission_summary: ContentMissionSummary;
+  next_action: "continue-content-production";
+}
+
+export interface ContentFullDeckProjection {
+  display_policy: "content-sidebar-full-deck";
+  phase: Exclude<ContentWorkflowPhase, "content-producing" | "content-hard-gate-review">;
+  project_id: string;
+  revision: number;
+  mission_summary: ContentMissionSummary;
+  material_mode: ContentMaterialMode;
+  source_version: string;
+  chapters: ContentReviewChapter[];
+  slides: ContentReviewSlide[];
+  review_progress: ContentReviewProgress;
+  decision_set: {
+    decision_set_id: string;
+    review_batch_id: string;
+    status: string;
+  };
+  current_batch: {
+    batch_ref: string;
+    review_batch_id: string;
+    status: string;
+  };
+  current_plan: {
+    plan_ref: string;
+    confirmation_ref: string;
+    status: string;
+    requires_blueprint_revision: boolean;
+  };
+  previous_round: null | {
+    source_version: string;
+    review_batch_ref: string;
+    revision_plan_ref: string;
+    plan_confirmation_ref: string;
+    result: string;
+  };
+  next_action: string;
+}
+
+export type ContentSidebarReviewProjection =
+  | ContentProgressProjection
+  | ContentFullDeckProjection;
+
 export interface HostBridge {
   connect(onData?: (data: SurfaceData) => void): Promise<void>;
   callTool<T = DecisionResult>(name: string, args: Record<string, unknown>): Promise<T>;
@@ -265,6 +478,9 @@ declare global {
       bytes: number;
       dataBase64: string;
     }>;
+    __AI_PPT_CONTENT_REVIEW_PREVIEW__?: ContentSidebarReviewProjection;
+    __AI_PPT_CONTENT_REVIEW_SCENARIO__?: string;
+    __AI_PPT_PREVIEW_CALLS__?: Record<string, number>;
     openai?: Record<string, unknown>;
     __AI_PPT_SIDEBAR_HOST__?: {
       connect(onData?: (data: SurfaceData) => void): Promise<void>;

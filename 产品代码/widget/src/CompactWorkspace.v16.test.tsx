@@ -77,7 +77,7 @@ describe("v1.6 compact five-space reading line", () => {
     expect(host.bridge.sendFollowUp).not.toHaveBeenCalled();
   });
 
-  for (const space of ["overview", "materials", "blueprint", "visual"] satisfies SpaceId[]) {
+  for (const space of ["overview", "materials", "visual"] satisfies SpaceId[]) {
     it(`renders ${space} in the formal cognition order with one strongest action`, () => {
       const initial = compactWidgetData(space);
       const { container } = render(<App initialData={initial} bridge={hostBridge(initial).bridge} />);
@@ -107,17 +107,23 @@ describe("v1.6 compact five-space reading line", () => {
     expect(screen.queryByRole("button", { name: "打开内容审阅" })).not.toBeInTheDocument();
   });
 
-  it("keeps delivery evidence separate and tied to one PPTX identity", () => {
+  it("binds only current required evidence to the PPTX identity", () => {
     const initial = compactWidgetData("delivery");
     const { container } = render(<App initialData={initial} bridge={hostBridge(initial).bridge} />);
 
     expect(container.querySelectorAll('[data-testid^="binary-gate-"]')).toHaveLength(4);
     expect(container.querySelectorAll('[data-testid^="target-"]')).toHaveLength(4);
     for (const target of initial.snapshot.workspace.delivery.targets) {
-      expect(screen.getByTestId(`target-${target.target_id}`)).toHaveAttribute(
-        "data-pptx-sha256",
-        initial.snapshot.workspace.delivery.hash_identity,
-      );
+      const row = screen.getByTestId(`target-${target.target_id}`);
+      if (initial.snapshot.workspace.delivery.release_target_policy.required_target_ids.includes(target.target_id)) {
+        expect(row).toHaveAttribute(
+          "data-pptx-sha256",
+          initial.snapshot.workspace.delivery.hash_identity,
+        );
+      } else {
+        expect(row).not.toHaveAttribute("data-pptx-sha256");
+        expect(row).toHaveTextContent("延期 · 当前版本不验收");
+      }
     }
     expect(screen.getAllByTestId("delivery-blocker")).toHaveLength(1);
     expect(container.querySelectorAll(".compact-primary-action")).toHaveLength(0);

@@ -188,6 +188,10 @@ describe("review surface matches backend projection structure", () => {
     // page_family routes to the visual implementation contract column.
     expect(screen.getAllByText("页面家族").length).toBeGreaterThan(0);
     expect(screen.getAllByText("证据页").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "当前发布目标证据" })).toBeInTheDocument();
+    expect(screen.getByText("macOS Microsoft PowerPoint")).toBeInTheDocument();
+    expect(screen.getAllByText("延期 · 当前版本不验收")).toHaveLength(3);
+    expect(screen.queryByText(/四目标证据身份已经齐备/)).not.toBeInTheDocument();
   });
 
   it("renders Gate and four-target evidence from the formal projection instead of hard-coded pass copy", () => {
@@ -256,11 +260,11 @@ describe("review surface matches backend projection structure", () => {
     expect(screen.queryByText(/工程与实机验证通过/)).not.toBeInTheDocument();
     expect(screen.queryByText(/目标软件渲染：全部通过/)).not.toBeInTheDocument();
     expect(screen.queryByText("合同通过")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "四目标桌面实机证据" })).toBeInTheDocument();
-    expect(screen.getByText("macOS · Microsoft PowerPoint")).toBeInTheDocument();
-    expect(screen.getByText("macOS · WPS Office")).toBeInTheDocument();
-    expect(screen.getByText("Windows 11 · Microsoft PowerPoint")).toBeInTheDocument();
-    expect(screen.getByText("Windows 11 · WPS Office")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "当前发布目标证据" })).toBeInTheDocument();
+    expect(screen.getByText("macOS Microsoft PowerPoint")).toBeInTheDocument();
+    expect(screen.getAllByText("延期 · 当前版本不验收")).toHaveLength(3);
+    expect(screen.queryByText("macOS · WPS Office")).not.toBeInTheDocument();
+    expect(screen.queryByText("Windows 11 · Microsoft PowerPoint")).not.toBeInTheDocument();
     expect(container).toHaveTextContent("7".repeat(64));
     expect(container).toHaveTextContent("artifact://anchor-slide-set/" + "a".repeat(64));
     expect(container).not.toHaveTextContent("target_evidence_identities");
