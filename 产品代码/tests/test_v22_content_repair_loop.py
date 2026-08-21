@@ -19,7 +19,10 @@ from tests.test_v22_content_contracts import blueprint, decision_context, eviden
 
 
 def build_content(
-    kernel: ProjectKernel, source_version: str = "content-v1", slide_count: int = 1
+    kernel: ProjectKernel,
+    source_version: str = "content-v1",
+    slide_count: int = 1,
+    empty_material_view_orders: frozenset[int] = frozenset(),
 ) -> str:
     state = kernel.load()
     if not state.artifact_heads.get("mission/confirmation"):
@@ -58,20 +61,26 @@ def build_content(
         slide.update(
             slide_id=f"S{order:02d}",
             order=order,
-            material_views=[
-                {
-                    **material,
-                    "material_view_id": f"S{order:02d}-M{index:02d}",
-                    "asset_ref": f"review-assets/content/S{order:02d}-M{index:02d}.png",
-                    "page_number": material["page_number"] + order - 1,
-                    "purpose": (
-                        material["purpose"]
-                        if slide_count == 1
-                        else f"{material['purpose']}（S{order:02d}）"
-                    ),
-                }
-                for index, material in enumerate(template["material_views"], start=1)
-            ],
+            material_views=(
+                []
+                if order in empty_material_view_orders
+                else [
+                    {
+                        **material,
+                        "material_view_id": f"S{order:02d}-M{index:02d}",
+                        "asset_ref": f"review-assets/content/S{order:02d}-M{index:02d}.png",
+                        "page_number": material["page_number"] + order - 1,
+                        "purpose": (
+                            material["purpose"]
+                            if slide_count == 1
+                            else f"{material['purpose']}（S{order:02d}）"
+                        ),
+                    }
+                    for index, material in enumerate(
+                        template["material_views"], start=1
+                    )
+                ]
+            ),
             neutral_title=(
                 template["neutral_title"]
                 if slide_count == 1

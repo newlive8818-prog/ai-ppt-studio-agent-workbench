@@ -68,8 +68,16 @@ def nested_keys(value) -> set[str]:
     return set(value) | set().union(*(nested_keys(item) for item in value.values()), set())
 
 
-def accepted_review(kernel: ProjectKernel, slide_count: int = 1):
-    blueprint_ref = build_content(kernel, slide_count=slide_count)
+def accepted_review(
+    kernel: ProjectKernel,
+    slide_count: int = 1,
+    empty_material_view_orders: frozenset[int] = frozenset(),
+):
+    blueprint_ref = build_content(
+        kernel,
+        slide_count=slide_count,
+        empty_material_view_orders=empty_material_view_orders,
+    )
     gates = ContentHardGateService(kernel)
     gates.run_evidence_gate(
         command_id="evidence-pass",
@@ -97,6 +105,39 @@ def accepted_review(kernel: ProjectKernel, slide_count: int = 1):
 
 
 class ContentReviewProjectionTests(unittest.TestCase):
+    def test_projection_preserves_mixed_empty_and_non_empty_material_views(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = ProjectKernel.initialize(Path(folder), project_id="p1")
+            _blueprint_ref, _session_ref, session, _state = accepted_review(
+                kernel,
+                slide_count=2,
+                empty_material_view_orders=frozenset({2}),
+            )
+
+            projection = ContentReviewProjectionService(kernel).project(
+                session["review_session_id"]
+            )
+
+            self.assertEqual(
+                projection["slides"][0]["material_views"],
+                [{
+                    "material_view_id": "S01-M01",
+                    "asset_ref": "review-assets/content/S01-M01.png",
+                }],
+            )
+            self.assertEqual(projection["slides"][1]["material_views"], [])
+            self.assertEqual(
+                [slide["slide_id"] for slide in projection["slides"]],
+                ["S01", "S02"],
+            )
+            self.assertEqual(
+                set(projection["slides"][0]["material_views"][0]),
+                CONTENT_REVIEW_MATERIAL_FIELDS,
+            )
+            self.assertTrue(
+                CONTENT_REVIEW_FORBIDDEN_FIELDS.isdisjoint(nested_keys(projection))
+            )
+
     def test_projection_requires_current_acceptance_and_source_bound_session(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             kernel = ProjectKernel.initialize(Path(folder), project_id="p1")

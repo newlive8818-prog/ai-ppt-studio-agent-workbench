@@ -183,6 +183,9 @@ test("collectProjectionAssetRefs trims, deduplicates, and only reads closed proj
         { asset_ref: "   " },
         { asset_ref: null },
       ],
+    }, {
+      slide_id: "S02",
+      material_views: [],
     }],
     anchors: [{
       slide_id: "S01",
@@ -368,6 +371,56 @@ test("Review Bridge allows content material assets only after the fixed projecti
     );
     assert.equal(fromAnotherProjection.status, 404);
     assert.equal(reads.length, 1);
+  } finally {
+    await bridge.stop();
+  }
+});
+
+test("Review Bridge keeps zero-image content pages out of the asset allowlist", async () => {
+  const allowedRef = "review-assets/content/S01-M01.png";
+  const absentRef = "review-assets/content/S02-M01.png";
+  const reads = [];
+  const { bridge, session } = await startedBridge({
+    review: {
+      ...review,
+      slides: [{
+        ...review.slides[0],
+        material_views: [{ material_view_id: "S01-M01", asset_ref: allowedRef }],
+      }, {
+        ...review.slides[0],
+        slide_id: "S02",
+        order: 2,
+        material_views: [],
+      }],
+    },
+    readProjectAsset: ({ projectRoot, assetRef }) => {
+      reads.push({ projectRoot, assetRef });
+      return {
+        assetRef,
+        mimeType: "image/png",
+        bytes: 3,
+        dataBase64: "YWJj",
+      };
+    },
+  });
+  try {
+    await fetch(`${session.origin}/api/review`, { headers: bearer(session) });
+
+    const allowed = await fetch(
+      `${session.origin}/api/asset?assetRef=${encodeURIComponent(allowedRef)}`,
+      { headers: bearer(session) },
+    );
+    const absent = await fetch(
+      `${session.origin}/api/asset?assetRef=${encodeURIComponent(absentRef)}`,
+      { headers: bearer(session) },
+    );
+
+    assert.equal(allowed.status, 200);
+    assert.equal(absent.status, 404);
+    assert.deepEqual(reads, [{
+      projectRoot: "/managed/project",
+      assetRef: allowedRef,
+    }]);
   } finally {
     await bridge.stop();
   }
