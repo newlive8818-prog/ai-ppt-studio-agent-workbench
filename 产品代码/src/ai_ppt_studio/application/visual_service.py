@@ -13,10 +13,7 @@ from ai_ppt_studio.domains.visual.contracts import (
     validate_visual_convergence,
     validate_visual_review,
 )
-from ai_ppt_studio.domains.presentation.targets import (
-    REQUIRED_TARGET_IDS,
-    TargetRenderEvidence,
-)
+from ai_ppt_studio.domains.presentation.targets import TargetRenderEvidence
 from ai_ppt_studio.errors import (
     ArtifactReferenceError,
     ContractValidationError,
@@ -25,6 +22,10 @@ from ai_ppt_studio.errors import (
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 from ai_ppt_studio.application.gate_evaluator import GateEvaluator
+from ai_ppt_studio.application.gate_confirmation import GateConfirmationPolicy
+from ai_ppt_studio.application.release_policy_service import (
+    ReleaseTargetPolicyService,
+)
 from ai_ppt_studio.kernel.state import KernelState
 
 
@@ -32,16 +33,20 @@ class VisualService:
     def __init__(self, kernel: ProjectKernel) -> None:
         self.kernel = kernel
 
+    def require_visual_production_open(self) -> str:
+        """Block public production/task entrypoints once G2 freezes lineage."""
+
+        return self._require_current_g0_confirmation()
+
     def register_visual_brief(
         self,
         command_id: str,
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
-        state = self.kernel.load()
-        if state.gate_status.get("G0") != "passed":
-            raise GateBlockedError("visual-brief", ("G0-not-passed",))
-        normalized = validate_visual_brief(payload)
+        self._require_current_g0_confirmation()
+        _policy_ref, policy = ReleaseTargetPolicyService(self.kernel).current()
+        normalized = validate_visual_brief(payload, policy.required_target_ids)
         self._require_exact_ref(
             normalized["content_blueprint_ref"],
             "content/blueprint",
@@ -63,6 +68,7 @@ class VisualService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
+        blueprint_ref = self._require_current_g0_confirmation()
         normalized = validate_deck_design_system(payload)
         self._require_exact_ref(
             normalized["visual_brief_ref"], "visual/brief", "visual-brief"
@@ -72,6 +78,17 @@ class VisualService:
             "content/blueprint",
             "content-blueprint",
         )
+        if normalized["content_blueprint_ref"] != blueprint_ref:
+            raise GateBlockedError(
+                "deck-design-system", ("frozen-content-lineage-mismatch",)
+            )
+        brief = self._require_exact_ref(
+            normalized["visual_brief_ref"], "visual/brief", "visual-brief"
+        )["payload"]
+        if brief.get("content_blueprint_ref") != blueprint_ref:
+            raise GateBlockedError(
+                "deck-design-system", ("visual-brief-content-lineage-stale",)
+            )
         committed = self.kernel.commit(
             command_id=command_id,
             expected_revision=expected_revision,
@@ -88,16 +105,24 @@ class VisualService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
-        self._require_exact_ref(
+        blueprint_ref = self._require_current_g0_confirmation()
+        design_system = self._require_exact_ref(
             str(payload.get("deck_design_system_ref") or ""),
             "visual/design-system",
             "deck-design-system",
-        )
+        )["payload"]
         content = self._require_exact_ref(
             str(payload.get("content_blueprint_ref") or ""),
             "content/blueprint",
             "content-blueprint",
         )["payload"]
+        if (
+            str(payload.get("content_blueprint_ref") or "") != blueprint_ref
+            or design_system.get("content_blueprint_ref") != blueprint_ref
+        ):
+            raise GateBlockedError(
+                "visual-contract-set", ("frozen-content-lineage-mismatch",)
+            )
         normalized = validate_visual_contract_set(payload, content)
         committed = self.kernel.commit(
             command_id=command_id,
@@ -115,12 +140,17 @@ class VisualService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
+        blueprint_ref = self._require_current_g0_confirmation()
         normalized = validate_visual_convergence(payload)
-        self._require_exact_ref(
+        contracts = self._require_exact_ref(
             normalized["visual_contract_set_ref"],
             "visual/contracts",
             "visual-contract-set",
-        )
+        )["payload"]
+        if contracts.get("content_blueprint_ref") != blueprint_ref:
+            raise GateBlockedError(
+                "visual-convergence", ("frozen-content-lineage-mismatch",)
+            )
         committed = self.kernel.commit(
             command_id=command_id,
             expected_revision=expected_revision,
@@ -137,6 +167,7 @@ class VisualService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
+        self._require_current_g0_confirmation()
         normalized = validate_visual_review(payload)
         if normalized["stage"] == "G1":
             if normalized["reviewer_kind"] != "aesthetic":
@@ -177,6 +208,7 @@ class VisualService:
     def record_g1(
         self, command_id: str, expected_revision: int
     ) -> KernelState:
+        self._require_current_g0_confirmation()
         mutation = GateEvaluator(self.kernel).pass_g1()
         return self.kernel.commit(
             command_id=command_id,
@@ -192,6 +224,7 @@ class VisualService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
+        self._require_current_g0_confirmation()
         state = self.kernel.load()
         if state.gate_status.get("G1") != "passed":
             raise GateBlockedError("anchor-slide-set", ("G1-not-passed",))
@@ -239,6 +272,7 @@ class VisualService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
+        self._require_current_g0_confirmation()
         normalized = validate_image_asset_pack(payload)
         anchor = self._require_exact_ref(
             normalized["anchor_slide_set_ref"],
@@ -265,6 +299,7 @@ class VisualService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
+        self._require_current_g0_confirmation()
         state = self.kernel.load()
         if (
             state.gate_status.get("G1") != "passed"
@@ -327,23 +362,35 @@ class VisualService:
     def record_g2(
         self, command_id: str, expected_revision: int
     ) -> KernelState:
-        mutation = GateEvaluator(self.kernel).pass_g2()
+        self._require_current_g0_confirmation()
+        mutation, lineage = GateEvaluator(self.kernel).pass_g2()
         return self.kernel.commit(
             command_id=command_id,
             expected_revision=expected_revision,
             event_type="gate.G2.passed",
-            artifact_updates={},
+            artifact_updates={
+                "gate/G2/lineage": ("g2-visual-lineage", lineage)
+            },
             gate_mutation=mutation,
         )
 
     def publish_visual_review(
         self, command_id: str, expected_revision: int
     ) -> KernelState:
+        self._require_current_g0_confirmation(allow_g2_passed=True)
         state = self.kernel.load()
         if state.gate_status.get("G2") != "passed":
             raise GateBlockedError("visual-review", ("G2-not-passed",))
+        reviewed_lineage = GateEvaluator(
+            self.kernel
+        ).current_g2_reviewed_lineage()
+        policy_ref, policy = ReleaseTargetPolicyService(self.kernel).current()
         required = {
             "content_blueprint_ref": ("content/blueprint", "content-blueprint"),
+            "visual_convergence_ref": (
+                "visual/convergence",
+                "visual-convergence",
+            ),
             "deck_design_system_ref": (
                 "visual/design-system",
                 "deck-design-system",
@@ -363,9 +410,7 @@ class VisualService:
             payloads[field] = record["payload"]
         target_evidence_refs: list[str] = []
         target_evidence_identities: list[dict[str, Any]] = []
-        from ai_ppt_studio.domains.presentation.targets import REQUIRED_TARGET_IDS
-
-        for target_id in REQUIRED_TARGET_IDS:
+        for target_id in policy.required_target_ids:
             slot = f"visual/target-evidence/G2/{target_id}"
             value = state.artifact_heads.get(slot, "")
             record = self._require_exact_ref(value, slot, "target-render-evidence")
@@ -399,6 +444,13 @@ class VisualService:
         contracts = payloads["visual_contract_set_ref"]
         visual_contract = {
             **refs,
+            "visual_brief_ref": reviewed_lineage["visual_brief_ref"],
+            "g2_reviewed_lineage_ref": state.artifact_heads[
+                "gate/G2/lineage"
+            ],
+            "release_target_policy_ref": policy_ref,
+            "required_target_ids": list(policy.required_target_ids),
+            "deferred_target_ids": list(policy.deferred_target_ids),
             "production_route": "strict-B",
             "deck_framework": {
                 "strategy": blueprint.get("strategy"),
@@ -412,6 +464,7 @@ class VisualService:
             "target_evidence_refs": target_evidence_refs,
             "target_evidence_identities": target_evidence_identities,
             "internal_review_refs": [
+                state.artifact_heads["visual/review/G1/aesthetic"],
                 state.artifact_heads["visual/review/G2/aesthetic"],
                 state.artifact_heads["visual/review/G2/engineering"],
             ],
@@ -438,27 +491,29 @@ class VisualService:
         command_id: str,
         expected_revision: int,
         *,
-        user_message_ref: str,
+        user_action_ref: str = "",
+        user_message_ref: str = "",
+        host_confirmation_assertion: str = "",
+        source_version: str = "",
+        challenge_id: str = "",
+        challenge_revision: int = -1,
     ) -> KernelState:
-        state = self.kernel.load()
-        if (
-            state.gate_status.get("G3") != "user-reviewable"
-            or not user_message_ref.startswith("chat://message/")
-        ):
-            raise GateBlockedError(
-                "G3", ("explicit-chat-confirmation-and-visual-review-required",)
-            )
-        confirmation = {
-            "gate": "G3",
-            "user_message_ref": user_message_ref,
-            "visual_contract_ref": state.artifact_heads["visual/contract"],
-        }
+        policy = GateConfirmationPolicy(self.kernel)
+        confirmation, consumptions = policy.confirmation_payload(
+            gate="G3",
+            source_version=source_version,
+            challenge_id=challenge_id,
+            challenge_revision=challenge_revision,
+            host_confirmation_assertion=host_confirmation_assertion,
+            user_action_ref=user_action_ref,
+            user_message_ref=user_message_ref,
+        )
+        confirmation["visual_contract_ref"] = confirmation["source_version"]
         confirmation_ref = str(
             self.kernel.artifacts.put("g3-confirmation", confirmation)
         )
         mutation = GateEvaluator(self.kernel).confirm_g3(
             confirmation_ref=confirmation_ref,
-            user_message_ref=user_message_ref,
         )
         return self.kernel.commit(
             command_id=command_id,
@@ -467,6 +522,77 @@ class VisualService:
             artifact_updates={
                 "gate/G3/confirmation": ("g3-confirmation", confirmation)
             },
+            confirmation_consumptions=consumptions,
+            gate_mutation=mutation,
+        )
+
+    def reopen_g3(
+        self,
+        command_id: str,
+        expected_revision: int,
+        *,
+        reason: str,
+    ) -> KernelState:
+        explanation = reason.strip()
+        if not explanation:
+            raise ContractValidationError("Reopening G3 requires a reason")
+        state = self.kernel.load()
+        visual_contract_ref = state.artifact_heads.get("visual/contract", "")
+        mutation = GateEvaluator(self.kernel).reopen_g3(
+            visual_contract_ref=visual_contract_ref
+        )
+        removals = {
+            slot
+            for slot in state.artifact_heads
+            if slot.startswith(("visual/", "delivery/", "chat-delivery/"))
+            or slot in {
+                "gate/G3/confirmation",
+                "gate/G4/confirmation",
+                "gate/G4/reopen",
+                "gate/G2/lineage",
+                "review-marks/visual",
+            }
+        }
+        removals.discard("gate/G3/reopen")
+        artifact_updates: dict[str, tuple[str, dict[str, Any]]] = {
+            "gate/G3/reopen": (
+                "scope-reopen",
+                {
+                    "gate": "G3",
+                    "reason": explanation,
+                    "prior_status": state.gate_status.get("G3", "locked"),
+                    "visual_contract_ref": visual_contract_ref,
+                },
+            )
+        }
+        active_ref = state.artifact_heads.get("agent/task/active", "")
+        if active_ref:
+            removals.add("agent/task/active")
+            task = self.kernel.artifacts.resolve(
+                ArtifactReference.parse(active_ref)
+            )["payload"]
+            if task.get("status") not in {"completed", "invalidated"}:
+                invalidated = {
+                    **task,
+                    "status": "invalidated",
+                    "progress": {
+                        "stage": "invalidated",
+                        "done": task.get("progress", {}).get("done", 0),
+                        "total": task.get("progress", {}).get("total", 1),
+                    },
+                    "invalidated_by_gate": "G3",
+                    "invalidation_reason": explanation,
+                }
+                artifact_updates[f"agent/task/{task['task_id']}"] = (
+                    "agent-task",
+                    invalidated,
+                )
+        return self.kernel.commit(
+            command_id=command_id,
+            expected_revision=expected_revision,
+            event_type="gate.G3.reopened",
+            artifact_updates=artifact_updates,
+            artifact_removals=tuple(sorted(removals)),
             gate_mutation=mutation,
         )
 
@@ -498,14 +624,19 @@ class VisualService:
                 raise ContractValidationError(
                     "G2 final recording requires the PPT engineering reviewer"
                 )
+            policy_ref, policy = ReleaseTargetPolicyService(self.kernel).current()
             expected = {
+                state.artifact_heads.get("visual/design-system", ""),
+                state.artifact_heads.get("visual/contracts", ""),
+                state.artifact_heads.get("visual/anchors", ""),
                 state.artifact_heads.get("visual/review/G2/aesthetic", ""),
                 state.artifact_heads.get("visual/review/G2/engineering", ""),
+                policy_ref,
                 *(
                     state.artifact_heads.get(
                         f"visual/target-evidence/G2/{target_id}", ""
                     )
-                    for target_id in REQUIRED_TARGET_IDS
+                    for target_id in policy.required_target_ids
                 ),
             }
         else:
@@ -608,6 +739,44 @@ class VisualService:
                 f"Artifact reference is not the current {slot} head: {value}"
             )
         return self.kernel.artifacts.resolve(reference)
+
+    def _require_current_g0_confirmation(
+        self, *, allow_g2_passed: bool = False
+    ) -> str:
+        state = self.kernel.load()
+        if state.gate_status.get("G3") in {"user-reviewable", "passed"} or state.artifact_heads.get(
+            "visual/contract"
+        ):
+            raise GateBlockedError(
+                "visual",
+                ("G3-visual-lineage-frozen-reopen-required",),
+            )
+        if (
+            state.gate_status.get("G2") == "passed"
+            and not allow_g2_passed
+        ):
+            raise GateBlockedError(
+                "visual",
+                ("G2-visual-lineage-frozen-until-G3-publication",),
+            )
+        blueprint_ref = state.artifact_heads.get("content/blueprint", "")
+        confirmation_ref = state.artifact_heads.get("gate/G0/confirmation", "")
+        if state.gate_status.get("G0") != "passed" or not confirmation_ref:
+            raise GateBlockedError("visual", ("current-G0-confirmation-required",))
+        confirmation = self._resolve_kind(
+            confirmation_ref, "g0-confirmation"
+        )["payload"]
+        if (
+            confirmation.get("project_id") != state.project_id
+            or confirmation.get("gate") != "G0"
+            or confirmation.get("source_version") != blueprint_ref
+            or confirmation.get("content_blueprint_ref") != blueprint_ref
+            or not GateEvaluator._trusted_confirmation_identity(confirmation)
+        ):
+            raise GateBlockedError(
+                "visual", ("current-G0-confirmation-lineage-stale",)
+            )
+        return blueprint_ref
 
     def _resolve_kind(self, value: str, kind: str) -> dict:
         reference = ArtifactReference.parse(value)

@@ -1,4 +1,4 @@
-"""Four-target, same-PPTX target-render evidence contract."""
+"""Desktop target-render evidence and policy-parameterized matrices."""
 
 from __future__ import annotations
 
@@ -8,14 +8,11 @@ from datetime import datetime
 from typing import Any
 
 from ai_ppt_studio.errors import GateBlockedError
+from ai_ppt_studio.domains.presentation.release_policy import SUPPORTED_TARGET_IDS
 from ai_ppt_studio.kernel.references import ArtifactReference
 
-REQUIRED_TARGET_IDS = (
-    "macos-powerpoint",
-    "macos-wps",
-    "windows-powerpoint",
-    "windows-wps",
-)
+# Compatibility alias for callers not yet migrated to project-bound policy.
+REQUIRED_TARGET_IDS = SUPPORTED_TARGET_IDS
 TARGET_PROFILES = {
     "macos-powerpoint": ("macOS", "Microsoft PowerPoint"),
     "macos-wps": ("macOS", "WPS Office"),
@@ -58,7 +55,7 @@ def _artifact_refs(payload: dict[str, Any], field: str) -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class TargetRenderEvidence:
-    """Immutable identity and result for one required desktop target."""
+    """Immutable identity and result for one supported desktop target."""
 
     target_id: str
     evidence_identity: str
@@ -85,7 +82,7 @@ class TargetRenderEvidence:
     evidence_ref: str
 
     def __post_init__(self) -> None:
-        if self.target_id not in REQUIRED_TARGET_IDS:
+        if self.target_id not in SUPPORTED_TARGET_IDS:
             raise ValueError(f"Unknown target profile: {self.target_id}")
         if self.evidence_identity != "formal-target-render":
             raise ValueError("Preflight-only output cannot be target-render evidence")
@@ -162,7 +159,7 @@ class TargetRenderEvidence:
         if not isinstance(payload, dict):
             raise ValueError("TargetRenderEvidence must be an object")
         target_id = _required_text(payload, "target_id")
-        if target_id not in REQUIRED_TARGET_IDS:
+        if target_id not in SUPPORTED_TARGET_IDS:
             raise ValueError(f"Unknown target profile: {target_id}")
         export_refs = _artifact_refs(payload, "export_refs")
         page_image_refs = _artifact_refs(payload, "page_image_refs")
@@ -238,7 +235,7 @@ class TargetRenderEvidence:
 
 @dataclass(frozen=True)
 class TargetEvidenceMatrix:
-    """A complete four-target result for one exact PPTX binary."""
+    """A complete policy-required result for one exact PPTX binary."""
 
     pptx_sha256: str
     target_ids: tuple[str, ...]
@@ -246,12 +243,27 @@ class TargetEvidenceMatrix:
 
 def validate_required_targets(
     evidence: list[TargetRenderEvidence],
+    required_target_ids: tuple[str, ...] | None = None,
 ) -> TargetEvidenceMatrix:
-    """Reject incomplete, failed, duplicate, or mixed-hash evidence."""
+    """Reject invalid, incomplete, failed, extra, or mixed-hash evidence."""
 
-    counts = {target: 0 for target in REQUIRED_TARGET_IDS}
+    required = (
+        SUPPORTED_TARGET_IDS
+        if required_target_ids is None
+        else tuple(required_target_ids)
+    )
     blockers: list[str] = []
+    if not required:
+        blockers.append("required-targets-empty")
+    if len(required) != len(set(required)):
+        blockers.append("required-targets-duplicate")
+    if set(required).difference(SUPPORTED_TARGET_IDS):
+        blockers.append("required-targets-unsupported")
+    counts = {target: 0 for target in required}
     for item in evidence:
+        if item.target_id not in counts:
+            blockers.append(f"extra-target:{item.target_id}")
+            continue
         counts[item.target_id] += 1
     blockers.extend(target for target, count in counts.items() if count != 1)
     if any(item.overall_result != "passed" for item in evidence):
@@ -264,5 +276,5 @@ def validate_required_targets(
             "target-render-matrix", tuple(sorted(set(blockers)))
         )
     return TargetEvidenceMatrix(
-        pptx_sha256=next(iter(hashes)), target_ids=REQUIRED_TARGET_IDS
+        pptx_sha256=next(iter(hashes)), target_ids=required
     )

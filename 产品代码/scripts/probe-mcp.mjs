@@ -35,10 +35,13 @@ try {
     "request_ai_ppt_agent_action",
     "save_ai_ppt_mission_draft",
     "save_review_marks",
+    "set_ai_ppt_release_target_policy",
     "submit_ai_ppt_human_decision",
   ];
-  if (toolNames.length !== 17) {
-    throw new Error(`Expected 17 pure-data tools, found ${toolNames.length}.`);
+  if (toolNames.length !== requiredTools.length) {
+    throw new Error(
+      `Expected ${requiredTools.length} pure-data tools, found ${toolNames.length}.`,
+    );
   }
   for (const name of requiredTools) {
     if (!toolNames.includes(name)) {
@@ -94,17 +97,39 @@ try {
     throw new Error("Missing host sidebar must be reported as HOST_SIDEBAR_UNAVAILABLE.");
   }
 
-  const browserResult = await client.callTool({
-    name: "open_ai_ppt_browser_review",
-    arguments: {
-      projectRoot: selectedProjectRoot,
-      reviewType: "content",
-      sourceVersion: "probe-unproven-source",
-    },
-  });
-  const browserCode = browserResult.structuredContent?.error?.code;
-  if (browserResult.isError !== true || browserCode !== "BROWSER_REVIEW_UNAVAILABLE") {
-    throw new Error("Missing Browser adapter must be reported as BROWSER_REVIEW_UNAVAILABLE.");
+  const reviewTarget = [
+    ["content", initialSnapshot.workspace?.blueprint?.source_version],
+    ["visual", initialSnapshot.workspace?.visual?.source_version],
+  ].find(([, sourceVersion]) => typeof sourceVersion === "string" && sourceVersion);
+  let browserStatus = "review-source-unavailable";
+  let browserCode = "REVIEW_SOURCE_UNAVAILABLE";
+  let browserOpenMode = "";
+  if (reviewTarget) {
+    const [reviewType, sourceVersion] = reviewTarget;
+    const browserResult = await client.callTool({
+      name: "open_ai_ppt_browser_review",
+      arguments: {
+        projectRoot: selectedProjectRoot,
+        reviewType,
+        sourceVersion,
+      },
+    });
+    browserStatus = browserResult.structuredContent?.status || "";
+    browserOpenMode = browserResult.structuredContent?.openMode || "";
+    browserCode = "BROWSER_REVIEW_AVAILABLE";
+    if (
+      browserResult.isError === true ||
+      browserStatus !== "review-session-ready" ||
+      browserOpenMode !== "agent-browser" ||
+      browserResult.structuredContent?.browserAction !== "open-scoped-url" ||
+      !/^http:\/\/127\.0\.0\.1:\d+\/#token=/.test(
+        browserResult.structuredContent?.url || "",
+      )
+    ) {
+      throw new Error(
+        "Production MCP must return a review-session-ready Agent Browser handoff.",
+      );
+    }
   }
 
   process.stdout.write(
@@ -135,8 +160,9 @@ try {
           realHostEvidence: false,
         },
         browser: {
-          status: "unavailable",
+          status: browserStatus,
           code: browserCode,
+          openMode: browserOpenMode,
           proofEligible: false,
           realHostEvidence: false,
         },

@@ -20,6 +20,9 @@ from ai_ppt_studio.application.content_action_policy import (
     content_action_contract,
     validate_content_action_targets,
 )
+from ai_ppt_studio.application.release_policy_service import (
+    ReleaseTargetPolicyService,
+)
 
 
 FOUR_TARGETS = (
@@ -106,12 +109,17 @@ class ContextCompiler:
             "same_pptx_sha256_required": False,
         }
         if task_type in {"verify-target-render", "coordinate-delivery"}:
+            policy_ref, policy = ReleaseTargetPolicyService(self.kernel).current()
             target_contract = {
                 "required": True,
-                "targets": list(FOUR_TARGETS),
+                "release_target_policy_ref": policy_ref,
+                "required_target_ids": list(policy.required_target_ids),
+                "deferred_target_ids": list(policy.deferred_target_ids),
+                "targets": list(policy.required_target_ids),
                 "same_pptx_sha256_required": True,
                 "desktop_evidence_only": True,
                 "preflight_evidence_forbidden": True,
+                "deferred_compatibility_claims_forbidden": True,
             }
         repair = task_type in {"repair-content", "govern-feedback"}
         repair_contract = {
@@ -181,9 +189,9 @@ class ContextCompiler:
                     "gates": {
                         "G0": "user-chat-confirmed",
                         "G1": "internal-binary",
-                        "G2": "internal-binary-four-target",
+                        "G2": "internal-binary-release-target",
                         "G3": "user-chat-confirmed",
-                        "G4": "user-chat-confirmed-four-target",
+                        "G4": "user-chat-confirmed-release-target",
                     },
                 },
                 "scenario_pack": {
@@ -375,4 +383,4 @@ class ContextCompiler:
         return exclusions
 
 
-__all__ = ["ContextCompiler", "FOUR_TARGETS"]
+__all__ = ["ContextCompiler"]

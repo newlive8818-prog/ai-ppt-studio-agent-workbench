@@ -10,6 +10,9 @@ from ai_ppt_studio.errors import (
     ContractValidationError,
     ReviewSourceStaleError,
 )
+from ai_ppt_studio.application.release_policy_service import (
+    ReleaseTargetPolicyService,
+)
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.state import KernelState
 from ai_ppt_studio.kernel.transactions import ProjectKernel
@@ -72,6 +75,7 @@ class ReviewService:
 
     def visual_projection(self) -> dict[str, Any]:
         state = self.kernel.load()
+        policy_ref, policy = ReleaseTargetPolicyService(self.kernel).current()
         source_version = state.artifact_heads.get("visual/contract")
         if not source_version:
             raise ContractValidationError("No user-reviewable visual contract")
@@ -79,6 +83,10 @@ class ReviewService:
         if reference.kind != "visual-contract":
             raise ContractValidationError("Visual contract head has the wrong kind")
         payload = copy.deepcopy(self.kernel.artifacts.resolve(reference)["payload"])
+        if payload.get("release_target_policy_ref") != policy_ref:
+            raise ContractValidationError(
+                "TARGET_POLICY_STALE: visual contract does not bind the current release policy"
+            )
         sections = self._visual_sections(payload)
         project_name = self._project_name(state)
         design_system = payload.get("deck_design_system")
@@ -97,6 +105,15 @@ class ReviewService:
             "source_version": source_version,
             "source_refs": [source_version],
             "status": payload.get("status"),
+            "release_target_policy": {
+                "policy_ref": policy_ref,
+                "policy_id": policy.policy_id,
+                "required_target_ids": list(policy.required_target_ids),
+                "deferred_target_ids": list(policy.deferred_target_ids),
+                "compatibility_claim_scope": list(
+                    policy.compatibility_claim_scope
+                ),
+            },
             "gate_status": {
                 gate: state.gate_status.get(gate, "locked")
                 for gate in ("G1", "G2", "G3")

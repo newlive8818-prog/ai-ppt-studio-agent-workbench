@@ -21,9 +21,11 @@ from ai_ppt_studio.acceptance.ledger import (  # noqa: E402
     extract_numbered_requirements,
 )
 from ai_ppt_studio.domains.presentation.targets import (  # noqa: E402
-    REQUIRED_TARGET_IDS,
     TargetRenderEvidence,
     validate_required_targets,
+)
+from ai_ppt_studio.domains.presentation.release_policy import (  # noqa: E402
+    ReleaseTargetPolicy,
 )
 from ai_ppt_studio.errors import GateBlockedError  # noqa: E402
 from ai_ppt_studio.kernel.references import ArtifactReference  # noqa: E402
@@ -176,7 +178,7 @@ def _verify_installed_release(
         or not isinstance(probe, dict)
         or probe.get("status") != "passed"
         or probe.get("source_repository_pythonpath") is not False
-        or probe.get("tool_count") != 17
+        or probe.get("tool_count") != 18
         or probe.get("chat_ui_template_count") != 0
         or probe.get("ordinary_tools_data_only") is not True
         or probe.get("sidebar_capability_code")
@@ -219,11 +221,15 @@ def _artifact_payload(
 
 
 def _target_matrix(
-    kernel: ProjectKernel, state: Any, *, stage: str
+    kernel: ProjectKernel,
+    state: Any,
+    *,
+    stage: str,
+    required_target_ids: tuple[str, ...],
 ) -> tuple[str, tuple[str, ...]]:
     prefix = "visual" if stage == "G2" else "delivery"
     values: list[TargetRenderEvidence] = []
-    for target_id in REQUIRED_TARGET_IDS:
+    for target_id in required_target_ids:
         slot = f"{prefix}/target-evidence/{stage}/{target_id}"
         ref = state.artifact_heads.get(slot, "")
         if not ref:
@@ -237,9 +243,11 @@ def _target_matrix(
             raise ValueError(f"{stage} target slot identity mismatch: {target_id}")
         values.append(item)
     try:
-        matrix = validate_required_targets(values)
+        matrix = validate_required_targets(values, required_target_ids)
     except GateBlockedError as exc:
-        raise ValueError(f"{stage} four-target evidence matrix is not complete") from exc
+        raise ValueError(
+            f"{stage} required-target evidence matrix is not complete"
+        ) from exc
     return matrix.pptx_sha256, matrix.target_ids
 
 
@@ -255,11 +263,25 @@ def _verify_project(project_root: Path) -> dict[str, Any]:
         raise ValueError("Final acceptance project lacks project identity")
     kernel = ProjectKernel(project, project_id=project_id)
     state = kernel.load()
+    policy_ref = state.artifact_heads.get("release/target-policy", "")
+    policy = ReleaseTargetPolicy.from_payload(
+        _artifact_payload(kernel, policy_ref, "release-target-policy")
+    )
     for gate in ("G0", "G1", "G2", "G3", "G4"):
         if state.gate_status.get(gate) != "passed":
             raise ValueError(f"Final acceptance Gate is not passed: {gate}")
-    g2_hash, g2_targets = _target_matrix(kernel, state, stage="G2")
-    g4_hash, g4_targets = _target_matrix(kernel, state, stage="G4")
+    g2_hash, g2_targets = _target_matrix(
+        kernel,
+        state,
+        stage="G2",
+        required_target_ids=policy.required_target_ids,
+    )
+    g4_hash, g4_targets = _target_matrix(
+        kernel,
+        state,
+        stage="G4",
+        required_target_ids=policy.required_target_ids,
+    )
     if g2_hash != g4_hash:
         raise ValueError("G2 and G4 target matrices must use the same PPTX SHA-256")
     build_ref = state.artifact_heads.get("delivery/build", "")
@@ -276,6 +298,7 @@ def _verify_project(project_root: Path) -> dict[str, Any]:
         build.get("pptx_sha256") != g4_hash
         or package.get("build_ref") != build_ref
         or package.get("pptx_sha256") != g4_hash
+        or package.get("release_target_policy_ref") != policy_ref
         or receipt.get("build_ref") != build_ref
         or receipt.get("package_ref") != package_ref
         or receipt.get("pptx_sha256") != g4_hash
@@ -284,9 +307,11 @@ def _verify_project(project_root: Path) -> dict[str, Any]:
         or confirmation.get("build_ref") != build_ref
         or confirmation.get("package_ref") != package_ref
         or confirmation.get("receipt_ref") != receipt_ref
-        or not str(confirmation.get("user_message_ref") or "").startswith(
-            "chat://message/"
-        )
+        or confirmation.get("confirmation_identity_type")
+        not in {"host-action", "verified-message"}
+        or not confirmation.get("host_assertion_sha256")
+        or bool(confirmation.get("user_action_ref"))
+        == bool(confirmation.get("user_message_ref"))
     ):
         raise ValueError("Final delivery package, chat receipt, or G4 acceptance is stale")
     return {
@@ -297,6 +322,12 @@ def _verify_project(project_root: Path) -> dict[str, Any]:
         "g4_pptx_sha256": g4_hash,
         "g2_targets": list(g2_targets),
         "g4_targets": list(g4_targets),
+        "release_target_policy_ref": policy_ref,
+        "required_target_ids": list(policy.required_target_ids),
+        "deferred_target_ids": list(policy.deferred_target_ids),
+        "compatibility_claim_scope": list(
+            policy.compatibility_claim_scope
+        ),
         "chat_message_ref": receipt["message_ref"],
         "g4_user_message_ref": confirmation["user_message_ref"],
     }

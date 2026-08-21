@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from ai_ppt_studio.domains.presentation.targets import REQUIRED_TARGET_IDS
 from ai_ppt_studio.errors import ContractValidationError
 
 VISUAL_RULE_LEVELS = frozenset(
@@ -46,7 +45,9 @@ def _strict_route(payload: dict[str, Any]) -> None:
         )
 
 
-def validate_visual_brief(payload: dict[str, Any]) -> dict[str, Any]:
+def validate_visual_brief(
+    payload: dict[str, Any], required_target_ids: tuple[str, ...]
+) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ContractValidationError("VisualBrief must be an object")
     _strict_route(payload)
@@ -61,11 +62,11 @@ def validate_visual_brief(payload: dict[str, Any]) -> dict[str, Any]:
         "powerpoint_constraints",
     ):
         normalized[field] = _text(payload, field)
-    if tuple(payload.get("target_ids") or ()) != REQUIRED_TARGET_IDS:
+    if tuple(payload.get("target_ids") or ()) != required_target_ids:
         raise ContractValidationError(
-            "VisualBrief must include all four required target IDs in canonical order"
+            "VisualBrief target IDs must equal the current release policy in order"
         )
-    normalized["target_ids"] = list(REQUIRED_TARGET_IDS)
+    normalized["target_ids"] = list(required_target_ids)
     return normalized
 
 

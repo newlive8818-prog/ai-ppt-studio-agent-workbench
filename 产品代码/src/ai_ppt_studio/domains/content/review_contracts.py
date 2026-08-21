@@ -33,6 +33,10 @@ _CONTENT_BLUEPRINT_FIELDS = frozenset(
         "framework_confirmation_ref",
         "full_deck_expansion_authorization_ref",
         "acceptance_ref",
+        "supersedes_blueprint_ref",
+        "review_batch_ref",
+        "batch_revision_plan_ref",
+        "batch_plan_confirmation_ref",
         "strategy",
         "claim_evidence_map",
         "argument_map",
@@ -40,6 +44,12 @@ _CONTENT_BLUEPRINT_FIELDS = frozenset(
         "status",
     }
 )
+_CONTENT_BLUEPRINT_REVISION_REFERENCE_KINDS = {
+    "supersedes_blueprint_ref": "content-blueprint",
+    "review_batch_ref": "content-review-batch",
+    "batch_revision_plan_ref": "content-batch-revision-plan",
+    "batch_plan_confirmation_ref": "content-batch-plan-confirmation",
+}
 _CONTENT_BLUEPRINT_REFERENCE_KINDS = {
     "strategy_ref": "presales-content-strategy",
     "claim_evidence_map_ref": "claim-evidence-map",
@@ -111,6 +121,7 @@ _CONTENT_REVIEW_BATCH_FIELDS = frozenset(
         "confirmed_at",
     }
 )
+_CONTENT_REVIEW_BATCH_LIFECYCLE_FIELDS = frozenset({"result_blueprint_ref"})
 _CONTENT_REVIEW_BATCH_COUNTS = frozenset(
     {"approved", "modify", "evidence", "merge_or_delete"}
 )
@@ -136,6 +147,27 @@ _CONTENT_REVIEW_BATCH_WITHDRAWAL_FIELDS = frozenset(
         "confirmation_identity_type",
         "host_assertion_sha256",
         "confirmed_at",
+    }
+)
+_CONTENT_BATCH_REVISION_PLAN_FIELDS = frozenset(
+    {
+        "plan_id",
+        "plan_version",
+        "review_batch_ref",
+        "review_batch_id",
+        "source_version",
+        "direct_actions",
+        "cross_page_actions",
+        "merge_delete_actions",
+        "evidence_actions",
+        "revised_chapters",
+        "estimated_slide_count",
+        "preserve_items",
+        "conflicts_and_risks",
+        "required_user_decisions",
+        "re_review_scope",
+        "requires_blueprint_revision",
+        "status",
     }
 )
 CONTENT_REVIEW_BATCH_STATUSES = frozenset(
@@ -216,6 +248,162 @@ def _timestamp(value: object, *, field: str) -> str:
     return text
 
 
+def _plan_text_list(value: object, *, field: str) -> list[str]:
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item.strip() for item in value
+    ):
+        raise ContractValidationError(f"{field} must be a string array")
+    return [item.strip() for item in value]
+
+
+def _plan_action_list(
+    value: object,
+    *,
+    field: str,
+    required_fields: frozenset[str],
+    slide_list_fields: frozenset[str],
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise ContractValidationError(f"{field} must be an object array")
+    normalized: list[dict[str, Any]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict) or set(item) != required_fields:
+            raise ContractValidationError(
+                f"{field}[{index}] must contain exactly "
+                + ", ".join(sorted(required_fields))
+            )
+        row: dict[str, Any] = {}
+        for name in required_fields:
+            if name in slide_list_fields:
+                slides = _plan_text_list(item.get(name), field=f"{field}.{name}")
+                if not slides or len(slides) != len(set(slides)):
+                    raise ContractValidationError(
+                        f"{field}.{name} must contain unique slide ids"
+                    )
+                row[name] = slides
+            else:
+                row[name] = _nonempty_text(item, name)
+        normalized.append(row)
+    return normalized
+
+
+def validate_content_batch_revision_plan(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate the complete, source-bound whole-deck revision proposal."""
+
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != _CONTENT_BATCH_REVISION_PLAN_FIELDS
+    ):
+        raise ContractValidationError(
+            "ContentBatchRevisionPlan must contain every exact formal field"
+        )
+    direct_actions = _plan_action_list(
+        payload.get("direct_actions"),
+        field="direct_actions",
+        required_fields=frozenset({"slide_ids", "action"}),
+        slide_list_fields=frozenset({"slide_ids"}),
+    )
+    cross_page_actions = _plan_action_list(
+        payload.get("cross_page_actions"),
+        field="cross_page_actions",
+        required_fields=frozenset({"slide_ids", "action"}),
+        slide_list_fields=frozenset({"slide_ids"}),
+    )
+    merge_delete_actions = _plan_action_list(
+        payload.get("merge_delete_actions"),
+        field="merge_delete_actions",
+        required_fields=frozenset(
+            {
+                "source_slide_ids",
+                "target_slide_id",
+                "preserve",
+                "remove",
+            }
+        ),
+        slide_list_fields=frozenset({"source_slide_ids"}),
+    )
+    evidence_actions = _plan_action_list(
+        payload.get("evidence_actions"),
+        field="evidence_actions",
+        required_fields=frozenset(
+            {"slide_ids", "action", "required_material"}
+        ),
+        slide_list_fields=frozenset({"slide_ids"}),
+    )
+    revised_chapters = _plan_action_list(
+        payload.get("revised_chapters"),
+        field="revised_chapters",
+        required_fields=frozenset({"chapter_id", "title", "slide_ids"}),
+        slide_list_fields=frozenset({"slide_ids"}),
+    )
+    requires_revision = payload.get("requires_blueprint_revision")
+    if not isinstance(requires_revision, bool):
+        raise ContractValidationError(
+            "requires_blueprint_revision must be a boolean"
+        )
+    if not requires_revision and any(
+        (
+            direct_actions,
+            cross_page_actions,
+            merge_delete_actions,
+            evidence_actions,
+            revised_chapters,
+        )
+    ):
+        raise ContractValidationError(
+            "A no-revision plan cannot contain blueprint revision actions"
+        )
+    if payload.get("re_review_scope") != "new-blueprint-full-deck":
+        raise ContractValidationError(
+            "re_review_scope must be new-blueprint-full-deck"
+        )
+    if payload.get("status") != "proposed":
+        raise ContractValidationError("Revision plan status must be proposed")
+    normalized = {
+        "plan_id": _nonempty_text(payload, "plan_id"),
+        "plan_version": _positive_int(payload, "plan_version"),
+        "review_batch_ref": _artifact_ref(
+            _nonempty_text(payload, "review_batch_ref"),
+            field="review_batch_ref",
+            kind="content-review-batch",
+        ),
+        "review_batch_id": _nonempty_text(payload, "review_batch_id"),
+        "source_version": _artifact_ref(
+            _nonempty_text(payload, "source_version"),
+            field="source_version",
+            kind="content-blueprint",
+        ),
+        "direct_actions": direct_actions,
+        "cross_page_actions": cross_page_actions,
+        "merge_delete_actions": merge_delete_actions,
+        "evidence_actions": evidence_actions,
+        "revised_chapters": revised_chapters,
+        "estimated_slide_count": _positive_int(
+            payload, "estimated_slide_count"
+        ),
+        "preserve_items": _plan_text_list(
+            payload.get("preserve_items"), field="preserve_items"
+        ),
+        "conflicts_and_risks": _plan_text_list(
+            payload.get("conflicts_and_risks"), field="conflicts_and_risks"
+        ),
+        "required_user_decisions": _plan_text_list(
+            payload.get("required_user_decisions"),
+            field="required_user_decisions",
+        ),
+        "re_review_scope": "new-blueprint-full-deck",
+        "requires_blueprint_revision": requires_revision,
+        "status": "proposed",
+    }
+    if normalized != payload:
+        raise ContractValidationError(
+            "ContentBatchRevisionPlan payload is not canonical"
+        )
+    return normalized
+
+
 def normalize_page_decision_choice(
     decision: object,
     comment: object,
@@ -264,6 +452,22 @@ def validate_content_blueprint(payload: dict[str, Any]) -> dict[str, Any]:
         )
         for field, kind in _CONTENT_BLUEPRINT_REFERENCE_KINDS.items()
     }
+    revision_refs: dict[str, str] = {}
+    for field, kind in _CONTENT_BLUEPRINT_REVISION_REFERENCE_KINDS.items():
+        value = _optional_text(payload, field)
+        revision_refs[field] = (
+            _artifact_ref(value, field=field, kind=kind) if value else ""
+        )
+    present_revision_refs = {
+        field for field, value in revision_refs.items() if value
+    }
+    if present_revision_refs and present_revision_refs != set(
+        _CONTENT_BLUEPRINT_REVISION_REFERENCE_KINDS
+    ):
+        raise ContractValidationError(
+            "A revised ContentBlueprint requires complete batch-plan lineage"
+        )
+    normalized.update(revision_refs)
     for field in ("strategy", "claim_evidence_map", "argument_map"):
         value = payload.get(field)
         if not isinstance(value, dict) or not value:
@@ -674,7 +878,12 @@ def validate_content_review_batch(
 ) -> dict[str, Any]:
     """Validate one exact immutable full-deck review-batch lifecycle artifact."""
 
-    if not isinstance(payload, dict) or set(payload) != _CONTENT_REVIEW_BATCH_FIELDS:
+    payload_fields = set(payload) if isinstance(payload, dict) else set()
+    if not isinstance(payload, dict) or (
+        payload_fields != _CONTENT_REVIEW_BATCH_FIELDS
+        and payload_fields
+        != _CONTENT_REVIEW_BATCH_FIELDS | _CONTENT_REVIEW_BATCH_LIFECYCLE_FIELDS
+    ):
         raise ContractValidationError(
             "ContentReviewBatch must contain every exact formal field"
         )
@@ -760,6 +969,17 @@ def validate_content_review_batch(
         "host_assertion_sha256": submission["host_assertion_sha256"],
         "confirmed_at": submission["confirmed_at"],
     }
+    if "result_blueprint_ref" in payload:
+        result_blueprint_ref = _artifact_ref(
+            _nonempty_text(payload, "result_blueprint_ref"),
+            field="result_blueprint_ref",
+            kind="content-blueprint",
+        )
+        if status != "applied" or result_blueprint_ref == source_version:
+            raise ContractValidationError(
+                "result_blueprint_ref is reserved for an applied revision lifecycle"
+            )
+        normalized["result_blueprint_ref"] = result_blueprint_ref
     if normalized != payload:
         raise ContractValidationError(
             "ContentReviewBatch payload is not canonical"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,14 +29,20 @@ from ai_ppt_studio.domains.feedback.contracts import (
     validate_feedback_governance,
     validate_raw_feedback,
 )
+from ai_ppt_studio.domains.content.review_contracts import (
+    validate_content_blueprint,
+    validate_content_review_batch,
+)
 from ai_ppt_studio.errors import (
     ArtifactReferenceError,
     ConfirmationTransactionError,
     ContentWorkflowError,
+    ContractValidationError,
     FeedbackGovernanceError,
     GateBlockedError,
 )
 from ai_ppt_studio.application.gate_evaluator import GateEvaluator
+from ai_ppt_studio.application.gate_confirmation import GateConfirmationPolicy
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 from ai_ppt_studio.kernel.state import KernelState
@@ -331,6 +338,10 @@ class ContentService:
 
         readiness = MissionReadinessPolicy(self.kernel).require_ready()
         lineage = require_full_deck_expansion_authorization(self.kernel)
+        if stage == "slide-draft-set" and self.kernel.load().artifact_heads.get(
+            "content/blueprint"
+        ):
+            self._current_revision_plan_lineage(self.kernel.load())
         self._reject_supplied_stale_workflow_lineage(payload, lineage)
         governed_payload = self._govern_content_identity(
             {**payload, **lineage}, readiness
@@ -387,6 +398,9 @@ class ContentService:
         MissionReadinessPolicy(self.kernel).require_ready()
         lineage = require_full_deck_expansion_authorization(self.kernel)
         state = self.kernel.load()
+        revision_lineage = self._current_revision_plan_lineage(
+            state, allow_initial=True
+        )
         refs, payloads = self._validated_current_content_chain(lineage)
         draft_ref = refs["draft_ref"]
         records: list[tuple[str, dict[str, Any]]] = []
@@ -404,12 +418,17 @@ class ContentService:
             records.append((value, envelope["payload"]))
         acceptance = aggregate_content_reviews(draft_ref, records)
         acceptance.update(lineage)
+        acceptance.update(revision_lineage)
         acceptance["passed_at"] = datetime.now(timezone.utc).isoformat()
         acceptance_ref = str(
             self.kernel.artifacts.put("content-acceptance", acceptance)
         )
         blueprint = self._build_blueprint(
-            acceptance_ref, lineage, refs, payloads
+            acceptance_ref,
+            lineage,
+            revision_lineage,
+            refs,
+            payloads,
         )
         blueprint_ref = str(
             self.kernel.artifacts.put("content-blueprint", blueprint)
@@ -417,14 +436,71 @@ class ContentService:
         mutation = GateEvaluator(self.kernel).content_user_reviewable(
             acceptance_ref, blueprint_ref
         )
+        downstream_prefixes = (
+            "visual/",
+            "delivery/",
+            "chat-delivery/",
+            "gate/",
+            "review-marks/visual",
+        )
+        removals = tuple(
+            sorted(
+                slot
+                for slot in state.artifact_heads
+                if slot.startswith(downstream_prefixes)
+            )
+        )
+        artifact_updates: dict[str, tuple[str, dict[str, Any]]] = {
+            "content/acceptance": ("content-acceptance", acceptance),
+            "content/blueprint": ("content-blueprint", blueprint),
+        }
+        if revision_lineage["supersedes_blueprint_ref"]:
+            current_batch_ref = state.artifact_heads.get(
+                "content/review-batch", ""
+            )
+            current_batch = self.kernel.artifacts.resolve(
+                ArtifactReference.parse(current_batch_ref)
+            )["payload"]
+            applied_batch = copy.deepcopy(current_batch)
+            applied_batch["status"] = "applied"
+            applied_batch["supersedes_ref"] = current_batch_ref
+            applied_batch["result_blueprint_ref"] = blueprint_ref
+            applied_batch = validate_content_review_batch(
+                applied_batch, prior_submitted=current_batch
+            )
+            artifact_updates["content/review-batch"] = (
+                "content-review-batch",
+                applied_batch,
+            )
+        removal_set = set(removals)
+        active_ref = state.artifact_heads.get("agent/task/active", "")
+        if active_ref:
+            removal_set.add("agent/task/active")
+            task = self.kernel.artifacts.resolve(
+                ArtifactReference.parse(active_ref)
+            )["payload"]
+            if task.get("status") not in {"completed", "invalidated"}:
+                invalidated = {
+                    **task,
+                    "status": "invalidated",
+                    "progress": {
+                        "stage": "invalidated",
+                        "done": task.get("progress", {}).get("done", 0),
+                        "total": task.get("progress", {}).get("total", 1),
+                    },
+                    "invalidated_by_gate": "G0",
+                    "invalidation_reason": "content-blueprint-republished",
+                }
+                artifact_updates[f"agent/task/{task['task_id']}"] = (
+                    "agent-task",
+                    invalidated,
+                )
         committed = self.kernel.commit(
             command_id=command_id,
             expected_revision=expected_revision,
             event_type="content.accepted-internally",
-            artifact_updates={
-                "content/acceptance": ("content-acceptance", acceptance),
-                "content/blueprint": ("content-blueprint", blueprint),
-            },
+            artifact_updates=artifact_updates,
+            artifact_removals=tuple(sorted(removal_set)),
             gate_mutation=mutation,
         )
         return ContentAcceptanceResult(
@@ -438,35 +514,126 @@ class ContentService:
         command_id: str,
         expected_revision: int,
         *,
-        user_message_ref: str,
+        user_action_ref: str = "",
+        user_message_ref: str = "",
+        host_confirmation_assertion: str = "",
+        source_version: str = "",
+        challenge_id: str = "",
+        challenge_revision: int = -1,
     ) -> KernelState:
-        state = self.kernel.load()
-        if state.gate_status.get("G0") != "user-reviewable" or not user_message_ref.startswith(
-            "chat://message/"
-        ):
-            raise GateBlockedError(
-                "G0", ("explicit-chat-confirmation-and-accepted-content-required",)
-            )
-        confirmation = {
-            "gate": "G0",
-            "user_message_ref": user_message_ref,
-            "content_acceptance_ref": state.artifact_heads["content/acceptance"],
-            "content_blueprint_ref": state.artifact_heads["content/blueprint"],
-        }
+        policy = GateConfirmationPolicy(self.kernel)
+        confirmation, consumptions = policy.confirmation_payload(
+            gate="G0",
+            source_version=source_version,
+            challenge_id=challenge_id,
+            challenge_revision=challenge_revision,
+            host_confirmation_assertion=host_confirmation_assertion,
+            user_action_ref=user_action_ref,
+            user_message_ref=user_message_ref,
+        )
+        confirmation["content_acceptance_ref"] = confirmation["evidence_refs"][0]
+        confirmation["content_blueprint_ref"] = confirmation["source_version"]
         confirmation_ref = str(
             self.kernel.artifacts.put("g0-confirmation", confirmation)
         )
-        mutation = GateEvaluator(self.kernel).confirm_g0(
-            confirmation_ref=confirmation_ref,
-            user_message_ref=user_message_ref,
+        evaluator = GateEvaluator(self.kernel)
+        mutation = (
+            evaluator.upgrade_legacy_g0_confirmation(
+                confirmation_ref=confirmation_ref
+            )
+            if confirmation.get("confirmation_mode")
+            == "legacy-credential-upgrade"
+            else evaluator.confirm_g0(confirmation_ref=confirmation_ref)
         )
         return self.kernel.commit(
             command_id=command_id,
             expected_revision=expected_revision,
-            event_type="gate.G0.confirmed",
+            event_type=(
+                "gate.G0.confirmation-credential-upgraded"
+                if confirmation.get("confirmation_mode")
+                == "legacy-credential-upgrade"
+                else "gate.G0.confirmed"
+            ),
             artifact_updates={
                 "gate/G0/confirmation": ("g0-confirmation", confirmation)
             },
+            confirmation_consumptions=consumptions,
+            gate_mutation=mutation,
+        )
+
+    def gate_confirmation_context(self, gate: str = "G0") -> dict[str, Any]:
+        return GateConfirmationPolicy(self.kernel).context(gate)
+
+    def reopen_g0(
+        self,
+        command_id: str,
+        expected_revision: int,
+        *,
+        reason: str,
+    ) -> KernelState:
+        explanation = reason.strip()
+        if not explanation:
+            raise ContractValidationError("Reopening G0 requires a reason")
+        state = self.kernel.load()
+        acceptance_ref = state.artifact_heads.get("content/acceptance", "")
+        blueprint_ref = state.artifact_heads.get("content/blueprint", "")
+        mutation = GateEvaluator(self.kernel).reopen_g0(
+            acceptance_ref=acceptance_ref,
+            blueprint_ref=blueprint_ref,
+        )
+        downstream_prefixes = (
+            "visual/",
+            "delivery/",
+            "chat-delivery/",
+            "gate/",
+            "review-marks/visual",
+        )
+        removals = {
+            slot
+            for slot in state.artifact_heads
+            if slot.startswith(downstream_prefixes)
+        }
+        removals.discard("gate/G0/reopen")
+        artifact_updates: dict[str, tuple[str, dict[str, Any]]] = {
+            "gate/G0/reopen": (
+                "scope-reopen",
+                {
+                    "gate": "G0",
+                    "reason": explanation,
+                    "prior_status": state.gate_status.get("G0", "locked"),
+                    "content_acceptance_ref": acceptance_ref,
+                    "content_blueprint_ref": blueprint_ref,
+                },
+            )
+        }
+        active_ref = state.artifact_heads.get("agent/task/active", "")
+        if active_ref:
+            removals.add("agent/task/active")
+            task = self.kernel.artifacts.resolve(
+                ArtifactReference.parse(active_ref)
+            )["payload"]
+            if task.get("status") not in {"completed", "invalidated"}:
+                invalidated = {
+                    **task,
+                    "status": "invalidated",
+                    "progress": {
+                        "stage": "invalidated",
+                        "done": task.get("progress", {}).get("done", 0),
+                        "total": task.get("progress", {}).get("total", 1),
+                    },
+                    "invalidated_by_gate": "G0",
+                    "invalidation_reason": explanation,
+                }
+                artifact_updates[f"agent/task/{task['task_id']}"] = (
+                    "agent-task",
+                    invalidated,
+                )
+        return self.kernel.commit(
+            command_id=command_id,
+            expected_revision=expected_revision,
+            event_type="gate.G0.reopened",
+            artifact_updates=artifact_updates,
+            artifact_removals=tuple(sorted(removals)),
             gate_mutation=mutation,
         )
 
@@ -545,7 +712,24 @@ class ContentService:
         command_id: str,
         expected_revision: int,
         governance_ref: str,
+        plan_confirmation_ref: str = "",
     ) -> str:
+        current_confirmation = self.kernel.load().artifact_heads.get(
+            "content/batch-plan-confirmation", ""
+        )
+        if (
+            not plan_confirmation_ref
+            or plan_confirmation_ref != current_confirmation
+        ):
+            raise ContentWorkflowError(
+                "CONTENT_BATCH_PLAN_NOT_CONFIRMED",
+                "CONTENT_BATCH_PLAN_NOT_CONFIRMED: ContentChangeSet requires "
+                "the current exact whole-deck plan confirmation",
+                {
+                    "current_plan_confirmation_ref": current_confirmation,
+                    "provided_plan_confirmation_ref": plan_confirmation_ref,
+                },
+            )
         try:
             self._require_exact_ref(
                 governance_ref,
@@ -558,6 +742,37 @@ class ContentService:
             ) from exc
         governance = self.kernel.artifacts.resolve(
             ArtifactReference.parse(governance_ref)
+        )["payload"]
+        if governance.get("plan_confirmation_ref") != plan_confirmation_ref:
+            raise ContentWorkflowError(
+                "CONTENT_BATCH_PLAN_NOT_CONFIRMED",
+                "CONTENT_BATCH_PLAN_NOT_CONFIRMED: governance is not bound "
+                "to the current exact plan confirmation",
+                {"governance_ref": governance_ref},
+            )
+        from ai_ppt_studio.application.content_batch_planning_service import (
+            ContentBatchPlanningService,
+        )
+
+        confirmation = ContentBatchPlanningService(
+            self.kernel
+        ).require_current_plan_confirmation(plan_confirmation_ref)
+        plan_ref = str(governance.get("revision_plan_ref") or "")
+        if (
+            confirmation.get("revision_plan_ref") != plan_ref
+            or self.kernel.load().artifact_heads.get(
+                "content/batch-revision-plan"
+            )
+            != plan_ref
+        ):
+            raise ContentWorkflowError(
+                "CONTENT_BATCH_PLAN_NOT_CONFIRMED",
+                "CONTENT_BATCH_PLAN_NOT_CONFIRMED: governance and current "
+                "confirmation do not bind the same revision plan",
+                {"governance_ref": governance_ref},
+            )
+        plan = self.kernel.artifacts.resolve(
+            ArtifactReference.parse(plan_ref)
         )["payload"]
         if governance.get("status") != "executable":
             raise FeedbackGovernanceError(
@@ -579,11 +794,12 @@ class ContentService:
             "preserve_refs": governance["preserve_refs"],
             "scope": governance["scope"],
             "required_role_runs": ["content-repair-specialist"],
-            "review_route": (
-                list(REQUIRED_CONTENT_REVIEW_ROLES)
-                if governance["feedback_level"] in {"F2", "F3"}
-                else ["editorial-reviewer"]
-            ),
+            "review_route": governance["full_deck_re_review_route"],
+            "affected_refs": list(governance["affected_refs"]),
+            "review_batch_ref": governance["review_batch_ref"],
+            "revision_plan_ref": plan_ref,
+            "plan_confirmation_ref": plan_confirmation_ref,
+            "source_blueprint_ref": plan["source_version"],
             "status": "ready",
         }
         state = self.kernel.commit(
@@ -633,6 +849,7 @@ class ContentService:
                 command_id,
                 expected_revision,
                 str(payload.get("governance_ref") or ""),
+                str(payload.get("plan_confirmation_ref") or ""),
             )
         if kind == "material-findings" and (
             artifact_type == "material-inventory" or "sources" in payload
@@ -648,18 +865,96 @@ class ContentService:
         self,
         acceptance_ref: str,
         lineage: dict[str, str],
+        revision_lineage: dict[str, str],
         refs: dict[str, str],
         payloads: dict[str, dict[str, Any]],
     ) -> dict[str, Any]:
-        return {
+        return validate_content_blueprint({
             **refs,
             **lineage,
+            **revision_lineage,
             "acceptance_ref": acceptance_ref,
             "strategy": payloads["strategy"],
             "claim_evidence_map": payloads["claim_evidence_map"],
             "argument_map": payloads["argument_map"],
             "slides": payloads["draft"]["slides"],
             "status": "user-reviewable",
+        })
+
+    def _current_revision_plan_lineage(
+        self,
+        state: KernelState,
+        *,
+        allow_initial: bool = False,
+    ) -> dict[str, str]:
+        prior_blueprint_ref = state.artifact_heads.get(
+            "content/blueprint", ""
+        )
+        if not prior_blueprint_ref:
+            if not allow_initial:
+                raise ContentWorkflowError(
+                    "CONTENT_BATCH_PLAN_NOT_CONFIRMED",
+                    "A revised draft requires an existing source blueprint",
+                    {},
+                )
+            return {
+                "supersedes_blueprint_ref": "",
+                "review_batch_ref": "",
+                "batch_revision_plan_ref": "",
+                "batch_plan_confirmation_ref": "",
+            }
+        from ai_ppt_studio.application.content_batch_planning_service import (
+            ContentBatchPlanningService,
+        )
+
+        plan_ref = state.artifact_heads.get(
+            "content/batch-revision-plan", ""
+        )
+        confirmation_ref = state.artifact_heads.get(
+            "content/batch-plan-confirmation", ""
+        )
+        change_set_ref = state.artifact_heads.get("content/change-set", "")
+        try:
+            confirmation = ContentBatchPlanningService(
+                self.kernel
+            ).require_current_plan_confirmation(confirmation_ref)
+            plan = self.kernel.artifacts.resolve(
+                ArtifactReference.parse(plan_ref)
+            )["payload"]
+            change_set = self.kernel.artifacts.resolve(
+                ArtifactReference.parse(change_set_ref)
+            )["payload"]
+        except (
+            ArtifactReferenceError,
+            ContentWorkflowError,
+            KeyError,
+            TypeError,
+        ) as error:
+            raise ContentWorkflowError(
+                "CONTENT_BATCH_PLAN_NOT_CONFIRMED",
+                "Revised content requires the current confirmed batch plan",
+                {},
+            ) from error
+        review_batch_ref = str(plan.get("review_batch_ref") or "")
+        if (
+            not plan.get("requires_blueprint_revision")
+            or plan.get("source_version") != prior_blueprint_ref
+            or confirmation.get("revision_plan_ref") != plan_ref
+            or change_set.get("review_batch_ref") != review_batch_ref
+            or change_set.get("revision_plan_ref") != plan_ref
+            or change_set.get("plan_confirmation_ref") != confirmation_ref
+            or change_set.get("source_blueprint_ref") != prior_blueprint_ref
+        ):
+            raise ContentWorkflowError(
+                "CONTENT_BATCH_PLAN_NOT_CONFIRMED",
+                "Revised content lineage does not match the current source",
+                {},
+            )
+        return {
+            "supersedes_blueprint_ref": prior_blueprint_ref,
+            "review_batch_ref": review_batch_ref,
+            "batch_revision_plan_ref": plan_ref,
+            "batch_plan_confirmation_ref": confirmation_ref,
         }
 
     def _validated_current_content_chain(

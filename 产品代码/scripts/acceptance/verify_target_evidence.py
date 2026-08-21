@@ -20,6 +20,9 @@ from ai_ppt_studio.domains.presentation.targets import (
     TARGET_PROFILES,
     TargetRenderEvidence,
 )
+from ai_ppt_studio.domains.presentation.release_policy import (
+    SUPPORTED_TARGET_IDS,
+)
 
 
 def _sha(path: Path) -> str:
@@ -119,7 +122,7 @@ def verify_target_evidence(
         raise ValueError("Evidence package misses environment, font, or slide checks")
     environment = _read_json(resolved_files["environment.json"], dict)
     target_id = str(environment.get("target_id") or "")
-    if target_id not in TARGET_PROFILES:
+    if target_id not in SUPPORTED_TARGET_IDS:
         raise ValueError(f"Unknown target profile: {target_id}")
     expected_os, expected_application = TARGET_PROFILES[target_id]
     if (

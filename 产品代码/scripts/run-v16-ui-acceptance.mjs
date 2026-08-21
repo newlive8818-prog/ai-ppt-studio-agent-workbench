@@ -90,9 +90,9 @@ run(
   process.execPath,
   [path.join(root, "scripts", "create-widget-preview.mjs"), seed.project_root, seed.workspace_config, "blueprint"],
   "workbench preview",
-  previewEnv,
+  { ...previewEnv, AI_PPT_CONTENT_REVIEW_PREVIEWS: "1" },
 );
-for (const reviewType of ["content", "visual"]) {
+for (const reviewType of ["visual"]) {
   run(
     process.execPath,
     [path.join(root, "scripts", "create-review-preview.mjs"), seed.project_root, seed.workspace_config, reviewType],
@@ -101,13 +101,7 @@ for (const reviewType of ["content", "visual"]) {
   );
 }
 
-const contentPreview = await readFile(previewPath("ai-ppt-content-review-preview.html"), "utf8");
 const visualPreview = await readFile(previewPath("ai-ppt-visual-review-preview.html"), "utf8");
-await writeFile(
-  previewPath("ai-ppt-content-review-long-60.html"),
-  longProjectionHtml(contentPreview, "content", 60),
-  "utf8",
-);
 await writeFile(
   previewPath("ai-ppt-visual-review-long-120.html"),
   longProjectionHtml(visualPreview, "visual", 120),
@@ -118,6 +112,7 @@ const { chromium } = await playwrightModule();
 const browser = await chromium.launch({ headless: true });
 const results = [];
 const longDocumentResults = [];
+const contentSidebarResults = [];
 
 async function openPage(file, width, deviceScaleFactor = 1) {
   const context = await browser.newContext({
@@ -164,7 +159,9 @@ async function checkWorkbench(width) {
       }),
     );
     assert(navigationTargets.every(({ width: itemWidth, height }) => itemWidth >= 40 && height >= 40), `${identity}: navigation target below 40px`);
-    assert((await page.locator(".compact-primary-action").count()) === 1, `${identity}: blueprint requires exactly one primary action`);
+    await page.waitForSelector(".content-review-document");
+    assert((await page.locator(".content-review-document").count()) === 1, `${identity}: blueprint must render one complete UI-03 document`);
+    assert((await page.locator(".compact-primary-action").count()) === 0, `${identity}: review-ready UI-03 must not fall back to a compact action card`);
 
     const bodyText = await page.locator("body").textContent();
     for (const forbidden of ["展开完整工作台", "联系表", "下载 PPTX", "验收交付并通过 G4", "返回聊天"]) {
@@ -173,11 +170,22 @@ async function checkWorkbench(width) {
 
     await page.locator(".nav-item").filter({ hasText: "制作与交付" }).click();
     assert((await page.locator('[data-testid^="binary-gate-"]').count()) === 4, `${identity}: four binary quality gates required`);
-    assert((await page.locator('[data-testid^="target-"]').count()) === 4, `${identity}: four desktop targets required`);
-    const targetHashes = await page.locator('[data-testid^="target-"]').evaluateAll((nodes) =>
-      nodes.map((node) => node.getAttribute("data-pptx-sha256")),
+    assert((await page.locator('[data-testid^="target-"]').count()) === 4, `${identity}: four supported target profiles required`);
+    const targetRows = await page.locator('[data-testid^="target-"]').evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        targetId: node.getAttribute("data-testid")?.replace("target-", ""),
+        hash: node.getAttribute("data-pptx-sha256"),
+        text: node.textContent || "",
+      })),
     );
-    assert(new Set(targetHashes).size === 1 && targetHashes[0]?.length === 64, `${identity}: targets must share one SHA-256`);
+    const requiredRows = targetRows.filter(({ targetId }) => targetId === "macos-powerpoint");
+    const deferredRows = targetRows.filter(({ targetId }) => targetId !== "macos-powerpoint");
+    assert(requiredRows.length === 1 && requiredRows[0].hash?.length === 64, `${identity}: current required target must bind one SHA-256`);
+    assert(
+      deferredRows.length === 3 && deferredRows.every(({ hash, text }) => !hash && text.includes("延期 · 当前版本不验收")),
+      `${identity}: deferred profiles must have no SHA-256 or pass state`,
+    );
+    const targetHashes = targetRows.map(({ hash }) => hash);
     assertNoOverflow(await overflowMetrics(page), `${identity}/delivery`);
 
     await page.locator(".nav-item").filter({ hasText: "内容蓝图" }).click();
@@ -190,7 +198,8 @@ async function checkWorkbench(width) {
       zoomPercent: 100,
       mountMs,
       ...base,
-      primaryActionCount: 1,
+      primaryActionCount: 0,
+      contentReviewDocumentCount: 1,
       targetHashes,
       consoleErrors,
       screenshot,
@@ -202,7 +211,6 @@ async function checkWorkbench(width) {
 
 async function persistentControls(page, identity) {
   const controls = [
-    page.getByRole("button", { name: "内容审阅" }),
     page.getByRole("button", { name: "视觉合同" }),
     page.getByRole("button", { name: "目录" }),
     page.getByRole("button", { name: /^标记 \d+$/ }),
@@ -326,13 +334,187 @@ async function checkLongDocument(reviewType, pageCount) {
   }
 }
 
+async function contentSidebarPage(file, width) {
+  const opened = await openPage(file, width);
+  await opened.page.waitForSelector(".content-review-document, .content-review-progress");
+  return opened;
+}
+
+async function checkContentSidebarResponsive(width) {
+  const identity = `content-sidebar-ready-10@${width}`;
+  const { context, page, consoleErrors } = await contentSidebarPage("content-review-ready-10.html", width);
+  try {
+    const metrics = await overflowMetrics(page);
+    assertNoOverflow(metrics, identity);
+    const documentBox = await page.locator(".content-review-document").boundingBox();
+    assert(documentBox && documentBox.x <= 1 && documentBox.width >= width - 2, `${identity}: content document does not use the full available width`);
+    const columnCount = await page.locator(".content-slide-main").first().evaluate((node) =>
+      getComputedStyle(node).gridTemplateColumns.split(" ").filter(Boolean).length,
+    );
+    assert(columnCount === (width >= 900 ? 2 : 1), `${identity}: responsive content/evidence columns are incorrect`);
+    const anchors = await page.locator("article.content-slide-section").evaluateAll((nodes) => nodes.map((node) => node.id));
+    assert(anchors.length === 10 && new Set(anchors).size === 10, `${identity}: 10 unique full-deck anchors required`);
+    const bodyText = await page.locator("body").textContent();
+    for (const required of ["页面实际文字", "图片与材料", "完整逐字稿", "问题—要求—方案映射", "承接上一页", "进入下一页"]) {
+      assert(bodyText.includes(required), `${identity}: missing complete review content: ${required}`);
+    }
+    for (const forbidden of ["待确认目录框架", "待授权展开全部页面", "框架确认", "整稿展开授权", "希望客户形成的判断"]) {
+      assert(!bodyText.includes(forbidden), `${identity}: obsolete content workflow remains: ${forbidden}`);
+    }
+    await page.locator(".content-evidence-item").first().scrollIntoViewIfNeeded();
+    await page.locator(".content-evidence-item img").first().waitFor();
+    const lazyImages = await page.locator(".content-evidence-item img").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("loading")));
+    assert(lazyImages.length > 0 && lazyImages.every((value) => value === "lazy"), `${identity}: evidence images must lazy-load`);
+    const unclipped = await page.locator(".visible-copy-row p, .speaker-notes-block p").evaluateAll((nodes) => nodes.every((node) => {
+      const style = getComputedStyle(node);
+      return style.textOverflow !== "ellipsis" && style.webkitLineClamp === "none";
+    }));
+    assert(unclipped, `${identity}: core copy or notes are truncated`);
+
+    const before = await page.locator(".content-review-document").boundingBox();
+    await page.getByRole("button", { name: "目录定位" }).click();
+    await page.getByRole("dialog", { name: "全稿目录" }).waitFor();
+    const after = await page.locator(".content-review-document").boundingBox();
+    assert(before && after && before.x === after.x && before.width === after.width, `${identity}: directory overlay changed document geometry`);
+    await page.keyboard.press("Escape");
+
+    assert(consoleErrors.length === 0, `${identity}: console errors: ${consoleErrors.join(" | ")}`);
+    const screenshot = previewPath(`content-sidebar-ready-10-${width}.png`);
+    await page.screenshot({ path: screenshot, fullPage: false });
+    contentSidebarResults.push({ scenario: "ready-10", width, columnCount, anchors: anchors.length, ...metrics, screenshot, consoleErrors });
+  } finally {
+    await context.close();
+  }
+}
+
+async function checkContentProgress(file, requiredText) {
+  const { context, page, consoleErrors } = await contentSidebarPage(file, 900);
+  try {
+    const text = await page.locator("body").textContent();
+    assert(text.includes(requiredText), `${file}: expected progress state is missing`);
+    assert((await page.locator("article.content-slide-section").count()) === 0, `${file}: draft pages leaked before internal passage`);
+    assert(consoleErrors.length === 0, `${file}: console errors: ${consoleErrors.join(" | ")}`);
+    contentSidebarResults.push({ scenario: file, width: 900, progressOnly: true, consoleErrors });
+  } finally {
+    await context.close();
+  }
+}
+
+async function checkMixedAndReadyBatch() {
+  {
+    const { context, page, consoleErrors } = await contentSidebarPage("content-review-mixed-24.html", 1200);
+    try {
+      const footer = page.locator(".review-batch-footer");
+      assert((await footer.textContent()).includes("23 / 24"), "mixed-decisions-24: 23 / 24 progress is missing");
+      assert(await footer.getByRole("button", { name: "完成本轮审核，交给 Codex 集中处理" }).isDisabled(), "mixed-decisions-24: incomplete batch must stay disabled");
+      assert((await page.locator("article.content-slide-section").count()) === 24, "mixed-decisions-24: all 24 pages must render");
+      assert(consoleErrors.length === 0, `mixed-decisions-24: console errors: ${consoleErrors.join(" | ")}`);
+      contentSidebarResults.push({ scenario: "mixed-decisions-24", width: 1200, progress: "23 / 24", batchEnabled: false, consoleErrors });
+    } finally {
+      await context.close();
+    }
+  }
+  {
+    const { context, page, consoleErrors } = await contentSidebarPage("content-review-ready-24.html", 1200);
+    try {
+      const footer = page.locator(".review-batch-footer");
+      assert((await footer.textContent()).includes("24 / 24"), "ready-24: 24 / 24 progress is missing");
+      const submit = footer.getByRole("button", { name: "完成本轮审核，交给 Codex 集中处理" });
+      assert(await submit.isEnabled(), "ready-24: complete clean batch must be enabled");
+      await submit.click();
+      await page.getByText("已提交，等待整套修改方案。").waitFor();
+      const calls = await page.evaluate(() => window.__AI_PPT_PREVIEW_CALLS__ || {});
+      assert(calls.submit_content_review_batch === 1, "ready-24: batch must submit exactly once");
+      assert(calls.sendFollowUp === 1, "ready-24: submit must trigger exactly one Codex follow-up");
+      assert(consoleErrors.length === 0, `ready-24: console errors: ${consoleErrors.join(" | ")}`);
+      contentSidebarResults.push({ scenario: "ready-24", width: 1200, progress: "24 / 24", batchEnabled: true, calls, consoleErrors });
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+async function checkRetainedDraft(file, expectedError) {
+  const { context, page, consoleErrors } = await contentSidebarPage(file, 900);
+  try {
+    const first = page.locator("article.content-slide-section").first();
+    await first.getByRole("radio", { name: "需要修改" }).check();
+    const comment = first.getByRole("textbox", { name: "审核意见" });
+    const draft = "保留这条未保存的完整修改意见，用于验证失败恢复。";
+    await comment.fill(draft);
+    await first.getByRole("button", { name: "保存本页判断" }).click();
+    await first.getByRole("alert").waitFor();
+    assert((await first.getByRole("alert").textContent()).includes(expectedError), `${file}: expected save error is missing`);
+    assert(await first.getByRole("radio", { name: "需要修改" }).isChecked(), `${file}: selected decision was lost`);
+    assert(await comment.inputValue() === draft, `${file}: comment draft was lost`);
+    const submit = page.getByRole("button", { name: "完成本轮审核，交给 Codex 集中处理" });
+    assert(await submit.isDisabled(), `${file}: failed/conflicted draft must block submission`);
+    assert(consoleErrors.length === 0, `${file}: console errors: ${consoleErrors.join(" | ")}`);
+    contentSidebarResults.push({ scenario: file, width: 900, draftRetained: true, batchEnabled: false, consoleErrors });
+  } finally {
+    await context.close();
+  }
+}
+
+async function checkFrozenAndVersionStates() {
+  for (const [file, scenario] of [
+    ["content-review-submitted-frozen.html", "submitted-frozen"],
+    ["content-review-plan-proposed.html", "plan-proposed"],
+  ]) {
+    const { context, page, consoleErrors } = await contentSidebarPage(file, 900);
+    try {
+      assert((await page.locator(".page-decision-editor.frozen").count()) === 24, `${scenario}: all decisions must be frozen`);
+      assert((await page.getByText("已提交，等待整套修改方案。").count()) === 1, `${scenario}: submitted state is missing`);
+      assert(consoleErrors.length === 0, `${scenario}: console errors: ${consoleErrors.join(" | ")}`);
+      contentSidebarResults.push({ scenario, width: 900, frozen: 24, consoleErrors });
+    } finally {
+      await context.close();
+    }
+  }
+  {
+    const { context, page, consoleErrors } = await contentSidebarPage("content-review-new-version-zero.html", 900);
+    try {
+      assert((await page.locator("article.content-slide-section").count()) === 24, "new-version-zero: all pages must render");
+      assert((await page.locator(".decision-saved-summary").count()) === 0, "new-version-zero: old decisions must not be inherited");
+      assert((await page.locator(".review-batch-footer").textContent()).includes("0 / 24"), "new-version-zero: progress must restart at zero");
+      assert(consoleErrors.length === 0, `new-version-zero: console errors: ${consoleErrors.join(" | ")}`);
+      contentSidebarResults.push({ scenario: "new-version-zero-decisions", width: 900, progress: "0 / 24", inherited: 0, consoleErrors });
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+async function checkContentLong60() {
+  const { context, page, consoleErrors } = await contentSidebarPage("content-review-long-60.html", 1440);
+  try {
+    const anchors = await page.locator("article.content-slide-section").evaluateAll((nodes) => nodes.map((node) => node.id));
+    assert(anchors.length === 60 && new Set(anchors).size === 60, "long-review-60: all page anchors must exist exactly once");
+    assert((await page.locator("#content-slide-S60").count()) === 1, "long-review-60: last page is missing");
+    assert((await page.locator("body").textContent()).includes("第 60 页逐字稿完整保留"), "long-review-60: final speaker notes are missing");
+    const metrics = await overflowMetrics(page);
+    assertNoOverflow(metrics, "long-review-60@1440");
+    assert(consoleErrors.length === 0, `long-review-60: console errors: ${consoleErrors.join(" | ")}`);
+    contentSidebarResults.push({ scenario: "long-review-60", width: 1440, anchors: 60, ...metrics, consoleErrors });
+  } finally {
+    await context.close();
+  }
+}
+
 try {
   for (const width of [360, 420, 480]) await checkWorkbench(width);
-  for (const reviewType of ["content", "visual"]) {
-    for (const width of [760, 1000, 1440]) await checkReview(reviewType, width, 1);
-    for (const width of [760, 1000, 1440]) await checkReview(reviewType, width, 2);
-  }
-  await checkLongDocument("content", 60);
+  for (const width of [480, 900, 1200, 1440]) await checkContentSidebarResponsive(width); // 480, 900, 1200, 1440
+  await checkContentProgress("content-review-producing.html", "正在生成完整内容");
+  await checkContentProgress("content-review-hard-gate.html", "内容正在内部检查");
+  await checkContentProgress("content-review-hard-gate-failed.html", "内容正在内部检查");
+  await checkContentProgress("content-review-hard-gate-repaired.html", "内容正在内部检查");
+  await checkMixedAndReadyBatch(); // 23 / 24 blocked; 24 / 24 ready
+  await checkRetainedDraft("content-review-save-failure.html", "尚未保存");
+  await checkRetainedDraft("content-review-source-conflict.html", "版本已变化");
+  await checkFrozenAndVersionStates();
+  await checkContentLong60();
+  for (const width of [760, 1000, 1440]) await checkReview("visual", width, 1);
+  for (const width of [760, 1000, 1440]) await checkReview("visual", width, 2);
   await checkLongDocument("visual", 120);
 } finally {
   await browser.close();
@@ -351,9 +533,11 @@ const report = {
   screenshotCount: results.length,
   results,
   longDocumentResults,
+  contentSidebarResults,
 };
-assert(results.length === 15, `Expected 15 screenshots, received ${results.length}`);
-assert(longDocumentResults.length === 2, "Expected 60/120-page performance results");
+assert(results.length === 9, `Expected 9 screenshots, received ${results.length}`);
+assert(longDocumentResults.length === 1, "Expected one 120-page visual performance result");
+assert(contentSidebarResults.length === 16, `Expected 16 content-sidebar checks, received ${contentSidebarResults.length}`);
 const reportPath = previewPath("v16-ui-acceptance.json");
 await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 process.stdout.write(`${reportPath}\n`);

@@ -7,11 +7,15 @@ import hashlib
 from typing import Any
 
 from ai_ppt_studio.application.gate_evaluator import GateEvaluator
+from ai_ppt_studio.application.gate_confirmation import GateConfirmationPolicy
 from ai_ppt_studio.domains.presentation.targets import (
-    REQUIRED_TARGET_IDS,
     TargetRenderEvidence,
     validate_required_targets,
 )
+from ai_ppt_studio.application.release_policy_service import (
+    ReleaseTargetPolicyService,
+)
+from ai_ppt_studio.domains.presentation.release_policy import SUPPORTED_TARGET_IDS
 from ai_ppt_studio.domains.delivery.contracts import (
     validate_chat_delivery_receipt,
     validate_deck_qa,
@@ -75,14 +79,15 @@ class DeliveryService:
             payload, visual_contract_record["payload"]
         )
         state = self.kernel.load()
+        policy_ref, policy = ReleaseTargetPolicyService(self.kernel).current()
         g2_evidence: list[TargetRenderEvidence] = []
-        for target_id in REQUIRED_TARGET_IDS:
+        for target_id in policy.required_target_ids:
             ref = state.artifact_heads.get(
                 f"visual/target-evidence/G2/{target_id}", ""
             )
             if not ref:
                 raise ContractValidationError(
-                    "Final build requires the complete current G2 target matrix"
+                    "Final build requires the complete current required G2 target matrix"
                 )
             try:
                 g2_evidence.append(
@@ -95,7 +100,9 @@ class DeliveryService:
                     "Final build requires valid same-hash G2 target evidence"
                 ) from error
         try:
-            g2_matrix = validate_required_targets(g2_evidence)
+            g2_matrix = validate_required_targets(
+                g2_evidence, policy.required_target_ids
+            )
         except GateBlockedError as error:
             raise ContractValidationError(
                 "Final build requires valid same-hash G2 target evidence"
@@ -379,17 +386,20 @@ class DeliveryService:
         build = self._require_exact_ref(
             build_ref, "delivery/build", "presentation-build"
         )["payload"]
+        policy_ref, policy = ReleaseTargetPolicyService(self.kernel).current()
         target_refs = [
             state.artifact_heads.get(
                 f"delivery/target-evidence/G4/{target_id}", ""
             )
-            for target_id in REQUIRED_TARGET_IDS
+            for target_id in policy.required_target_ids
         ]
         if "" in target_refs:
             raise ContractValidationError(
-                "DeliveryPackage requires all four current G4 target evidence heads"
+                "DeliveryPackage requires all current required G4 target evidence heads"
             )
-        normalized = validate_delivery_package(payload, build, target_refs)
+        normalized = validate_delivery_package(
+            payload, build, target_refs, policy_ref
+        )
         self._resolve_kind(normalized["pptx_ref"], "final-pptx")
         for value in normalized["preview_refs"]:
             preview = self._resolve_kind(value, "delivery-preview")["payload"]
@@ -409,10 +419,13 @@ class DeliveryService:
         )["payload"]
         if (
             font_report.get("build_ref") != build_ref
-            or font_report.get("targets") != list(REQUIRED_TARGET_IDS)
+            or font_report.get("release_target_policy_ref") != policy_ref
+            or font_report.get("targets") != list(policy.required_target_ids)
+            or font_report.get("deferred_targets")
+            != list(policy.deferred_target_ids)
         ):
             raise ContractValidationError(
-                "Font/platform report must bind the current build and four targets"
+                "Font/platform report must bind the current build and release policy"
             )
         qa_report = self._resolve_kind(
             normalized["qa_report_ref"], "delivery-qa-report"
@@ -489,32 +502,31 @@ class DeliveryService:
         command_id: str,
         expected_revision: int,
         *,
-        user_message_ref: str,
+        user_action_ref: str = "",
+        user_message_ref: str = "",
+        host_confirmation_assertion: str = "",
+        source_version: str = "",
+        challenge_id: str = "",
+        challenge_revision: int = -1,
     ) -> KernelState:
-        state = self.kernel.load()
-        if (
-            state.gate_status.get("G4") != "user-reviewable"
-            or not user_message_ref.startswith("chat://message/")
-        ):
-            raise GateBlockedError(
-                "G4", ("explicit-chat-acceptance-and-sent-pptx-required",)
-            )
-        build_ref = state.artifact_heads.get("delivery/build", "")
-        package_ref = state.artifact_heads.get("delivery/package", "")
-        receipt_ref = state.artifact_heads.get("chat-delivery/pptx", "")
-        confirmation = {
-            "gate": "G4",
-            "user_message_ref": user_message_ref,
-            "build_ref": build_ref,
-            "package_ref": package_ref,
-            "receipt_ref": receipt_ref,
-        }
+        policy = GateConfirmationPolicy(self.kernel)
+        confirmation, consumptions = policy.confirmation_payload(
+            gate="G4",
+            source_version=source_version,
+            challenge_id=challenge_id,
+            challenge_revision=challenge_revision,
+            host_confirmation_assertion=host_confirmation_assertion,
+            user_action_ref=user_action_ref,
+            user_message_ref=user_message_ref,
+        )
+        confirmation["build_ref"] = confirmation["evidence_refs"][0]
+        confirmation["package_ref"] = confirmation["source_version"]
+        confirmation["receipt_ref"] = confirmation["evidence_refs"][2]
         confirmation_ref = str(
             self.kernel.artifacts.put("g4-confirmation", confirmation)
         )
         mutation = GateEvaluator(self.kernel).confirm_g4(
             confirmation_ref=confirmation_ref,
-            user_message_ref=user_message_ref,
         )
         return self.kernel.commit(
             command_id=command_id,
@@ -523,6 +535,7 @@ class DeliveryService:
             artifact_updates={
                 "gate/G4/confirmation": ("g4-confirmation", confirmation)
             },
+            confirmation_consumptions=consumptions,
             gate_mutation=mutation,
         )
 
@@ -717,13 +730,15 @@ class DeliveryService:
         )
         target_rows: list[dict[str, str]] = []
         target_statuses: list[str] = []
-        for target_id in REQUIRED_TARGET_IDS:
+        policy_ref, policy = ReleaseTargetPolicyService(self.kernel).current()
+        for target_id in SUPPORTED_TARGET_IDS:
+            required = target_id in policy.required_target_ids
             value = state.artifact_heads.get(
                 f"delivery/target-evidence/G4/{target_id}", ""
             )
-            status = "pending"
+            status = "pending" if required else "deferred"
             sha256 = ""
-            if value:
+            if value and required:
                 payload = self._resolve_kind(value, "target-render-evidence")[
                     "payload"
                 ]
@@ -743,7 +758,8 @@ class DeliveryService:
             target_rows.append(
                 {"target_id": target_id, "status": status, "pptx_sha256": sha256}
             )
-            target_statuses.append(status)
+            if required:
+                target_statuses.append(status)
         target_gate = (
             "passed"
             if target_statuses and set(target_statuses) == {"passed"}
@@ -798,7 +814,7 @@ class DeliveryService:
             ):
                 blocker = "deck-qa-incomplete-or-failed"
             elif target_gate != "passed":
-                blocker = "four-target-evidence-incomplete-or-failed"
+                blocker = "required-target-evidence-incomplete-or-failed"
             elif state.gate_status.get("G4") == "delivery-ready" and not state.artifact_heads.get(
                 "delivery/package"
             ):
@@ -813,6 +829,15 @@ class DeliveryService:
             "targets": target_rows,
             "hash_identity": str(build.get("pptx_sha256") or ""),
             "chat_send": chat_send,
+            "release_target_policy": {
+                "policy_ref": policy_ref,
+                "policy_id": policy.policy_id,
+                "required_target_ids": list(policy.required_target_ids),
+                "deferred_target_ids": list(policy.deferred_target_ids),
+                "compatibility_claim_scope": list(
+                    policy.compatibility_claim_scope
+                ),
+            },
         }
 
     def _require_exact_ref(self, value: str, slot: str, kind: str) -> dict:

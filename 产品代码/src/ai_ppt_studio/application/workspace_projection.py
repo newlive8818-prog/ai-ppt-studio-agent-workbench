@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ai_ppt_studio.application.content_review_service import ContentReviewService
 from ai_ppt_studio.application.delivery_service import DeliveryService
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.state import KernelState
@@ -254,28 +255,38 @@ class WorkspaceProjectionService:
         blueprint: dict[str, Any],
         acceptance: dict[str, Any],
     ) -> dict[str, Any]:
-        blueprint_ref = state.artifact_heads.get("content/blueprint", "")
-        slides = blueprint.get("slides")
-        slide_rows = slides if isinstance(slides, list) else []
+        sidebar = ContentReviewService(
+            self.kernel
+        ).content_sidebar_projection()
+        phase = str(sidebar["phase"])
+        blueprint_ref = str(sidebar.get("source_version") or "")
+        slide_rows = sidebar.get("slides")
+        slides = slide_rows if isinstance(slide_rows, list) else []
+        progress = sidebar.get("review_progress")
+        progress_row = progress if isinstance(progress, dict) else {}
+        current_batch = sidebar.get("current_batch")
+        batch_row = current_batch if isinstance(current_batch, dict) else {}
         internal_result = str(acceptance.get("overall_result") or "pending")
-        review_available = bool(
-            blueprint_ref
-            and internal_result == "passed"
-            and state.gate_status.get("G0") in {"user-reviewable", "passed"}
+        review_available = phase in {
+            "full-deck-review-ready",
+            "review-batch-submitted",
+            "batch-plan-proposed",
+            "batch-plan-confirmed",
+        }
+        thesis = (
+            "完整逐页内容、证据、讲解备注和跨页关系已形成。"
+            if slides
+            else "AI 正在生成并检查完整售前内容。"
         )
-        strategy = blueprint.get("strategy")
-        strategy_row = strategy if isinstance(strategy, dict) else {}
-        thesis = str(
-            strategy_row.get("persuasion_proposition")
-            or strategy_row.get("core_tension")
-            or (
-                "逐页内容、讲解稿和来源已形成。"
-                if slide_rows
-                else "AI 正在形成售前策略、证据、论证和逐页内容。"
-            )
-        )
-        mark_count = self._mark_count(state, "content", blueprint_ref)
         status = str(state.gate_status.get("G0") or "locked")
+        action_labels = {
+            "content-producing": "查看内容生产进度",
+            "content-hard-gate-review": "查看内容检查进度",
+            "full-deck-review-ready": "审核完整内容",
+            "review-batch-submitted": "等待 Codex 汇总修改方案",
+            "batch-plan-proposed": "在聊天中确认整套修改方案",
+            "batch-plan-confirmed": "等待 Codex 执行已确认方案",
+        }
         return {
             "status": status,
             "conclusion": (
@@ -285,7 +296,7 @@ class WorkspaceProjectionService:
             ),
             "focus": thesis,
             "risk": (
-                "完成专业审阅和标记保存后，在聊天中确认或修改 G0。"
+                "完成全部逐页判断并提交审核批次后，Codex 才会集中处理。"
                 if review_available and status != "passed"
                 else "当前没有需要用户处理的内容审阅动作。"
             ),
@@ -295,17 +306,23 @@ class WorkspaceProjectionService:
             "high_impact_count": 0,
             "primary_action": (
                 _action(
-                    "open-content-review", "打开内容审阅", enabled=True
+                    (
+                        "review-complete-deck"
+                        if phase == "full-deck-review-ready"
+                        else "continue-chat"
+                    ),
+                    action_labels.get(phase, "继续与 Codex 对话"),
+                    enabled=True,
                 )
-                if review_available
-                else _action("none")
             ),
-            "phase": status,
+            "phase": phase,
             "internal_status": internal_result,
-            "slide_count": len(slide_rows),
-            "saved_mark_count": mark_count,
             "review_available": review_available,
             "source_version": blueprint_ref,
+            "slide_count": len(slides),
+            "completed_page_count": int(progress_row.get("completed") or 0),
+            "remaining_page_count": int(progress_row.get("remaining") or 0),
+            "current_batch_status": str(batch_row.get("status") or ""),
         }
 
     def _visual(
@@ -340,7 +357,7 @@ class WorkspaceProjectionService:
             "risk": (
                 "完成合同审阅和标记保存后，在聊天中确认或修改 G3。"
                 if review_available and g3 != "passed"
-                else "任一内部硬门或四目标证据不完整时不会开放确认。"
+                else "任一内部硬门或必需目标证据不完整时不会开放确认。"
             ),
             "affected_artifacts": self._refs(
                 state,
@@ -387,7 +404,7 @@ class WorkspaceProjectionService:
             "focus": (
                 "最终 PPTX 已发送到聊天，等待用户明确接受或修改。"
                 if chat_status == "sent"
-                else "系统继续完成构建、四门和四目标同哈希证据。"
+                else "系统继续完成构建、四门和当前发布目标同哈希证据。"
             ),
             "risk": str(blocker or "当前没有内部阻断项。"),
             "affected_artifacts": self._refs(

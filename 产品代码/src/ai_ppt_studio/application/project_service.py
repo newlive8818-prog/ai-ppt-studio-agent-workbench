@@ -22,6 +22,10 @@ from ai_ppt_studio.errors import (
     ProjectNotFoundError,
 )
 from ai_ppt_studio.kernel.references import ArtifactReference
+from ai_ppt_studio.domains.presentation.release_policy import (
+    CURRENT_RELEASE_TARGET_POLICY,
+    ReleaseTargetPolicy,
+)
 from ai_ppt_studio.kernel.state import KernelState
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 from ai_ppt_studio.paths import PathPolicy
@@ -93,6 +97,18 @@ NONCONTENT_RESULT_CONTRACTS = {
         ("target-render-evidence", ""),
     }),
 }
+
+VISUAL_ACTIONS = frozenset(
+    {
+        "design-deck-system",
+        "design-slide-visuals",
+        "build-native-first",
+        "generate-image-assets",
+        "review-visual-aesthetic",
+        "review-visual-engineering",
+        "verify-target-render",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -245,7 +261,13 @@ class ProjectService:
                         "created_at": datetime.now(timezone.utc).isoformat(),
                         "scenario_pack": "reading-first-presales",
                     },
-                )
+                ),
+                "release/target-policy": (
+                    "release-target-policy",
+                    ReleaseTargetPolicy.from_payload(
+                        CURRENT_RELEASE_TARGET_POLICY
+                    ).as_payload(),
+                ),
             },
         )
         return kernel
@@ -481,6 +503,10 @@ class ProjectCommandService:
             validate_content_action_targets(
                 action, target_refs, self.kernel.load().artifact_heads
             )
+        if action in VISUAL_ACTIONS:
+            from ai_ppt_studio.application.visual_service import VisualService
+
+            VisualService(self.kernel).require_visual_production_open()
         for value in target_refs:
             self.kernel.artifacts.resolve(ArtifactReference.parse(value))
         from ai_ppt_studio.context_compiler import ContextCompiler

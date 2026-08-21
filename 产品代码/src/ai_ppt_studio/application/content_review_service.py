@@ -13,6 +13,7 @@ from typing import Any
 from ai_ppt_studio.domains.content.review_contracts import (
     CONTENT_PAGE_DECISIONS,
     normalize_page_decision_choice,
+    validate_content_batch_revision_plan,
     validate_content_blueprint,
     validate_content_review_batch,
     validate_content_review_batch_withdrawal,
@@ -80,6 +81,14 @@ CONTENT_REVIEW_BATCH_FOLLOW_UP = (
     "读取已冻结的内容审核批次，结合当前完整蓝图、目录框架、证据地图和跨页关系，"
     "先提出整套修改方案；在用户确认方案前，不生成 ContentChangeSet 或新蓝图。"
 )
+CONTENT_SIDEBAR_PHASES = (
+    "content-producing",
+    "content-hard-gate-review",
+    "full-deck-review-ready",
+    "review-batch-submitted",
+    "batch-plan-proposed",
+    "batch-plan-confirmed",
+)
 PROTECTED_HEADS = (
     "content/blueprint",
     "content/acceptance",
@@ -99,6 +108,10 @@ CONTENT_ACCEPTANCE_FIELDS = frozenset(
         "all_applicable_checks",
         "overall_result",
         "passed_at",
+        "supersedes_blueprint_ref",
+        "review_batch_ref",
+        "batch_revision_plan_ref",
+        "batch_plan_confirmation_ref",
         *CONTENT_WORKFLOW_LINEAGE_FIELDS,
     }
 )
@@ -146,6 +159,180 @@ class ContentReviewService:
     def __init__(self, kernel: ProjectKernel) -> None:
         self.kernel = kernel
         self.confirmations = ScopedConfirmationPolicy(kernel)
+
+    def current_decision_set(self, source_version: str) -> dict[str, Any]:
+        """Project the current source's decision set without inheriting history."""
+
+        source = self._required_text(source_version, "source_version")
+        state = self.kernel.load()
+        _blueprint, slides = self._current_blueprint(state, source)
+        head = state.artifact_heads.get(PAGE_DECISION_HEAD, "")
+        if head:
+            reference = ArtifactReference.parse(head)
+            if reference.kind != PAGE_DECISION_SET_KIND:
+                self._conflict(
+                    "The page-decision head has the wrong kind",
+                    {"decision_set_ref": head},
+                )
+            payload = validate_persisted_page_decision_set(
+                self.kernel.artifacts.resolve(reference)["payload"]
+            )
+            if payload["source_version"] == source:
+                _ref, current = self._current_decision_set(
+                    state=state,
+                    source_version=source,
+                    review_batch_id=payload["review_batch_id"],
+                    slides=slides,
+                )
+                if current is not None:
+                    return current
+        return {
+            "decision_set_id": str(
+                uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    f"{state.project_id}:{source}:fresh-decision-set",
+                )
+            ),
+            "review_batch_id": "",
+            "project_id": state.project_id,
+            "review_type": "content",
+            "source_version": source,
+            "expected_slide_count": len(slides),
+            "status": "draft",
+            "decision_refs": [],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def progress(self, source_version: str) -> dict[str, Any]:
+        """Return progress for only the requested current blueprint version."""
+
+        source = self._required_text(source_version, "source_version")
+        state = self.kernel.load()
+        _blueprint, slides = self._current_blueprint(state, source)
+        decision_set = self.current_decision_set(source)
+        if not decision_set["decision_refs"]:
+            return {
+                "total": len(slides),
+                "completed": 0,
+                "remaining": len(slides),
+                "saved_comment_count": 0,
+                "next_incomplete_slide_id": slides[0]["slide_id"],
+                "counts": {
+                    "approved": 0,
+                    "modify": 0,
+                    "evidence": 0,
+                    "merge_or_delete": 0,
+                },
+            }
+        return self._progress(decision_set, slides)
+
+    def content_sidebar_projection(self) -> dict[str, Any]:
+        """Project content-production progress or the complete reviewable deck."""
+
+        state = self.kernel.load()
+        blueprint_ref = state.artifact_heads.get(BLUEPRINT_HEAD, "")
+        mission_summary = self._mission_summary(state)
+        if not blueprint_ref:
+            phase = (
+                "content-hard-gate-review"
+                if state.artifact_heads.get("content/draft")
+                else "content-producing"
+            )
+            return {
+                "display_policy": "content-sidebar-progress",
+                "phase": phase,
+                "project_id": state.project_id,
+                "revision": state.revision,
+                "mission_summary": mission_summary,
+                "next_action": "continue-content-production",
+            }
+
+        blueprint, slides = self._current_blueprint(state, blueprint_ref)
+        decision_set = self.current_decision_set(blueprint_ref)
+        progress = self.progress(blueprint_ref)
+        decisions_by_slide: dict[str, dict[str, Any]] = {}
+        for row in decision_set["decision_refs"]:
+            decision = self._resolve_decision(str(row["decision_ref"]))
+            decisions_by_slide[str(decision["slide_id"])] = decision
+
+        batch_ref, batch = self._current_source_batch(state, blueprint_ref)
+        batch_status = str(batch.get("status") or "draft")
+        phase_by_batch_status = {
+            "submitted": "review-batch-submitted",
+            "plan-proposed": "batch-plan-proposed",
+            "plan-confirmed": "batch-plan-confirmed",
+        }
+        phase = phase_by_batch_status.get(
+            batch_status, "full-deck-review-ready"
+        )
+        frozen = decision_set.get("status") != "draft" or batch_status in {
+            "submitted",
+            "plan-proposed",
+            "plan-confirmed",
+            "applied",
+            "superseded",
+        }
+        projected_slides: list[dict[str, Any]] = []
+        for slide in slides:
+            projected = self._sidebar_slide(slide)
+            decision = decisions_by_slide.get(str(slide["slide_id"]))
+            projected["decision_state"] = {
+                "selected": str(decision.get("decision") or "")
+                if decision
+                else "",
+                "comment": str(decision.get("comment") or "")
+                if decision
+                else "",
+                "completed": bool(decision.get("completed"))
+                if decision
+                else False,
+                "saved": decision is not None,
+                "frozen": frozen,
+            }
+            projected_slides.append(projected)
+
+        plan_ref, plan = self._current_source_plan(state, blueprint_ref)
+        confirmation_ref = (
+            state.artifact_heads.get("content/batch-plan-confirmation", "")
+            if plan_ref
+            else ""
+        )
+        return {
+            "display_policy": "content-sidebar-full-deck",
+            "phase": phase,
+            "project_id": state.project_id,
+            "revision": state.revision,
+            "mission_summary": mission_summary,
+            "material_mode": str(
+                blueprint.get("material_mode") or "mixed-evidence"
+            ),
+            "chapters": self._sidebar_chapters(slides),
+            "source_version": blueprint_ref,
+            "slides": projected_slides,
+            "review_progress": progress,
+            "decision_set": {
+                "decision_set_id": decision_set["decision_set_id"],
+                "review_batch_id": decision_set["review_batch_id"],
+                "status": decision_set["status"],
+            },
+            "current_batch": {
+                "batch_ref": batch_ref,
+                "review_batch_id": str(batch.get("review_batch_id") or ""),
+                "status": batch_status,
+            },
+            "current_plan": {
+                "plan_ref": plan_ref,
+                "confirmation_ref": confirmation_ref,
+                "status": batch_status
+                if batch_status in {"plan-proposed", "plan-confirmed"}
+                else "",
+                "requires_blueprint_revision": bool(
+                    plan.get("requires_blueprint_revision")
+                ),
+            },
+            "previous_round": self._previous_round(blueprint),
+            "next_action": self._sidebar_next_action(phase),
+        }
 
     def save_page_decision(
         self,
@@ -2551,6 +2738,266 @@ class ContentReviewService:
             raise ContractValidationError(
                 "Withdrawal confirmation binding is invalid"
             )
+
+    def _optional_head_payload(
+        self,
+        state: KernelState,
+        *,
+        slot: str,
+        kind: str,
+        validator: Any,
+    ) -> tuple[str, dict[str, Any]]:
+        reference_value = state.artifact_heads.get(slot, "")
+        if not reference_value:
+            return "", {}
+        try:
+            reference = ArtifactReference.parse(reference_value)
+            if reference.kind != kind:
+                raise ArtifactReferenceError(f"{slot} has the wrong kind")
+            payload = validator(
+                self.kernel.artifacts.resolve(reference)["payload"]
+            )
+        except (
+            ArtifactReferenceError,
+            ContractValidationError,
+            KeyError,
+            TypeError,
+        ) as error:
+            raise ContractValidationError(
+                f"Cannot project authoritative {slot}"
+            ) from error
+        return reference_value, copy.deepcopy(payload)
+
+    def _mission_summary(self, state: KernelState) -> dict[str, str]:
+        reference_value = state.artifact_heads.get("mission/draft", "")
+        if not reference_value:
+            return {
+                "topic": "",
+                "primary_audience": "",
+                "decision_question_or_next_action": "",
+            }
+        try:
+            reference = ArtifactReference.parse(reference_value)
+            if reference.kind != "mission-draft":
+                raise ArtifactReferenceError("Mission draft has the wrong kind")
+            payload = self.kernel.artifacts.resolve(reference)["payload"]
+            if not isinstance(payload, dict):
+                raise TypeError("Mission draft is not an object")
+        except (ArtifactReferenceError, KeyError, TypeError) as error:
+            raise ContractValidationError(
+                "Cannot project the authoritative mission summary"
+            ) from error
+        return {
+            "topic": str(payload.get("topic") or ""),
+            "primary_audience": str(payload.get("primary_audience") or ""),
+            "decision_question_or_next_action": str(
+                payload.get("decision_question_or_next_action")
+                or payload.get("desired_judgment_or_action")
+                or ""
+            ),
+        }
+
+    @staticmethod
+    def _sidebar_slide(slide: dict[str, Any]) -> dict[str, Any]:
+        """Expose the current neutral review vocabulary across legacy/new blueprints."""
+
+        sequence = slide.get("sequence")
+        sequence_row = sequence if isinstance(sequence, dict) else {}
+        analysis = slide.get("analysis_or_proposal_blocks")
+        analysis_rows = copy.deepcopy(analysis) if isinstance(analysis, list) else []
+        if not analysis_rows and slide.get("customer_judgment"):
+            analysis_rows = [
+                {
+                    "identity": "AI 分析（历史蓝图迁移）",
+                    "text": str(slide["customer_judgment"]),
+                }
+            ]
+        return {
+            "slide_id": str(slide.get("slide_id") or ""),
+            "order": int(slide.get("order") or 0),
+            "section_id": str(
+                slide.get("section_id") or slide.get("chapter_id") or ""
+            ),
+            "neutral_title": str(
+                slide.get("neutral_title") or slide.get("title") or ""
+            ),
+            "page_task": str(
+                slide.get("page_task")
+                or slide.get("page_purpose")
+                or slide.get("communication_goal")
+                or ""
+            ),
+            "reading_question": str(
+                slide.get("reading_question")
+                or slide.get("user_judgment_prompt")
+                or ""
+            ),
+            "visible_copy": copy.deepcopy(
+                slide.get("visible_copy_blocks")
+                or slide.get("visible_copy")
+                or []
+            ),
+            "identity_labels": copy.deepcopy(
+                slide.get("identity_labels") or []
+            ),
+            "evidence_items": copy.deepcopy(
+                slide.get("evidence_bindings")
+                or slide.get("evidence_items")
+                or []
+            ),
+            "analysis_or_proposal_blocks": analysis_rows,
+            "solution_mapping_refs": copy.deepcopy(
+                slide.get("solution_mapping_refs") or []
+            ),
+            "source_refs": copy.deepcopy(slide.get("source_refs") or []),
+            "speaker_notes": str(slide.get("speaker_notes") or ""),
+            "reading_quality": copy.deepcopy(
+                slide.get("reading_quality") or {}
+            ),
+            "previous_relation": str(
+                slide.get("previous_relation")
+                or sequence_row.get("transition_from_previous")
+                or ""
+            ),
+            "next_relation": str(
+                slide.get("next_relation")
+                or sequence_row.get("transition_to_next")
+                or ""
+            ),
+        }
+
+    @staticmethod
+    def _sidebar_chapters(slides: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        chapters: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for slide in slides:
+            section_id = str(
+                slide.get("section_id") or slide.get("chapter_id") or "deck"
+            )
+            if section_id in seen:
+                continue
+            seen.add(section_id)
+            chapters.append(
+                {
+                    "section_id": section_id,
+                    "title": str(
+                        slide.get("section_title")
+                        or slide.get("chapter_title")
+                        or section_id
+                    ),
+                    "first_slide_id": str(slide.get("slide_id") or ""),
+                }
+            )
+        return chapters
+
+    @staticmethod
+    def _framework_sidebar_payload(
+        *,
+        framework_ref: str,
+        framework: dict[str, Any],
+        framework_confirmation_ref: str,
+        authorization_ref: str,
+    ) -> dict[str, Any]:
+        return {
+            "source_version": framework_ref,
+            "core_proposition": str(
+                framework.get("core_proposition") or ""
+            ),
+            "persuasion_path": copy.deepcopy(
+                framework.get("persuasion_path") or []
+            ),
+            "chapters": copy.deepcopy(framework.get("chapters") or []),
+            "structural_risks": copy.deepcopy(
+                framework.get("structural_risks") or []
+            ),
+            "highest_impact_question": str(
+                framework.get("highest_impact_question") or ""
+            ),
+            "confirmed": bool(framework_confirmation_ref),
+            "expansion_authorized": bool(authorization_ref),
+        }
+
+    def _current_source_batch(
+        self, state: KernelState, source_version: str
+    ) -> tuple[str, dict[str, Any]]:
+        reference_value = state.artifact_heads.get(REVIEW_BATCH_HEAD, "")
+        if not reference_value:
+            return "", {}
+        try:
+            reference = ArtifactReference.parse(reference_value)
+            if reference.kind != REVIEW_BATCH_KIND:
+                raise ArtifactReferenceError("Review batch has the wrong kind")
+            payload = validate_content_review_batch(
+                self.kernel.artifacts.resolve(reference)["payload"]
+            )
+        except (
+            ArtifactReferenceError,
+            ContractValidationError,
+            KeyError,
+            TypeError,
+        ) as error:
+            raise ContractValidationError(
+                "Cannot project the authoritative content review batch"
+            ) from error
+        if payload["source_version"] != source_version:
+            return "", {}
+        return reference_value, payload
+
+    def _current_source_plan(
+        self, state: KernelState, source_version: str
+    ) -> tuple[str, dict[str, Any]]:
+        reference_value = state.artifact_heads.get(
+            "content/batch-revision-plan", ""
+        )
+        if not reference_value:
+            return "", {}
+        try:
+            reference = ArtifactReference.parse(reference_value)
+            if reference.kind != "content-batch-revision-plan":
+                raise ArtifactReferenceError("Revision plan has the wrong kind")
+            payload = validate_content_batch_revision_plan(
+                self.kernel.artifacts.resolve(reference)["payload"]
+            )
+        except (
+            ArtifactReferenceError,
+            ContractValidationError,
+            KeyError,
+            TypeError,
+        ) as error:
+            raise ContractValidationError(
+                "Cannot project the authoritative content revision plan"
+            ) from error
+        if payload["source_version"] != source_version:
+            return "", {}
+        return reference_value, copy.deepcopy(payload)
+
+    @staticmethod
+    def _previous_round(blueprint: dict[str, Any]) -> dict[str, Any] | None:
+        previous_source = str(
+            blueprint.get("supersedes_blueprint_ref") or ""
+        )
+        if not previous_source:
+            return None
+        return {
+            "source_version": previous_source,
+            "review_batch_ref": str(blueprint.get("review_batch_ref") or ""),
+            "revision_plan_ref": str(
+                blueprint.get("batch_revision_plan_ref") or ""
+            ),
+            "plan_confirmation_ref": str(
+                blueprint.get("batch_plan_confirmation_ref") or ""
+            ),
+            "result": "superseded-by-current-blueprint",
+        }
+
+    @staticmethod
+    def _sidebar_next_action(phase: str) -> str:
+        return {
+            "full-deck-review-ready": "review-complete-deck",
+            "review-batch-submitted": "prepare-whole-deck-revision-plan",
+            "batch-plan-proposed": "confirm-whole-deck-revision-plan",
+            "batch-plan-confirmed": "apply-confirmed-revision-plan",
+        }.get(phase, "continue-chat")
 
     @staticmethod
     def _assert_only_decision_head_changed(

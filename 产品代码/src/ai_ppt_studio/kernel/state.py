@@ -25,6 +25,7 @@ class KernelState:
     revision: int
     artifact_heads: dict[str, str] = field(default_factory=dict)
     gate_status: dict[str, str] = field(default_factory=_initial_gate_status)
+    consumed_user_confirmations: dict[str, str] = field(default_factory=dict)
     processed_commands: dict[str, int] = field(default_factory=dict)
     last_transaction_id: str = ""
 
@@ -43,6 +44,12 @@ class KernelState:
             revision=int(payload["revision"]),
             artifact_heads=dict(payload.get("artifact_heads", {})),
             gate_status=dict(payload.get("gate_status", {})),
+            consumed_user_confirmations={
+                str(key): str(value)
+                for key, value in payload.get(
+                    "consumed_user_confirmations", {}
+                ).items()
+            },
             processed_commands={
                 str(key): int(value)
                 for key, value in payload.get("processed_commands", {}).items()

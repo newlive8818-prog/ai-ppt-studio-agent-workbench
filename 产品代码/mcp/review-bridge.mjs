@@ -46,9 +46,37 @@ function htmlResponse(response, html, nonce) {
 }
 
 function nonceReviewHtml(html, nonce) {
-  return html
-    .replace(/<script(?![^>]*\bnonce=)/gi, `<script nonce="${nonce}"`)
-    .replace(/<style(?![^>]*\bnonce=)/gi, `<style nonce="${nonce}"`);
+  let result = "";
+  let cursor = 0;
+  let rawTextTag = "";
+  const lower = html.toLowerCase();
+  while (cursor < html.length) {
+    if (rawTextTag) {
+      const closeAt = lower.indexOf(`</${rawTextTag}`, cursor);
+      if (closeAt < 0) return result + html.slice(cursor);
+      result += html.slice(cursor, closeAt);
+      cursor = closeAt;
+      rawTextTag = "";
+      continue;
+    }
+    const tagAt = html.indexOf("<", cursor);
+    if (tagAt < 0) return result + html.slice(cursor);
+    result += html.slice(cursor, tagAt);
+    const tagEnd = html.indexOf(">", tagAt + 1);
+    if (tagEnd < 0) return result + html.slice(tagAt);
+    let tag = html.slice(tagAt, tagEnd + 1);
+    const opening = tag.match(/^<\s*(script|style)\b/i);
+    if (opening) {
+      if (!/\bnonce\s*=/i.test(tag)) {
+        const nameEnd = opening[0].length;
+        tag = `${tag.slice(0, nameEnd)} nonce="${nonce}"${tag.slice(nameEnd)}`;
+      }
+      if (!/\/\s*>$/.test(tag)) rawTextTag = opening[1].toLowerCase();
+    }
+    result += tag;
+    cursor = tagEnd + 1;
+  }
+  return result;
 }
 
 function statusForBridgeError(error) {
@@ -57,6 +85,70 @@ function statusForBridgeError(error) {
   }
   if (error?.code === "VALIDATION_ERROR") return 422;
   return 502;
+}
+
+function normalizedEvidenceScope(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const scope = {
+    slideId: String(value.slideId || "").trim(),
+    evidenceId: String(value.evidenceId || "").trim(),
+    materialRef: String(value.materialRef || "").trim(),
+    assetRef: String(value.assetRef || "").trim(),
+  };
+  return Object.values(scope).every(Boolean) ? scope : null;
+}
+
+function adjacentSlideSummary(slide) {
+  if (!slide) return null;
+  return {
+    slide_id: String(slide.slide_id || ""),
+    order: Number(slide.order || 0),
+    neutral_title: String(slide.neutral_title || ""),
+    page_task: String(slide.page_task || ""),
+  };
+}
+
+function buildContentEvidenceProjection(review, scope, evidenceAsset) {
+  const slides = Array.isArray(review?.slides) ? review.slides : [];
+  const index = slides.findIndex((slide) => String(slide?.slide_id || "") === scope.slideId);
+  const slide = index >= 0 ? slides[index] : null;
+  const evidenceItems = Array.isArray(slide?.evidence_items) ? slide.evidence_items : [];
+  const evidence = evidenceItems.find((item) =>
+    String(item?.evidence_id || "") === scope.evidenceId
+    && String(item?.material_ref || "") === scope.materialRef
+    && String(item?.asset_ref || "") === scope.assetRef
+  );
+  if (!slide || !evidence) return null;
+  return {
+    review_type: "content-evidence",
+    display_policy: "content-evidence-read-only",
+    project_id: String(review.project_id || ""),
+    project_name: String(review.project_name || review.project_id || "内容项目"),
+    title: `${String(slide.neutral_title || slide.slide_id)} · 材料证据`,
+    revision: Number(review.revision || 0),
+    status: "read-only",
+    gate_status: review.gate_status || {},
+    source_version: String(review.source_version || ""),
+    source_refs: [scope.materialRef, scope.assetRef],
+    sections: [],
+    outline: [],
+    mark_set: { status: "read-only", marks: [] },
+    capabilities: {
+      canSavePageDecision: false,
+      canSaveReviewMarks: false,
+      canCompareSourceAndSlide: true,
+      canCompareAdjacentSlides: true,
+    },
+    evidence_view: {
+      slide,
+      evidence,
+      asset: evidenceAsset || null,
+      adjacent: {
+        previous: adjacentSlideSummary(slides[index - 1]),
+        next: adjacentSlideSummary(slides[index + 1]),
+      },
+    },
+  };
 }
 
 async function readJsonBody(request) {
@@ -93,12 +185,15 @@ export function createReviewBridge(options) {
   const reviewType = String(options.reviewType || "").trim();
   const sourceVersion = String(options.sourceVersion || "").trim();
   const expectedRevision = Number(options.expectedRevision);
+  const evidenceScope = normalizedEvidenceScope(options.evidenceScope);
+  const evidenceAsset = options.evidenceAsset || null;
   if (
     !projectRoot ||
-    !["content", "visual"].includes(reviewType) ||
+    !["content", "visual", "content-evidence"].includes(reviewType) ||
     !sourceVersion ||
     !Number.isInteger(expectedRevision) ||
-    expectedRevision < 0
+    expectedRevision < 0 ||
+    (reviewType === "content-evidence" && !evidenceScope)
   ) {
     throw new TypeError("Review Bridge scope is invalid");
   }
@@ -116,6 +211,7 @@ export function createReviewBridge(options) {
   let port = 0;
   let origin = "";
   let stopped = false;
+  let activated = false;
   let sweepTimer = null;
 
   function isExpired() {
@@ -137,6 +233,7 @@ export function createReviewBridge(options) {
   }
 
   function renewLease() {
+    activated = true;
     leaseUntil = Math.min(expiresAt, now() + leaseMs);
   }
 
@@ -201,10 +298,11 @@ export function createReviewBridge(options) {
       htmlResponse(response, html, nonce);
       return;
     }
+    const evidenceReadOnly = reviewType === "content-evidence";
     const allowed =
       (url.pathname === "/api/review" && method === "GET") ||
-      (url.pathname === "/api/marks" && method === "POST") ||
-      (url.pathname === "/api/switch" && method === "POST") ||
+      (!evidenceReadOnly && url.pathname === "/api/marks" && method === "POST") ||
+      (!evidenceReadOnly && url.pathname === "/api/switch" && method === "POST") ||
       (url.pathname === "/api/heartbeat" && method === "POST");
     if (!allowed) {
       const knownPath = ["/api/review", "/api/marks", "/api/switch", "/api/heartbeat"].includes(
@@ -225,9 +323,11 @@ export function createReviewBridge(options) {
     try {
       if (url.pathname === "/api/review") {
         const payload = await invokeBridge({
-          operation: "get-review-projection",
+          operation: evidenceReadOnly
+            ? "get-content-sidebar-review-projection"
+            : "get-review-projection",
           project_root: projectRoot,
-          review_type: reviewType,
+          ...(evidenceReadOnly ? {} : { review_type: reviewType }),
         });
         if (
           payload?.review?.source_version !== sourceVersion ||
@@ -242,13 +342,26 @@ export function createReviewBridge(options) {
           });
           return;
         }
+        const projectedReview = evidenceReadOnly
+          ? buildContentEvidenceProjection(payload.review, evidenceScope, evidenceAsset)
+          : payload.review;
+        if (!projectedReview) {
+          jsonResponse(response, 409, {
+            ok: false,
+            error: {
+              code: "REVIEW_SOURCE_STALE",
+              message: "Scoped content evidence no longer matches this session.",
+            },
+          });
+          return;
+        }
         jsonResponse(response, 200, {
           ok: true,
           projectRoot,
           reviewType,
           sourceVersion,
           expectedRevision,
-          review: payload.review,
+          review: projectedReview,
         });
         return;
       }
@@ -360,7 +473,7 @@ export function createReviewBridge(options) {
 
   function sweep() {
     if (stopped) return;
-    if (isExpired() || now() > leaseUntil) {
+    if (isExpired() || (activated && now() > leaseUntil)) {
       stopped = true;
       const current = server;
       server = null;
@@ -385,6 +498,7 @@ export function createReviewBridge(options) {
       }
       port = address.port;
       origin = `http://${LOOPBACK_HOST}:${port}`;
+      server.unref();
       sweepTimer = setInterval(sweep, Math.min(leaseMs, 1_000));
       sweepTimer.unref();
       return {
@@ -398,12 +512,13 @@ export function createReviewBridge(options) {
         reviewType,
         sourceVersion,
         expectedRevision,
+        evidenceScope,
       };
     },
     stop,
     sweep,
     isActive() {
-      return !stopped && !isExpired() && now() <= leaseUntil;
+      return !stopped && !isExpired() && (!activated || now() <= leaseUntil);
     },
     isStopped() {
       return stopped;

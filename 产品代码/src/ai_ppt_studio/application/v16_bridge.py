@@ -7,16 +7,24 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ai_ppt_studio.application.content_batch_planning_service import (
+    ContentBatchPlanningService,
+)
+from ai_ppt_studio.application.content_review_service import ContentReviewService
 from ai_ppt_studio.application.content_service import ContentService
 from ai_ppt_studio.application.content_action_policy import (
     CONTENT_ACTION_CONTRACTS,
     CONTENT_RESULT_CONTRACTS,
     FORMAL_AGENT_CONTENT_ARTIFACT_TYPES,
 )
+from ai_ppt_studio.application.gate_confirmation import GateConfirmationPolicy
 from ai_ppt_studio.application.delivery_service import DeliveryService
 from ai_ppt_studio.application.experience_service import ExperienceService
 from ai_ppt_studio.application.review_service import ReviewService
 from ai_ppt_studio.application.project_service import ProjectCommandService
+from ai_ppt_studio.application.release_policy_service import (
+    ReleaseTargetPolicyService,
+)
 from ai_ppt_studio.application.visual_service import VisualService
 from ai_ppt_studio.application.workspace_projection import (
     WorkspaceProjectionService,
@@ -111,6 +119,8 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
     visual = VisualService(kernel)
     review_service = ReviewService(kernel)
     project_commands = ProjectCommandService(kernel)
+    content_review = ContentReviewService(kernel)
+    batch_planning = ContentBatchPlanningService(kernel)
 
     if operation == "get-project-snapshot":
         return {
@@ -118,6 +128,27 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
             "operation": operation,
             "selected_project_root": str(project_root),
             "snapshot": _snapshot(kernel.load(), project_root),
+        }
+    if operation == "set-release-target-policy":
+        policy_id = str(request.get("policy_id") or "")
+        if policy_id != "v1.6-macos-powerpoint":
+            raise ContractValidationError(
+                "policy_id must be v1.6-macos-powerpoint"
+            )
+        artifact_ref, state = ReleaseTargetPolicyService(
+            kernel
+        ).bind_current_policy(
+            _command_id(operation, request),
+            int(request["expected_revision"]),
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "result": {
+                "artifact_ref": artifact_ref,
+                "snapshot": _snapshot(state, project_root),
+            },
         }
     if operation == "get-review-projection":
         review_type = str(request.get("review_type") or "")
@@ -144,6 +175,54 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
             "delivery": delivery.delivery_status_projection(),
             "snapshot_revision": state.revision,
         }
+    if operation == "get-content-sidebar-review-projection":
+        state = kernel.load()
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "review": content_review.content_sidebar_projection(),
+            "snapshot_revision": state.revision,
+        }
+    if operation == "get-content-review-batch-submission-context":
+        state = kernel.load()
+        context = content_review.submission_context(
+            source_version=str(request.get("source_version") or ""),
+            review_batch_id=str(request.get("review_batch_id") or ""),
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "context": context,
+            "snapshot_revision": state.revision,
+        }
+    if operation == "get-content-review-batch-withdrawal-context":
+        state = kernel.load()
+        context = content_review.withdrawal_context(
+            source_version=str(request.get("source_version") or ""),
+            review_batch_id=str(request.get("review_batch_id") or ""),
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "context": context,
+            "snapshot_revision": state.revision,
+        }
+    if operation == "get-content-batch-plan-confirmation-context":
+        state = kernel.load()
+        context = batch_planning.confirmation_context(
+            review_batch_id=str(request.get("review_batch_id") or ""),
+            plan_ref=str(request.get("plan_ref") or ""),
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "context": context,
+            "snapshot_revision": state.revision,
+        }
     if operation == "add-material":
         artifact_ref, state = project_commands.add_material(
             _command_id(operation, request),
@@ -161,6 +240,141 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
             "selected_project_root": str(project_root),
             "result": {
                 "artifact_ref": artifact_ref,
+                "snapshot": _snapshot(state, project_root),
+            },
+        }
+    if operation == "save-content-page-decision":
+        page_completion, review_progress, state = (
+            content_review.save_page_decision(
+                command_id=_command_id(operation, request),
+                expected_revision=int(request["expected_revision"]),
+                source_version=str(request.get("source_version") or ""),
+                review_batch_id=str(request.get("review_batch_id") or ""),
+                slide_id=str(request.get("slide_id") or ""),
+                decision=str(request.get("decision") or ""),
+                comment=str(request.get("comment") or ""),
+            )
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "result": {
+                "artifact_ref": page_completion["page_decision_ref"],
+                "page_completion": page_completion,
+                "review_progress": review_progress,
+                "snapshot": _snapshot(state, project_root),
+            },
+        }
+    if operation == "submit-content-review-batch":
+        artifact_ref, follow_up, state = content_review.submit_review_batch(
+            command_id=_command_id(operation, request),
+            expected_revision=int(request["expected_revision"]),
+            source_version=str(request.get("source_version") or ""),
+            review_batch_id=str(request.get("review_batch_id") or ""),
+            challenge_id=str(request.get("challenge_id") or ""),
+            challenge_revision=int(request.get("challenge_revision", -1)),
+            host_confirmation_assertion=str(
+                request.get("host_confirmation_assertion") or ""
+            ),
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "result": {
+                "artifact_ref": artifact_ref,
+                "follow_up_message": follow_up,
+                "snapshot": _snapshot(state, project_root),
+            },
+        }
+    if operation == "withdraw-content-review-batch":
+        replacement_batch_id, state = content_review.withdraw_review_batch(
+            command_id=_command_id(operation, request),
+            expected_revision=int(request["expected_revision"]),
+            source_version=str(request.get("source_version") or ""),
+            review_batch_id=str(request.get("review_batch_id") or ""),
+            reason=str(request.get("reason") or ""),
+            challenge_id=str(request.get("challenge_id") or ""),
+            challenge_revision=int(request.get("challenge_revision", -1)),
+            host_confirmation_assertion=str(
+                request.get("host_confirmation_assertion") or ""
+            ),
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "result": {
+                "artifact_ref": state.artifact_heads.get(
+                    "content/review-batch", ""
+                ),
+                "replacement_review_batch_id": replacement_batch_id,
+                "snapshot": _snapshot(state, project_root),
+            },
+        }
+    if operation == "save-content-batch-revision-plan":
+        payload = request.get("payload")
+        if not isinstance(payload, dict):
+            raise ContractValidationError("payload must be an object")
+        artifact_ref, lifecycle_ref, state = batch_planning.save_revision_plan(
+            command_id=_command_id(operation, request),
+            expected_revision=int(request["expected_revision"]),
+            payload=payload,
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "result": {
+                "artifact_ref": artifact_ref,
+                "review_batch_lifecycle_ref": lifecycle_ref,
+                "snapshot": _snapshot(state, project_root),
+            },
+        }
+    if operation == "confirm-content-batch-revision-plan":
+        artifact_ref, lifecycle_ref, state = (
+            batch_planning.confirm_revision_plan(
+                command_id=_command_id(operation, request),
+                expected_revision=int(request["expected_revision"]),
+                review_batch_id=str(request.get("review_batch_id") or ""),
+                plan_ref=str(request.get("plan_ref") or ""),
+                challenge_id=str(request.get("challenge_id") or ""),
+                challenge_revision=int(
+                    request.get("challenge_revision", -1)
+                ),
+                host_confirmation_assertion=str(
+                    request.get("host_confirmation_assertion") or ""
+                ),
+            )
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "result": {
+                "artifact_ref": artifact_ref,
+                "review_batch_lifecycle_ref": lifecycle_ref,
+                "snapshot": _snapshot(state, project_root),
+            },
+        }
+    if operation == "create-content-batch-change-set":
+        governance_ref, artifact_ref, state = (
+            batch_planning.create_governance_and_change_set(
+                command_id=_command_id(operation, request),
+                expected_revision=int(request["expected_revision"]),
+                plan_confirmation_ref=str(
+                    request.get("plan_confirmation_ref") or ""
+                ),
+            )
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "result": {
+                "artifact_ref": artifact_ref,
+                "governance_ref": governance_ref,
                 "snapshot": _snapshot(state, project_root),
             },
         }
@@ -275,25 +489,55 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
             "selected_project_root": str(project_root),
             "result": {"snapshot": _snapshot(state, project_root)},
         }
+    if operation == "get-gate-confirmation-context":
+        gate = str(request.get("gate") or "")
+        context = GateConfirmationPolicy(kernel).context(gate)
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "confirmation_context": context,
+        }
     if operation == "confirm-gate":
         gate = str(request.get("gate") or "")
         if gate == "G0":
             state = content.confirm_g0(
                 _command_id(operation, request),
                 int(request["expected_revision"]),
+                user_action_ref=str(request.get("user_action_ref") or ""),
                 user_message_ref=str(request.get("user_message_ref") or ""),
+                host_confirmation_assertion=str(
+                    request.get("host_confirmation_assertion") or ""
+                ),
+                source_version=str(request.get("source_version") or ""),
+                challenge_id=str(request.get("challenge_id") or ""),
+                challenge_revision=int(request.get("challenge_revision", -1)),
             )
         elif gate == "G3":
             state = visual.confirm_g3(
                 _command_id(operation, request),
                 int(request["expected_revision"]),
+                user_action_ref=str(request.get("user_action_ref") or ""),
                 user_message_ref=str(request.get("user_message_ref") or ""),
+                host_confirmation_assertion=str(
+                    request.get("host_confirmation_assertion") or ""
+                ),
+                source_version=str(request.get("source_version") or ""),
+                challenge_id=str(request.get("challenge_id") or ""),
+                challenge_revision=int(request.get("challenge_revision", -1)),
             )
         elif gate == "G4":
             state = delivery.confirm_g4(
                 _command_id(operation, request),
                 int(request["expected_revision"]),
+                user_action_ref=str(request.get("user_action_ref") or ""),
                 user_message_ref=str(request.get("user_message_ref") or ""),
+                host_confirmation_assertion=str(
+                    request.get("host_confirmation_assertion") or ""
+                ),
+                source_version=str(request.get("source_version") or ""),
+                challenge_id=str(request.get("challenge_id") or ""),
+                challenge_revision=int(request.get("challenge_revision", -1)),
             )
         else:
             raise ContractValidationError(
@@ -482,12 +726,26 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
             "result": {"snapshot": _snapshot(state, project_root)},
         }
     if operation == "reopen-scope":
-        state = delivery.reopen_public_scope(
-            _command_id(operation, request),
-            int(request["expected_revision"]),
-            gate=str(request.get("gate") or ""),
-            reason=str(request.get("reason") or ""),
-        )
+        gate = str(request.get("gate") or "")
+        if gate == "G0":
+            state = content.reopen_g0(
+                _command_id(operation, request),
+                int(request["expected_revision"]),
+                reason=str(request.get("reason") or ""),
+            )
+        elif gate == "G3":
+            state = visual.reopen_g3(
+                _command_id(operation, request),
+                int(request["expected_revision"]),
+                reason=str(request.get("reason") or ""),
+            )
+        else:
+            state = delivery.reopen_public_scope(
+                _command_id(operation, request),
+                int(request["expected_revision"]),
+                gate=gate,
+                reason=str(request.get("reason") or ""),
+            )
         return {
             "ok": True,
             "operation": operation,

@@ -17,6 +17,7 @@ from ai_ppt_studio.errors import (
     ChatDeliveryError,
     ConfigurationError,
     ContractValidationError,
+    ContentWorkflowError,
     FeedbackGovernanceError,
     GateBlockedError,
     GateMutationError,
@@ -78,6 +79,15 @@ def dispatch(request: dict[str, Any]) -> dict[str, object]:
 
 
 def _error_payload(exc: Exception) -> tuple[int, dict[str, object]]:
+    if isinstance(exc, ContentWorkflowError):
+        return 2, {
+            "ok": False,
+            "error": {
+                "code": exc.code,
+                "message": str(exc),
+                "details": exc.details,
+            },
+        }
     if isinstance(exc, RevisionConflictError):
         return 2, {
             "ok": False,
