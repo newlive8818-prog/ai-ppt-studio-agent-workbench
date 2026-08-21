@@ -3,14 +3,14 @@
 ## 1. 文档状态
 
 - 日期：2026-08-20
-- 状态：`用户已确认设计，待形成实施计划，尚未实现`
+- 状态：`用户已确认设计；本地工程实现完成，真实客户 ReviewSession、宿主通知、AI 接收和 G0 尚未验证`
 - 决策来源：用户明确确认“没有图片的页面不用一定要求证据图片”，并在两种零图片前端处理方式中选择“隐藏图片区，页面实际文字扩展到整行”
 - 适用范围：AI PPT Studio 内容全稿审核页、ReadingDeckBlueprint 的页面材料画面合同、ContentReviewProjection、ContentReviewPageViewModel 及其活动 React 表面
 - 不改变：内容审核页既有用户验收结论、四类 PageDecision、ContentReviewBatch、内部证据治理、真实客户 ReviewSession 能力边界
 
 ## 2. 问题与结论
 
-当前目标合同和 Python validator 把整套 `material-backed | mixed-evidence` 材料模式错误地下沉为“每一页必须至少存在一个 `material_view`”。这会让合理的纯文字页被迫配置图片，并把“证据充分”与“存在证据图片”混为一件事。
+本设计确认时，目标合同和 Python validator 曾把整套 `material-backed | mixed-evidence` 材料模式错误地下沉为“每一页必须至少存在一个 `material_view`”。本地工程实现已经删除该数量强制；证据充分性与图片存在性继续按本设计分离。
 
 正式结论：
 
@@ -100,22 +100,22 @@ materialVisuals.length > 0   -> text-and-visual page layout
 
 只有非空 `material_views[].asset_ref` 进入 Review Bridge 资源白名单。空数组不触发项目资源读取。已有项目根约束、符号链接拒绝、文件类型、大小和精确引用检查保持不变。
 
-## 5. 当前实现差距
+## 5. 本地实现结果与剩余边界
 
-已存在：
+已完成本地工程实现：
 
-- TypeScript ViewModel 可以表达空 `materialVisuals[]`；
-- 活动 React 表面能接收空数组；
-- Review Bridge 能处理没有内容图片引用的投影；
-- 外部内容审核投影已经收窄，不需要恢复来源元数据。
+- Python `validate_reading_deck_blueprint()` 允许三种材料模式中的单页 `material_views = []`，同时保留 evidence bindings 与单条 material view 的闭合、安全和来源验证；
+- `ContentReviewProjection` 与 `ContentReviewPageViewModel` 原序保留非空画面，并把空数组作为正常状态传递；
+- 活动 React 表面对零图片页不渲染图片区、标题或空状态，“页面实际文字”使用整行单栏；
+- 有图片页继续使用已验收正文/画面结构和近视口读取；
+- Review Bridge 只允许读取投影中实际存在的非空 `asset_ref`；
+- 合同、投影、Bridge、React、路由、多视口和 10/24/60 页混合长稿均有本地自动化回归。
 
-尚未实现：
+仍不属于本地实现结论：
 
-- Python `validate_reading_deck_blueprint()` 仍强制 material-backed/mixed-evidence 每页至少一个 `material_view`；
-- 活动 React 表面仍渲染“文字与图片材料一起审核”和大面积空状态；
-- CSS 仍默认建立正文/图片区双栏；
-- 基于旧规则的合同、集成和 UI 测试仍需要更新；
-- 真实客户材料解析、图片提取、页面关联与选择机制仍是独立研发能力，不能由本设计声称完成。
+- 真实客户材料解析、图片提取、页面关联与选择机制；
+- 真实客户 ReviewSession 打开与恢复、宿主通知、AI 接收、G0 或其他 Gate；
+- 多图片数量、分组、排序、网格、主辅角色或自动选择策略。
 
 ## 6. 错误和状态
 
