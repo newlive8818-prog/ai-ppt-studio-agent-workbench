@@ -56,7 +56,7 @@ class V16SupportScriptContractTests(unittest.TestCase):
         self.assertIn("collectProjectionAssetRefs(review)", assets)
         self.assertNotIn("catch", assets)
 
-    def test_ui_acceptance_has_only_review_and_evidence_surfaces(self) -> None:
+    def test_ui_acceptance_has_only_current_review_surfaces(self) -> None:
         self.assertFalse((ROOT / "scripts" / "run-v16-ui-acceptance.mjs").exists())
         body = (ROOT / "scripts" / "run-v22-ui-acceptance.mjs").read_text(
             encoding="utf-8"
@@ -64,7 +64,6 @@ class V16SupportScriptContractTests(unittest.TestCase):
         for value in (
             "content-review",
             "visual-review",
-            "read-only-evidence-layer",
             "LOCAL_PREVIEW_EVIDENCE",
             "previewEvidence: { ...LOCAL_PREVIEW_EVIDENCE }",
             "rawScreenshot",
@@ -73,6 +72,8 @@ class V16SupportScriptContractTests(unittest.TestCase):
             "AI_PPT_PREVIEW_OUTPUT_DIR: runDirectory",
         ):
             self.assertIn(value, body)
+        self.assertIn('surfaces: ["content-review", "visual-review"]', body)
+        self.assertNotIn("read-only-evidence-layer", body)
         self.assertNotIn("AI_PPT_PREVIEW_OUTPUT_DIR: outputDirectory", body)
         self.assertNotIn("os.homedir()", body)
         evidence = (ROOT / "scripts" / "v22-ui-acceptance-evidence.mjs").read_text(
@@ -87,7 +88,6 @@ class V16SupportScriptContractTests(unittest.TestCase):
         self.assertIn("Not G3 or user acceptance proof", evidence)
         self.assertNotIn("Not G3 or user acceptance proof", body)
         for obsolete in (
-            "workbench",
             "compact-app-shell",
             "stable-navigation",
             "four desktop targets",
