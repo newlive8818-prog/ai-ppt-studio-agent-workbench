@@ -35,6 +35,27 @@ class V16UiSeedTests(unittest.TestCase):
                 project_root.is_relative_to(Path(temp).resolve() / "projects")
             )
             self.assertTrue(workspace_config.is_file())
+            self.assertEqual(
+                seeded["evidence_identity"],
+                "deterministic-contract-fixture-not-real-project-proof",
+            )
+            self.assertEqual(
+                seeded["content_review_scenarios"],
+                [
+                    "content-producing",
+                    "content-hard-gate-review",
+                    "content-hard-gate-failed",
+                    "content-hard-gate-repaired",
+                    "ready-10",
+                    "mixed-decisions-24",
+                    "long-review-60",
+                    "save-failure",
+                    "source-conflict",
+                    "submitted-frozen",
+                    "plan-proposed",
+                    "new-version-zero-decisions",
+                ],
+            )
 
             snapshot = dispatch(
                 {
@@ -48,14 +69,20 @@ class V16UiSeedTests(unittest.TestCase):
             self.assertEqual(
                 len(snapshot["workspace"]["delivery"]["targets"]), 4
             )
+            targets = snapshot["workspace"]["delivery"]["targets"]
             self.assertEqual(
-                len(
-                    {
-                        item["pptx_sha256"]
-                        for item in snapshot["workspace"]["delivery"]["targets"]
-                    }
-                ),
-                1,
+                [item["status"] for item in targets],
+                ["passed", "deferred", "deferred", "deferred"],
+            )
+            nonempty_hashes = {
+                item["pptx_sha256"]
+                for item in targets
+                if item["pptx_sha256"]
+            }
+            self.assertEqual(nonempty_hashes, {seeded["pptx_sha256"]})
+            self.assertEqual(
+                [item["pptx_sha256"] for item in targets[1:]],
+                ["", "", ""],
             )
 
             content = dispatch(

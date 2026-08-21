@@ -16,6 +16,7 @@ from tests.v16_delivery_fixtures import (
     prepared_delivery_ready,
     valid_package_payload,
 )
+from tests.host_confirmation_fixtures import signed_gate_assertion
 
 
 class V16DeliveryBridgeTests(unittest.TestCase):
@@ -132,6 +133,7 @@ class V16DeliveryBridgeTests(unittest.TestCase):
                     "targets",
                     "hash_identity",
                     "chat_send",
+                    "release_target_policy",
                 },
             )
             self.assertEqual(projection["phase"], "user-reviewable")
@@ -148,14 +150,35 @@ class V16DeliveryBridgeTests(unittest.TestCase):
             self.assertIsNone(projection["highest_blocker"])
             self.assertEqual(len(projection["targets"]), 4)
             self.assertEqual(
-                {target["status"] for target in projection["targets"]},
-                {"passed"},
+                [target["status"] for target in projection["targets"]],
+                ["passed", "deferred", "deferred", "deferred"],
             )
             self.assertEqual(projection["hash_identity"], refs["pptx_sha256"])
             self.assertEqual(projection["chat_send"]["status"], "sent")
+            self.assertEqual(
+                projection["release_target_policy"],
+                {
+                    "policy_ref": refs["release_target_policy_ref"],
+                    "policy_id": "v1.6-macos-powerpoint",
+                    "required_target_ids": ["macos-powerpoint"],
+                    "deferred_target_ids": [
+                        "macos-wps",
+                        "windows-powerpoint",
+                        "windows-wps",
+                    ],
+                    "compatibility_claim_scope": ["macos-powerpoint"],
+                },
+            )
             self.assertNotIn("page_images", str(projection))
             self.assertNotIn("contact_sheet", str(projection))
             self.assertNotIn("download", str(projection))
+            context = dispatch_v16(
+                {
+                    "operation": "get-gate-confirmation-context",
+                    "project_root": str(project),
+                    "gate": "G4",
+                }
+            )["confirmation_context"]
 
             accepted = dispatch_v16(
                 {
@@ -163,7 +186,14 @@ class V16DeliveryBridgeTests(unittest.TestCase):
                     "project_root": str(project),
                     "expected_revision": revision,
                     "gate": "G4",
-                    "user_message_ref": "chat://message/bridge-final-accepted",
+                    "host_confirmation_assertion": signed_gate_assertion(
+                        context,
+                        identity_type="verified-message",
+                        identity_ref="chat://message/bridge-final-accepted",
+                    ),
+                    "source_version": context["source_version"],
+                    "challenge_id": context["challenge_id"],
+                    "challenge_revision": context["challenge_revision"],
                 }
             )
             revision = accepted["result"]["snapshot"]["revision"]

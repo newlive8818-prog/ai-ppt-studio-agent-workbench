@@ -15,7 +15,9 @@ class V16SupportScriptContractTests(unittest.TestCase):
             "get_ai_ppt_sidebar_projection",
             "open_ai_ppt_browser_review",
             "HOST_SIDEBAR_UNAVAILABLE",
-            "BROWSER_REVIEW_UNAVAILABLE",
+            "BROWSER_REVIEW_AVAILABLE",
+            "review-session-ready",
+            "agent-browser",
         ):
             self.assertIn(value, body)
         for obsolete in (

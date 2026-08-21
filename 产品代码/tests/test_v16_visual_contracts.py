@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.application.visual_service import VisualService
-from ai_ppt_studio.errors import ContractValidationError
+from ai_ppt_studio.errors import ContractValidationError, GateBlockedError
 from ai_ppt_studio.kernel.references import ArtifactReference
 from tests.v16_visual_fixtures import (
     confirmed_g0,
@@ -23,6 +23,33 @@ from tests.v16_visual_fixtures import (
 
 
 class V16VisualContractTests(unittest.TestCase):
+    def test_every_visual_write_requires_current_g0_confirmation_lineage(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            content, revision, blueprint_ref = confirmed_g0(Path(temp))
+            visual = VisualService(content.kernel)
+            brief_ref = visual.register_visual_brief(
+                "brief-before-lineage-tamper",
+                revision,
+                valid_visual_brief(blueprint_ref),
+            )
+            state = visual.kernel.load()
+            visual.kernel.commit(
+                command_id="remove-current-g0-confirmation",
+                expected_revision=state.revision,
+                event_type="test.current-g0-confirmation-removed",
+                artifact_updates={},
+                artifact_removals=("gate/G0/confirmation",),
+            )
+
+            with self.assertRaises(GateBlockedError):
+                visual.register_design_system(
+                    "blocked-design-system",
+                    state.revision + 1,
+                    valid_design_system(brief_ref, blueprint_ref),
+                )
+
+            self.assertEqual(visual.kernel.load().revision, state.revision + 1)
+
     def test_strict_route_brief_and_complete_design_system(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             content, revision, blueprint_ref = confirmed_g0(Path(temp))

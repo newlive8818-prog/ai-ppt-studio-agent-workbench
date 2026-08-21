@@ -2,13 +2,111 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+from unittest.mock import patch
 
+from ai_ppt_studio.application.content_batch_planning_service import (
+    ContentBatchPlanningService,
+)
+from ai_ppt_studio.application.content_review_service import ContentReviewService
 from ai_ppt_studio.application.content_service import ContentService
+from ai_ppt_studio.application.release_policy_service import (
+    ReleaseTargetPolicyService,
+)
 from ai_ppt_studio.application.visual_service import VisualService
-from ai_ppt_studio.domains.presentation.targets import REQUIRED_TARGET_IDS
+from ai_ppt_studio.application.scoped_confirmation import (
+    HOST_CONFIRMATION_SECRET_ENV,
+)
+from ai_ppt_studio.domains.presentation.release_policy import (
+    CURRENT_RELEASE_TARGET_POLICY,
+)
 from ai_ppt_studio.kernel.references import ArtifactReference
 from tests.test_v16_review_marks import accepted_content
+from tests.test_v16_framework_discussion import TEST_SECRET, signed_assertion
+from tests.host_confirmation_fixtures import gate_confirmation_kwargs
+
+
+def apply_all_approved_content_review(
+    content: ContentService, blueprint_ref: str
+) -> None:
+    review = ContentReviewService(content.kernel)
+    blueprint = content.kernel.artifacts.resolve(
+        ArtifactReference.parse(blueprint_ref)
+    )["payload"]
+    batch_id = "visual-fixture-final-content-review"
+    with patch.dict(
+        os.environ,
+        {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET},
+        clear=False,
+    ):
+        for slide in blueprint["slides"]:
+            review.save_page_decision(
+                command_id=f"visual-fixture-review-{slide['slide_id']}",
+                expected_revision=content.kernel.load().revision,
+                source_version=blueprint_ref,
+                review_batch_id=batch_id,
+                slide_id=slide["slide_id"],
+                decision="approved",
+                comment="",
+            )
+        submission = review.submission_context(
+            source_version=blueprint_ref,
+            review_batch_id=batch_id,
+        )
+        batch_ref, _follow_up, _state = review.submit_review_batch(
+            command_id="visual-fixture-submit-content-review",
+            expected_revision=int(submission["challenge_revision"]),
+            source_version=blueprint_ref,
+            review_batch_id=batch_id,
+            challenge_id=str(submission["challenge_id"]),
+            challenge_revision=int(submission["challenge_revision"]),
+            host_confirmation_assertion=signed_assertion(submission),
+        )
+        planning = ContentBatchPlanningService(content.kernel)
+        plan_ref, _lifecycle_ref, _state = planning.save_revision_plan(
+            command_id="visual-fixture-save-no-revision-plan",
+            expected_revision=content.kernel.load().revision,
+            payload={
+                "plan_id": "visual-fixture-no-revision-plan",
+                "plan_version": 1,
+                "review_batch_ref": batch_ref,
+                "review_batch_id": batch_id,
+                "source_version": blueprint_ref,
+                "direct_actions": [],
+                "cross_page_actions": [],
+                "merge_delete_actions": [],
+                "evidence_actions": [],
+                "revised_chapters": [],
+                "estimated_slide_count": len(blueprint["slides"]),
+                "preserve_items": ["已确认的完整内容蓝图"],
+                "conflicts_and_risks": [],
+                "required_user_decisions": [],
+                "re_review_scope": "new-blueprint-full-deck",
+                "requires_blueprint_revision": False,
+                "status": "proposed",
+            },
+        )
+        plan_context = planning.confirmation_context(
+            review_batch_id=batch_id,
+            plan_ref=plan_ref,
+        )
+        confirmation_ref, _lifecycle_ref, _state = (
+            planning.confirm_revision_plan(
+                command_id="visual-fixture-confirm-no-revision-plan",
+                expected_revision=int(plan_context["challenge_revision"]),
+                review_batch_id=batch_id,
+                plan_ref=plan_ref,
+                challenge_id=str(plan_context["challenge_id"]),
+                challenge_revision=int(plan_context["challenge_revision"]),
+                host_confirmation_assertion=signed_assertion(plan_context),
+            )
+        )
+        planning.apply_no_revision_plan(
+            command_id="visual-fixture-apply-no-revision-plan",
+            expected_revision=content.kernel.load().revision,
+            plan_confirmation_ref=confirmation_ref,
+        )
 
 
 def confirmed_g0(
@@ -16,10 +114,20 @@ def confirmed_g0(
 ) -> tuple[ContentService, int, str]:
     content = ContentService.initialize(project, project_id=project_id)
     revision, blueprint_ref = accepted_content(content, slide_count)
+    apply_all_approved_content_review(content, blueprint_ref)
+    ReleaseTargetPolicyService(content.kernel).bind_current_policy(
+        "fixture-bind-release-target-policy",
+        content.kernel.load().revision,
+    )
+    revision = content.kernel.load().revision
+    context = content.gate_confirmation_context("G0")
     state = content.confirm_g0(
         "confirm-g0",
         revision,
-        user_message_ref="chat://message/g0-accepted",
+        **gate_confirmation_kwargs(
+            context,
+            identity_ref=f"test-host-confirmation://{project_id}-g0",
+        ),
     )
     return content, state.revision, blueprint_ref
 
@@ -34,7 +142,9 @@ def valid_visual_brief(blueprint_ref: str) -> dict:
         "imagery_strategy": "只使用可追溯素材和非语义装饰",
         "diagram_strategy": "关系使用原生可编辑对象",
         "powerpoint_constraints": "事实文字、数字和关系保持原生可编辑",
-        "target_ids": list(REQUIRED_TARGET_IDS),
+        "target_ids": list(
+            CURRENT_RELEASE_TARGET_POLICY["required_target_ids"]
+        ),
     }
 
 
@@ -369,7 +479,7 @@ def prepared_g2(
     )
     current_revision = revision + 2
     target_refs: dict[str, str] = {}
-    for target_id in REQUIRED_TARGET_IDS:
+    for target_id in CURRENT_RELEASE_TARGET_POLICY["required_target_ids"]:
         target_refs[target_id] = visual.register_target_render_evidence(
             f"g2-target-{target_id}",
             current_revision,

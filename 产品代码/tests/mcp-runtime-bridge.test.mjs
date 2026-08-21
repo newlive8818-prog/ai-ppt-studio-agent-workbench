@@ -8,6 +8,45 @@ import {
   invokePythonBridge,
   resolvePythonExecutable,
 } from "../mcp/runtime-bridge/python-runtime.mjs";
+import { createHostConfirmationAuthority } from "../mcp/host-confirmation-assertion.mjs";
+
+test("host confirmation assertion is signed, version-bound, and carries one identity", () => {
+  const authority = createHostConfirmationAuthority({
+    secret: "node-test-host-confirmation-secret-32-bytes-minimum",
+    now: () => 1_800_000_000,
+  });
+  const context = {
+    project_id: "p1",
+    project_root: "/managed/project",
+    scope_kind: "gate",
+    scope_id: "G3",
+    source_version: `artifact://visual-contract/${"a".repeat(64)}`,
+    evidence_refs: [`artifact://deck-design-system/${"b".repeat(64)}`],
+    challenge_id: "challenge-g3-current",
+    challenge_revision: 42,
+  };
+  const assertion = authority.issue(context, {
+    identityType: "verified-message",
+    identityRef: "chat://message/explicit-g3-acceptance",
+  });
+
+  const [version, payloadSegment, signatureSegment] = assertion.split(".");
+  const payload = JSON.parse(Buffer.from(payloadSegment, "base64url").toString("utf8"));
+  assert.equal(version, "v1");
+  assert.ok(signatureSegment.length > 32);
+  assert.equal(payload.project_id, context.project_id);
+  assert.equal(payload.project_root, context.project_root);
+  assert.equal(payload.scope_kind, context.scope_kind);
+  assert.equal(payload.scope_id, context.scope_id);
+  assert.equal(payload.source_version, context.source_version);
+  assert.deepEqual(payload.evidence_refs, context.evidence_refs);
+  assert.equal(payload.challenge_id, context.challenge_id);
+  assert.equal(payload.challenge_revision, context.challenge_revision);
+  assert.equal(payload.identity_type, "verified-message");
+  assert.equal(payload.identity_ref, "chat://message/explicit-g3-acceptance");
+  assert.equal(payload.expires_at - payload.issued_at, 120);
+  assert.ok(payload.nonce);
+});
 
 test("Python bridge returns a structured snapshot", async () => {
   const result = await invokePythonBridge({ operation: "list-projects" });

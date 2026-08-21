@@ -24,6 +24,7 @@ from tests.v16_delivery_fixtures import (
     prepared_delivery_ready,
     valid_package_payload,
 )
+from tests.host_confirmation_fixtures import gate_confirmation_kwargs
 
 
 SOURCES = (
@@ -62,10 +63,17 @@ def accepted_project(base: Path) -> Path:
             "retry_of": "",
         },
     )
+    from ai_ppt_studio.application.gate_confirmation import GateConfirmationPolicy
+
+    context = GateConfirmationPolicy(delivery.kernel).context("G4")
     delivery.confirm_g4(
         "final-verifier-g4",
         sent.revision,
-        user_message_ref="chat://message/final-verifier-accepted",
+        **gate_confirmation_kwargs(
+            context,
+            identity_type="verified-message",
+            identity_ref="chat://message/final-verifier-accepted",
+        ),
     )
     return project
 
@@ -155,7 +163,7 @@ def installed_release(base: Path) -> Path:
                 "installed_probe": {
                     "status": "passed",
                     "source_repository_pythonpath": False,
-                    "tool_count": 17,
+                    "tool_count": 18,
                     "chat_ui_template_count": 0,
                     "ordinary_tools_data_only": True,
                     "sidebar_capability_code": "HOST_SIDEBAR_UNAVAILABLE",
@@ -190,6 +198,17 @@ class FinalAcceptanceVerifierTests(unittest.TestCase):
             self.assertEqual(result["requirement_count"], 104)
             self.assertEqual(result["passed_requirement_count"], 104)
             self.assertEqual(result["g2_pptx_sha256"], result["g4_pptx_sha256"])
+            self.assertTrue(result["release_target_policy_ref"].startswith(
+                "artifact://release-target-policy/"
+            ))
+            self.assertEqual(result["required_target_ids"], ["macos-powerpoint"])
+            self.assertEqual(
+                result["deferred_target_ids"],
+                ["macos-wps", "windows-powerpoint", "windows-wps"],
+            )
+            self.assertEqual(
+                result["compatibility_claim_scope"], ["macos-powerpoint"]
+            )
             self.assertFalse(result["proof_eligible"])
 
             with self.assertRaises(ValueError):
@@ -230,7 +249,7 @@ class FinalAcceptanceVerifierTests(unittest.TestCase):
             from ai_ppt_studio.kernel.transactions import ProjectKernel
 
             kernel = ProjectKernel(project, project_id=state["project_id"])
-            slot = "delivery/target-evidence/G4/windows-wps"
+            slot = "delivery/target-evidence/G4/macos-powerpoint"
             current = kernel.artifacts.resolve(
                 ArtifactReference.parse(state["artifact_heads"][slot])
             )["payload"]

@@ -9,6 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.application.v16_bridge import dispatch_v16
+from ai_ppt_studio.application.release_policy_service import (
+    ReleaseTargetPolicyService,
+)
 from ai_ppt_studio.errors import ContractValidationError
 from ai_ppt_studio.kernel.references import ArtifactReference
 from tests.test_v16_experience_evolution import prepared_personal_candidate
@@ -25,6 +28,13 @@ class V16ExperienceBridgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
             experience, revision, refs = prepared_personal_candidate(project)
+            _policy_ref, policy_state = ReleaseTargetPolicyService(
+                experience.kernel
+            ).bind_current_policy(
+                "bind-policy-for-task-bound-experience-bridge-snapshot",
+                revision,
+            )
+            revision = policy_state.revision
             requested = dispatch_v16({
                 "operation": "request-agent-action",
                 "project_root": str(project),
@@ -91,6 +101,13 @@ class V16ExperienceBridgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
             experience, revision, refs = prepared_experience(project)
+            _policy_ref, policy_state = ReleaseTargetPolicyService(
+                experience.kernel
+            ).bind_current_policy(
+                "bind-policy-for-experience-bridge-snapshot",
+                revision,
+            )
+            revision = policy_state.revision
             intake = dispatch_v16(
                 {
                     "operation": "commit-artifact",

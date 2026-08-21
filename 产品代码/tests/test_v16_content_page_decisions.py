@@ -166,6 +166,10 @@ class PageDecisionContractTests(unittest.TestCase):
                 "full-deck-expansion-authorization"
             ),
             "acceptance_ref": artifact_ref("content-acceptance"),
+            "supersedes_blueprint_ref": "",
+            "review_batch_ref": "",
+            "batch_revision_plan_ref": "",
+            "batch_plan_confirmation_ref": "",
             "strategy": {"artifact_type": "presales-content-strategy"},
             "claim_evidence_map": {"artifact_type": "claim-evidence-map"},
             "argument_map": {"artifact_type": "deck-argument-map"},
@@ -1453,7 +1457,7 @@ class ContentReviewServiceTests(unittest.TestCase):
         self.assertEqual(object_files(self.content), objects)
         self.assertEqual(event_files(self.content), events)
 
-    def test_new_blueprint_starts_a_new_source_bound_set_and_old_snapshot_is_immutable(self) -> None:
+    def test_direct_revised_blueprint_is_rejected_and_old_snapshot_is_immutable(self) -> None:
         old_page, _progress, _state = self.save(
             command_id="old-source-decision",
             slide_id="s1",
@@ -1468,37 +1472,23 @@ class ContentReviewServiceTests(unittest.TestCase):
             )
         )
 
-        new_source, new_blueprint = publish_revised_blueprint(
-            self.content, slide_count=2
-        )
-        self.assertNotEqual(new_source, self.source_version)
-        page, progress, _state = self.save(
-            command_id="new-source-decision",
-            slide_id="s1",
-            decision="approved",
-            source_version=new_source,
-            review_batch_id="review-batch-new-source",
-        )
-        _set_ref, decision_set = self.current_set()
-        self.assertEqual(decision_set["source_version"], new_source)
+        before = self.content.kernel.load()
+        before_content_heads = {
+            key: value
+            for key, value in before.artifact_heads.items()
+            if key.startswith("content/")
+        }
+        with self.assertRaises(ContentWorkflowError) as caught:
+            publish_revised_blueprint(self.content, slide_count=2)
         self.assertEqual(
-            decision_set["review_batch_id"], "review-batch-new-source"
+            caught.exception.code, "CONTENT_BATCH_PLAN_NOT_CONFIRMED"
         )
-        self.assertEqual(len(decision_set["decision_refs"]), 1)
-        self.assertNotEqual(page["page_decision_ref"], old_ref)
-        self.assertEqual(progress["total"], 2)
-        self.assertEqual(progress["completed"], 1)
-        self.assertEqual(progress["next_incomplete_slide_id"], "s2")
-        new_decision = resolve_payload(
-            self.content, page["page_decision_ref"]
-        )
-        new_snapshot = resolve_payload(
-            self.content, new_decision["visible_copy_snapshot_ref"]
-        )
-        self.assertEqual(
-            new_snapshot["visible_copy"],
-            new_blueprint["slides"][0]["visible_copy"],
-        )
+        after_content_heads = {
+            key: value
+            for key, value in self.content.kernel.load().artifact_heads.items()
+            if key.startswith("content/")
+        }
+        self.assertEqual(after_content_heads, before_content_heads)
         self.assertEqual(resolve_payload(self.content, old_ref), old_decision)
         self.assertEqual(
             resolve_payload(

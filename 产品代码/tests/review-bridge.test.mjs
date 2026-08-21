@@ -16,6 +16,51 @@ const review = {
   mark_set: { marks: [] },
 };
 
+const contentSidebarReview = {
+  display_policy: "content-sidebar-full-deck",
+  phase: "full-deck-review-ready",
+  project_id: "p1",
+  project_name: "测试项目",
+  source_version: review.source_version,
+  revision: 7,
+  slides: [
+    {
+      slide_id: "S01",
+      order: 1,
+      neutral_title: "业务范围与系统现状",
+      page_task: "说明业务范围",
+      reading_question: "当前范围是什么？",
+      visible_copy: [{ copy_id: "copy-1", role: "body", text: "当前页完整文字" }],
+      previous_relation: "",
+      next_relation: "进入问题页",
+      evidence_items: [
+        {
+          evidence_id: "EV-S01-01",
+          material_ref: "artifact://material/m1",
+          asset_ref: "project-asset://renders/page-03.png",
+          source_file: "客户材料.pptx",
+          source_page_or_region: "P03 · 业务范围图",
+          used_region: "页面中部业务环节",
+          supports_claim: "支持范围说明",
+          treatment: "裁切页脚",
+          evidence_gap: "跨系统频次待核验",
+        },
+      ],
+    },
+    {
+      slide_id: "S02",
+      order: 2,
+      neutral_title: "跨系统协同事项",
+      page_task: "说明协同问题",
+      reading_question: "哪些事项需要联动？",
+      visible_copy: [{ copy_id: "copy-2", role: "body", text: "下一页完整文字" }],
+      previous_relation: "承接范围",
+      next_relation: "进入方案",
+      evidence_items: [],
+    },
+  ],
+};
+
 async function startedBridge(options = {}) {
   const calls = [];
   const bridge = createReviewBridge({
@@ -41,6 +86,46 @@ async function startedBridge(options = {}) {
         ok: true,
         result: { snapshot: { revision: 8 } },
       };
+    },
+    ...options,
+  });
+  const session = await bridge.start();
+  return { bridge, session, calls };
+}
+
+async function startedEvidenceBridge(options = {}) {
+  const calls = [];
+  const bridge = createReviewBridge({
+    projectRoot: "/managed/project",
+    reviewType: "content-evidence",
+    sourceVersion: review.source_version,
+    expectedRevision: 7,
+    evidenceScope: {
+      slideId: "S01",
+      evidenceId: "EV-S01-01",
+      materialRef: "artifact://material/m1",
+      assetRef: "project-asset://renders/page-03.png",
+    },
+    evidenceAsset: {
+      assetRef: "renders/page-03.png",
+      mimeType: "image/png",
+      bytes: 3,
+      dataBase64: "YWJj",
+    },
+    ttlMs: 10_000,
+    leaseMs: 500,
+    readReviewHtml: async () => "<!doctype html><html><body><div id=\"root\"></div></body></html>",
+    invokeBridge: async (request) => {
+      calls.push(request);
+      if (request.operation === "get-content-sidebar-review-projection") {
+        return {
+          ok: true,
+          selected_project_root: "/managed/project",
+          review: contentSidebarReview,
+          snapshot_revision: 7,
+        };
+      }
+      throw new Error(`unexpected evidence operation ${request.operation}`);
     },
     ...options,
   });
@@ -127,6 +212,24 @@ test("Review Bridge serves only the fixed Browser shell with nonce CSP", async (
 
     const asset = await fetch(`${origin}/assets/anything.js`);
     assert.equal(asset.status, 404);
+  } finally {
+    await bridge.stop();
+  }
+});
+
+test("Review Bridge adds nonces only to real HTML tags, not script string literals", async () => {
+  const { bridge, session } = await startedBridge({
+    readReviewHtml: async () =>
+      '<!doctype html><html><body><script>const example = "<script data-example>"; window.example = example;</script></body></html>',
+  });
+  try {
+    const origin = `http://${session.host}:${session.port}`;
+    const response = await fetch(`${origin}/`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /<script nonce="[^"]+">const example/);
+    assert.match(html, /const example = "<script data-example>"/);
+    assert.doesNotMatch(html, /const example = "<script nonce=/);
   } finally {
     await bridge.stop();
   }
@@ -299,5 +402,87 @@ test("Review Bridge lease heartbeat extends activity and expiry stops the server
     assert.equal(bridge.isStopped(), true);
   } finally {
     await bridge.stop();
+  }
+});
+
+test("Review Bridge keeps an unactivated Agent handoff alive until the hard TTL", async () => {
+  let now = 1_000;
+  const { bridge } = await startedBridge({
+    now: () => now,
+    ttlMs: 2_000,
+    leaseMs: 100,
+  });
+  try {
+    now = 1_150;
+    bridge.sweep();
+    assert.equal(bridge.isActive(), true);
+    assert.equal(bridge.isStopped(), false);
+
+    now = 3_001;
+    bridge.sweep();
+    assert.equal(bridge.isActive(), false);
+    assert.equal(bridge.isStopped(), true);
+  } finally {
+    await bridge.stop();
+  }
+});
+
+test("content evidence session exposes only one exact slide/material and adjacent comparison", async () => {
+  const { bridge, session, calls } = await startedEvidenceBridge();
+  try {
+    const origin = `http://${session.host}:${session.port}`;
+    const response = await fetch(`${origin}/api/review`, { headers: bearer(session) });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.review.review_type, "content-evidence");
+    assert.equal(payload.review.display_policy, "content-evidence-read-only");
+    assert.equal(payload.review.evidence_view.slide.slide_id, "S01");
+    assert.equal(payload.review.evidence_view.evidence.evidence_id, "EV-S01-01");
+    assert.equal(payload.review.evidence_view.evidence.material_ref, "artifact://material/m1");
+    assert.equal(payload.review.evidence_view.adjacent.next.slide_id, "S02");
+    assert.equal(payload.review.evidence_view.asset.dataBase64, "YWJj");
+    assert.deepEqual(payload.review.outline, []);
+    assert.deepEqual(payload.review.sections, []);
+    assert.deepEqual(payload.review.capabilities, {
+      canSavePageDecision: false,
+      canSaveReviewMarks: false,
+      canCompareSourceAndSlide: true,
+      canCompareAdjacentSlides: true,
+    });
+    assert.equal(calls.at(-1).operation, "get-content-sidebar-review-projection");
+  } finally {
+    await bridge.stop();
+  }
+});
+
+test("content evidence session rejects marks, switches, and scope drift without writes", async () => {
+  const { bridge, session, calls } = await startedEvidenceBridge();
+  try {
+    const origin = `http://${session.host}:${session.port}`;
+    for (const path of ["/api/marks", "/api/switch"]) {
+      const response = await fetch(`${origin}${path}`, {
+        method: "POST",
+        headers: { ...bearer(session), Origin: origin, "Content-Type": "application/json" },
+        body: JSON.stringify({ marks: [], reviewType: "visual" }),
+      });
+      assert.equal(response.status, 405);
+    }
+    assert.equal(calls.some((call) => call.operation === "save-review-marks"), false);
+  } finally {
+    await bridge.stop();
+  }
+
+  const drifted = structuredClone(contentSidebarReview);
+  drifted.slides[0].evidence_items[0].material_ref = "artifact://material/changed";
+  const stale = await startedEvidenceBridge({
+    invokeBridge: async () => ({ ok: true, review: drifted, snapshot_revision: 7 }),
+  });
+  try {
+    const origin = `http://${stale.session.host}:${stale.session.port}`;
+    const response = await fetch(`${origin}/api/review`, { headers: bearer(stale.session) });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).error.code, "REVIEW_SOURCE_STALE");
+  } finally {
+    await stale.bridge.stop();
   }
 });

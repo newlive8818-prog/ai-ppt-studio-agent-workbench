@@ -287,6 +287,37 @@ class ContextCompilerGovernanceTests(unittest.TestCase):
             governance = pack["layers"]["governance"]
             self.assertEqual(governance["production_route"], "strict-B")
 
+    def test_target_render_context_uses_project_release_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = make_project(Path(temp))
+            compiler = ContextCompiler(project)
+            pack = compiler.compile_role_task(
+                role_id="target-render-verifier",
+                task_type="verify-target-render",
+                project_revision=project.load().revision,
+                target_refs=[],
+                instructions="验证当前发布目标",
+            )
+
+            policy_ref = project.load().artifact_heads["release/target-policy"]
+            target_contract = pack["layers"]["target_render_contract"]
+            self.assertEqual(target_contract["release_target_policy_ref"], policy_ref)
+            self.assertEqual(target_contract["required_target_ids"], ["macos-powerpoint"])
+            self.assertEqual(
+                target_contract["deferred_target_ids"],
+                ["macos-wps", "windows-powerpoint", "windows-wps"],
+            )
+            self.assertEqual(target_contract["targets"], ["macos-powerpoint"])
+            self.assertTrue(target_contract["deferred_compatibility_claims_forbidden"])
+            self.assertEqual(
+                pack["layers"]["governance"]["gates"]["G2"],
+                "internal-binary-release-target",
+            )
+            self.assertEqual(
+                pack["layers"]["governance"]["gates"]["G4"],
+                "user-chat-confirmed-release-target",
+            )
+
     def test_image_asset_task_requires_frozen_native_first(self) -> None:
         """Image 2 资产任务若缺少冻结原生首版引用应失败。"""
         with tempfile.TemporaryDirectory() as temp:

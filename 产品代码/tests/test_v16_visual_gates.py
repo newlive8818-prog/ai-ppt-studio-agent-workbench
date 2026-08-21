@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.errors import ContractValidationError, GateBlockedError
-from ai_ppt_studio.domains.presentation.targets import REQUIRED_TARGET_IDS
+from ai_ppt_studio.kernel.references import ArtifactReference
 from tests.v16_visual_fixtures import (
     passing_visual_review,
     prepared_g1_anchor,
@@ -71,7 +71,7 @@ class V16VisualGateTests(unittest.TestCase):
             with self.assertRaises(GateBlockedError):
                 visual.record_g1("blocked-g1", revision + 1)
 
-    def test_g2_requires_independent_reviews_and_four_rich_same_hash_targets(self) -> None:
+    def test_g2_requires_independent_reviews_and_current_required_target(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             visual, revision, refs = prepared_g1_anchor(Path(temp))
             with self.assertRaises(GateBlockedError):
@@ -94,25 +94,63 @@ class V16VisualGateTests(unittest.TestCase):
                 ),
             )
             current_revision = revision + 2
-            for target_id in REQUIRED_TARGET_IDS[:-1]:
-                visual.register_target_render_evidence(
-                    f"target-{target_id}",
-                    current_revision,
-                    rich_target_payload(visual, target_id, refs),
-                )
-                current_revision += 1
             with self.assertRaises(GateBlockedError):
                 visual.record_g2("missing-target-g2", current_revision)
             self.assertEqual(visual.kernel.load().revision, current_revision)
-            final_target = REQUIRED_TARGET_IDS[-1]
-            visual.register_target_render_evidence(
-                f"target-{final_target}",
+            mac_ref = visual.register_target_render_evidence(
+                "target-macos-powerpoint",
                 current_revision,
-                rich_target_payload(visual, final_target, refs),
+                rich_target_payload(visual, "macos-powerpoint", refs),
             )
             state = visual.record_g2("pass-g2", current_revision + 1)
             self.assertEqual(state.gate_status["G2"], "passed")
             self.assertEqual(state.gate_status["G3"], "locked")
+            self.assertNotIn(
+                "visual/target-evidence/G2/macos-wps",
+                state.artifact_heads,
+            )
+            policy_ref = state.artifact_heads["release/target-policy"]
+            lineage = visual.kernel.artifacts.resolve(
+                ArtifactReference.parse(state.artifact_heads["gate/G2/lineage"])
+            )["payload"]
+            self.assertEqual(lineage["release_target_policy_ref"], policy_ref)
+            self.assertEqual(lineage["required_target_ids"], ["macos-powerpoint"])
+            self.assertEqual(
+                lineage["deferred_target_ids"],
+                ["macos-wps", "windows-powerpoint", "windows-wps"],
+            )
+            self.assertEqual(lineage["target_evidence_refs"], [mac_ref])
+
+    def test_deferred_wps_evidence_cannot_substitute_for_required_mac(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            visual, revision, refs = prepared_g1_anchor(Path(temp))
+            visual.register_visual_review(
+                "g2-aesthetic",
+                revision,
+                passing_visual_review(
+                    refs["anchors"], stage="G2", reviewer_kind="aesthetic"
+                ),
+            )
+            visual.register_visual_review(
+                "g2-engineering",
+                revision + 1,
+                passing_visual_review(
+                    refs["anchors"],
+                    stage="G2",
+                    reviewer_kind="engineering",
+                    reviewer_role="independent-ppt-engineering-reviewer",
+                ),
+            )
+            visual.register_target_render_evidence(
+                "deferred-macos-wps",
+                revision + 2,
+                rich_target_payload(visual, "macos-wps", refs),
+            )
+
+            with self.assertRaises(GateBlockedError) as raised:
+                visual.record_g2("wps-cannot-substitute", revision + 3)
+
+            self.assertIn("missing-target:macos-powerpoint", raised.exception.missing_evidence)
 
 
 if __name__ == "__main__":

@@ -9,8 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ai_ppt_studio.domains.presentation.targets import REQUIRED_TARGET_IDS
 from ai_ppt_studio.errors import ContractValidationError, GateBlockedError
+from ai_ppt_studio.kernel.references import ArtifactReference
 from tests.v16_delivery_fixtures import (
     package_artifacts,
     prepared_build,
@@ -21,6 +21,7 @@ from tests.v16_delivery_fixtures import (
     valid_deck_qa,
     valid_slide_qa,
 )
+from tests.host_confirmation_fixtures import gate_confirmation_kwargs
 
 
 class V16DeliveryG4Tests(unittest.TestCase):
@@ -77,7 +78,7 @@ class V16DeliveryG4Tests(unittest.TestCase):
             )
             self.assertTrue(deck_ref.startswith("artifact://deck-qa/"))
 
-    def test_delivery_ready_requires_four_full_deck_targets_for_one_hash(self) -> None:
+    def test_delivery_ready_requires_new_full_deck_macos_powerpoint_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             delivery, revision, refs = prepared_qa(Path(temp), slide_count=2)
             with self.assertRaises(GateBlockedError):
@@ -98,29 +99,45 @@ class V16DeliveryG4Tests(unittest.TestCase):
                 delivery.register_target_render_evidence(
                     "anchor-stage-target", revision, wrong_stage
                 )
-            current_revision = revision
-            for target_id in REQUIRED_TARGET_IDS[:-1]:
-                delivery.register_target_render_evidence(
-                    f"g4-target-{target_id}",
-                    current_revision,
-                    rich_g4_target_payload(delivery, target_id, refs),
-                )
-                current_revision += 1
-            with self.assertRaises(GateBlockedError):
-                delivery.finalize_delivery(
-                    "missing-one-target", current_revision
-                )
-            self.assertEqual(delivery.kernel.load().revision, current_revision)
-            last_target = REQUIRED_TARGET_IDS[-1]
-            delivery.register_target_render_evidence(
-                f"g4-target-{last_target}",
-                current_revision,
-                rich_g4_target_payload(delivery, last_target, refs),
+            g2_mac_ref = delivery.kernel.load().artifact_heads[
+                "visual/target-evidence/G2/macos-powerpoint"
+            ]
+            self.assertNotEqual(
+                g2_mac_ref,
+                delivery.kernel.load().artifact_heads.get(
+                    "delivery/target-evidence/G4/macos-powerpoint"
+                ),
+            )
+            mac_ref = delivery.register_target_render_evidence(
+                "g4-target-macos-powerpoint",
+                revision,
+                rich_g4_target_payload(delivery, "macos-powerpoint", refs),
             )
             ready = delivery.finalize_delivery(
-                "delivery-ready", current_revision + 1
+                "delivery-ready", revision + 1
             )
             self.assertEqual(ready.gate_status["G4"], "delivery-ready")
+            self.assertEqual(
+                ready.artifact_heads["delivery/target-evidence/G4/macos-powerpoint"],
+                mac_ref,
+            )
+            for deferred in ("macos-wps", "windows-powerpoint", "windows-wps"):
+                self.assertNotIn(
+                    f"delivery/target-evidence/G4/{deferred}",
+                    ready.artifact_heads,
+                )
+
+    def test_deferred_g4_wps_evidence_cannot_substitute_for_required_mac(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            delivery, revision, refs = prepared_qa(Path(temp), slide_count=2)
+            delivery.register_target_render_evidence(
+                "g4-deferred-wps",
+                revision,
+                rich_g4_target_payload(delivery, "macos-wps", refs),
+            )
+            with self.assertRaises(GateBlockedError) as raised:
+                delivery.finalize_delivery("wps-cannot-substitute", revision + 1)
+            self.assertIn("missing-target:macos-powerpoint", raised.exception.missing_evidence)
 
     def test_package_chat_send_and_explicit_user_message_are_separate_g4_steps(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -128,6 +145,18 @@ class V16DeliveryG4Tests(unittest.TestCase):
                 Path(temp), slide_count=2
             )
             artifacts = package_artifacts(delivery, refs)
+            font_report = delivery.kernel.artifacts.resolve(
+                ArtifactReference.parse(artifacts["font_platform_report"])
+            )["payload"]
+            self.assertEqual(font_report["targets"], ["macos-powerpoint"])
+            self.assertEqual(
+                font_report["deferred_targets"],
+                ["macos-wps", "windows-powerpoint", "windows-wps"],
+            )
+            self.assertEqual(
+                font_report["release_target_policy_ref"],
+                refs["release_target_policy_ref"],
+            )
             invalid_package = valid_package_payload(refs, artifacts)
             invalid_package["target_evidence_refs"] = refs[
                 "g4_target_evidence"
@@ -140,6 +169,16 @@ class V16DeliveryG4Tests(unittest.TestCase):
                 "delivery-package",
                 revision,
                 valid_package_payload(refs, artifacts),
+            )
+            package = delivery.kernel.artifacts.resolve(
+                ArtifactReference.parse(package_ref)
+            )["payload"]
+            self.assertEqual(
+                package["release_target_policy_ref"],
+                refs["release_target_policy_ref"],
+            )
+            self.assertEqual(
+                package["target_evidence_refs"], refs["g4_target_evidence"]
             )
             revision += 1
             failed = delivery.record_chat_delivery(
@@ -183,10 +222,13 @@ class V16DeliveryG4Tests(unittest.TestCase):
                     user_message_ref="review://downloaded/pptx",
                 )
             self.assertEqual(delivery.kernel.load().revision, sent.revision)
+            from ai_ppt_studio.application.gate_confirmation import GateConfirmationPolicy
+
+            context = GateConfirmationPolicy(delivery.kernel).context("G4")
             accepted = delivery.confirm_g4(
                 "accepted-g4",
                 sent.revision,
-                user_message_ref="chat://message/final-deck-accepted",
+                **gate_confirmation_kwargs(context),
             )
             self.assertEqual(accepted.gate_status["G4"], "passed")
 

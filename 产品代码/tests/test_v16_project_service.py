@@ -553,6 +553,26 @@ class V16ProjectServiceTests(unittest.TestCase):
             )
             self.assertEqual(kernel.load(), before)
 
+    def test_new_project_binds_manifest_and_release_policy_in_revision_one(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config, _profile = runtime_config(Path(temp))
+
+            kernel = ProjectService(config).create_project(
+                "Policy test", project_id="policy-test"
+            )
+            state = kernel.load()
+
+            self.assertEqual(state.revision, 1)
+            self.assertTrue(
+                state.artifact_heads["project/manifest"].startswith(
+                    "artifact://project-manifest/"
+                )
+            )
+            policy_ref = state.artifact_heads["release/target-policy"]
+            self.assertTrue(policy_ref.startswith("artifact://release-target-policy/"))
+            policy = kernel.artifacts.resolve(ArtifactReference.parse(policy_ref))
+            self.assertEqual(policy["payload"]["required_target_ids"], ["macos-powerpoint"])
+
     def test_project_id_accepts_unicode_letters_but_rejects_path_syntax(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)

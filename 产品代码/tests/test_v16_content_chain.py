@@ -50,6 +50,9 @@ def valid_materials() -> dict[str, list[dict[str, str]]]:
 def build_ready_draft(
     service: ContentService,
     slide_count: int = 1,
+    *,
+    mission_user_action_ref: str = "test-user-action://confirmed-content-fixture",
+    mission_user_message_ref: str = "",
 ) -> tuple[int, str, dict[str, str]]:
     mission = service.save_mission_draft("c1", 0, valid_mission())
     materials = service.register_materials("c2", 1, valid_materials())
@@ -59,8 +62,8 @@ def build_ready_draft(
         mission_draft_ref=mission,
         material_mode="materials-provided",
         material_inventory_ref=materials,
-        user_action_ref="test-user-action://confirmed-content-fixture",
-        user_message_ref="",
+        user_action_ref=mission_user_action_ref,
+        user_message_ref=mission_user_message_ref,
     )
     with patch.dict(
         os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False

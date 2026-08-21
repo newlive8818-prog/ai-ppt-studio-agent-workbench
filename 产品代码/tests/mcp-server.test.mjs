@@ -53,6 +53,21 @@ async function connectedClient(options = {}) {
     if (request.operation === "get-delivery-status-projection") {
       return { ok: true, delivery: { status: "qa-passed", chat_delivery: {} }, snapshot_revision: 3 };
     }
+    if (request.operation === "get-gate-confirmation-context") {
+      const gate = request.gate;
+      return {
+        ok: true,
+        confirmation_context: {
+          project_id: "p1",
+          gate,
+          source_version: `artifact://${gate === "G0" ? "content-blueprint" : gate === "G3" ? "visual-contract" : "delivery-package"}/${"a".repeat(64)}`,
+          evidence_refs: [`artifact://test-evidence/${"b".repeat(64)}`],
+          challenge_id: `challenge-${gate}-revision-3`,
+          challenge_revision: 3,
+          review_summary: `${gate} 当前完整审阅源。`,
+        },
+      };
+    }
     if (request.operation !== "get-project-snapshot") {
       return {
         ok: true,
@@ -74,6 +89,15 @@ async function connectedClient(options = {}) {
   };
   const server = createAiPptMcpServer({
     invokeBridge,
+    reviewBridgeFactory: () => ({
+      async start() {
+        return {
+          url: "http://127.0.0.1:43123/#token=short-lived-token",
+          expiresAt: 123456,
+        };
+      },
+      async stop() {},
+    }),
     confirmationVerifier: {
       async verify() {
         return true;
@@ -110,6 +134,7 @@ test("MCP exposes data contracts without rendering a Widget in chat", async () =
         "request_ai_ppt_agent_action",
         "save_ai_ppt_mission_draft",
         "save_review_marks",
+        "set_ai_ppt_release_target_policy",
         "submit_ai_ppt_human_decision",
       ],
     );
@@ -120,6 +145,14 @@ test("MCP exposes data contracts without rendering a Widget in chat", async () =
     assert.deepEqual(Object.keys(saveTool.inputSchema.properties.marks.items.properties).sort(), [
       "comment", "exact_text", "field_anchor", "mark_id", "prefix", "suffix",
     ]);
+    const policyTool = tools.tools.find(
+      (tool) => tool.name === "set_ai_ppt_release_target_policy",
+    );
+    assert.deepEqual(Object.keys(policyTool.inputSchema.properties).sort(), [
+      "expectedRevision", "policyId", "projectRoot",
+    ]);
+    assert.equal(policyTool.inputSchema.properties.policyId.const, "v1.6-macos-powerpoint");
+    assert.match(policyTool.description, /product-version|产品版本/);
     const actionTool = tools.tools.find((tool) => tool.name === "request_ai_ppt_agent_action");
     assert.deepEqual(actionTool.inputSchema.properties.actionType.enum, [
       "build-presales-strategy",
@@ -202,10 +235,14 @@ test("MCP exposes data contracts without rendering a Widget in chat", async () =
         sourceVersion: "content-v0001-abc123",
       },
     });
-    assert.equal(browserResult.isError, true);
-    assert.equal(
-      browserResult.structuredContent.error.code,
-      "BROWSER_REVIEW_UNAVAILABLE",
+    assert.equal(browserResult.isError, undefined);
+    assert.equal(browserResult.structuredContent.status, "review-session-ready");
+    assert.equal(browserResult.structuredContent.opened, false);
+    assert.equal(browserResult.structuredContent.openMode, "agent-browser");
+    assert.equal(browserResult.structuredContent.browserAction, "open-scoped-url");
+    assert.match(
+      browserResult.structuredContent.url,
+      /^http:\/\/127\.0\.0\.1:\d+\/#token=/,
     );
     assert.equal(browserResult._meta?.["openai/outputTemplate"], undefined);
   } finally {
@@ -363,7 +400,7 @@ test("Browser review switch resolves the target scope from the authoritative pro
   }
 });
 
-test("Browser review refuses to open when reliable save is unavailable", async () => {
+test("Browser review save capability belongs to the Review Bridge, not the open adapter", async () => {
   const server = createAiPptMcpServer({
     invokeBridge: async () => ({
       ok: true,
@@ -375,9 +412,18 @@ test("Browser review refuses to open when reliable save is unavailable", async (
       canOpen: true,
       canSave: false,
       async openUrl() {
-        throw new Error("must not open");
+        return { opened: true };
       },
     },
+    reviewBridgeFactory: () => ({
+      async start() {
+        return {
+          url: "http://127.0.0.1:43123/#token=short-lived-token",
+          expiresAt: 123456,
+        };
+      },
+      async stop() {},
+    }),
   });
   const client = new Client({ name: "browser-save-test", version: "0.1.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -391,11 +437,64 @@ test("Browser review refuses to open when reliable save is unavailable", async (
         sourceVersion: "content-v0001-abc123",
       },
     });
-    assert.equal(result.isError, true);
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent.status, "opened");
+    assert.equal(result.structuredContent.opened, true);
+    assert.equal(result.structuredContent.openMode, "host-adapter");
+  } finally {
+    await client.close();
+  }
+});
+
+test("Browser adapter failure keeps the scoped session ready for Agent Browser handoff", async () => {
+  const stopped = [];
+  const server = createAiPptMcpServer({
+    invokeBridge: async () => ({
+      ok: true,
+      selected_project_root: "/managed/project",
+      review,
+      snapshot_revision: 3,
+    }),
+    browserSurfaceAdapter: {
+      canOpen: true,
+      async openUrl() {
+        return { opened: false };
+      },
+    },
+    reviewBridgeFactory: () => ({
+      async start() {
+        return {
+          url: "http://127.0.0.1:43123/#token=short-lived-token",
+          expiresAt: 123456,
+        };
+      },
+      async stop() {
+        stopped.push(true);
+      },
+    }),
+  });
+  const client = new Client({ name: "browser-handoff-test", version: "0.1.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "open_ai_ppt_browser_review",
+      arguments: {
+        projectRoot: "/managed/project",
+        reviewType: "content",
+        sourceVersion: "content-v0001-abc123",
+      },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent.status, "review-session-ready");
+    assert.equal(result.structuredContent.opened, false);
+    assert.equal(result.structuredContent.openMode, "agent-browser");
+    assert.equal(result.structuredContent.browserAction, "open-scoped-url");
     assert.equal(
-      result.structuredContent.error.code,
-      "BROWSER_REVIEW_SAVE_UNAVAILABLE",
+      result.structuredContent.url,
+      "http://127.0.0.1:43123/#token=short-lived-token",
     );
+    assert.deepEqual(stopped, []);
   } finally {
     await client.close();
   }
@@ -604,6 +703,196 @@ async function callNativeMissionConfirmation(hostResult) {
   }
 }
 
+test("model-supplied Gate message requires a fresh host-native version-bound confirmation", async () => {
+  const calls = [];
+  const prompts = [];
+  const server = createAiPptMcpServer({
+    invokeBridge: async (request) => {
+      calls.push(request);
+      if (request.operation === "get-gate-confirmation-context") {
+        return {
+          ok: true,
+          confirmation_context: {
+            project_id: "p1",
+            gate: "G0",
+            source_version: "artifact://content-blueprint/" + "a".repeat(64),
+            evidence_refs: [
+              "artifact://content-acceptance/" + "b".repeat(64),
+              "artifact://content-blueprint/" + "a".repeat(64),
+            ],
+            challenge_id: "gate-challenge-current",
+            challenge_revision: 33,
+            review_summary: "完整内容蓝图，共 7 页，内部内容审核已通过。",
+          },
+        };
+      }
+      return {
+        ok: true,
+        result: { snapshot: { ...snapshot, revision: 34 } },
+      };
+    },
+  });
+  const client = new Client(
+    { name: "native-gate-confirmation-client", version: "0.1.0" },
+    { capabilities: { elicitation: { form: {} } } },
+  );
+  client.setRequestHandler(ElicitRequestSchema, async (request) => {
+    prompts.push(request.params);
+    return { action: "accept", content: { confirmed: true } };
+  });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "confirm_ai_ppt_gate",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 33,
+        gate: "G0",
+        userMessageRef: "chat://message/item-35",
+      },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(prompts.length, 1);
+    assert.match(prompts[0].message, /G0/);
+    assert.match(prompts[0].message, /7 页/);
+    assert.deepEqual(calls.map((call) => call.operation), [
+      "get-gate-confirmation-context",
+      "confirm-gate",
+    ]);
+    assert.equal(calls[1].user_message_ref, "");
+    assert.equal(calls[1].user_action_ref, "");
+    assert.match(calls[1].host_confirmation_assertion, /^v1\./);
+    assert.equal(calls[1].source_version, "artifact://content-blueprint/" + "a".repeat(64));
+    assert.equal(calls[1].challenge_id, "gate-challenge-current");
+    assert.equal(calls[1].challenge_revision, 33);
+  } finally {
+    await client.close();
+  }
+});
+
+test("verified Gate message becomes the only asserted confirmation identity", async () => {
+  const { client, calls } = await connectedClient();
+  try {
+    const result = await client.callTool({
+      name: "confirm_ai_ppt_gate",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        gate: "G0",
+        userMessageRef: "chat://message/verified-g0-acceptance",
+      },
+    });
+    assert.equal(result.isError, undefined);
+    const request = calls.at(-1);
+    assert.equal(request.operation, "confirm-gate");
+    assert.equal(request.user_action_ref, "");
+    assert.equal(request.user_message_ref, "");
+    const [, payloadSegment] = request.host_confirmation_assertion.split(".");
+    const payload = JSON.parse(
+      Buffer.from(payloadSegment, "base64url").toString("utf8"),
+    );
+    assert.equal(payload.identity_type, "verified-message");
+    assert.equal(payload.identity_ref, "chat://message/verified-g0-acceptance");
+  } finally {
+    await client.close();
+  }
+});
+
+for (const hostResult of [
+  { action: "decline" },
+  { action: "cancel" },
+  { action: "accept", content: { confirmed: false } },
+]) {
+  test(`host-native Gate confirmation makes no business write for ${JSON.stringify(hostResult)}`, async () => {
+    const calls = [];
+    const server = createAiPptMcpServer({
+      invokeBridge: async (request) => {
+        calls.push(request);
+        if (request.operation !== "get-gate-confirmation-context") {
+          throw new Error("must not reach Gate write");
+        }
+        return {
+          ok: true,
+          confirmation_context: {
+            project_id: "p1",
+            gate: "G0",
+            source_version: "artifact://content-blueprint/" + "a".repeat(64),
+            evidence_refs: ["artifact://content-acceptance/" + "b".repeat(64)],
+            challenge_id: "gate-decline-challenge",
+            challenge_revision: 33,
+            review_summary: "完整内容蓝图，共 7 页。",
+          },
+        };
+      },
+    });
+    const client = new Client(
+      { name: "native-gate-decline-client", version: "0.1.0" },
+      { capabilities: { elicitation: { form: {} } } },
+    );
+    client.setRequestHandler(ElicitRequestSchema, async () => hostResult);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+    try {
+      const result = await client.callTool({
+        name: "confirm_ai_ppt_gate",
+        arguments: {
+          projectRoot: "/managed/project",
+          expectedRevision: 33,
+          gate: "G0",
+        },
+      });
+      assert.equal(result.isError, true);
+      assert.equal(result.structuredContent.error.code, "HOST_CONFIRMATION_DECLINED");
+      assert.deepEqual(calls.map((call) => call.operation), [
+        "get-gate-confirmation-context",
+      ]);
+    } finally {
+      await client.close();
+    }
+  });
+}
+
+test("unverified Gate message stays blocked when host confirmation is unavailable", async () => {
+  const calls = [];
+  const server = createAiPptMcpServer({
+    invokeBridge: async (request) => {
+      calls.push(request);
+      return {
+        ok: true,
+        confirmation_context: {
+          project_id: "p1",
+          gate: "G0",
+          source_version: "artifact://content-blueprint/" + "a".repeat(64),
+          evidence_refs: ["artifact://content-acceptance/" + "b".repeat(64)],
+          challenge_id: "gate-unavailable-challenge",
+          challenge_revision: 33,
+          review_summary: "完整内容蓝图，共 7 页。",
+        },
+      };
+    },
+  });
+  const client = new Client({ name: "gate-unavailable-client", version: "0.1.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "confirm_ai_ppt_gate",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 33,
+        gate: "G0",
+        userMessageRef: "chat://message/item-35",
+      },
+    });
+    assert.equal(result.isError, true);
+    assert.equal(result.structuredContent.error.code, "HOST_CONFIRMATION_UNAVAILABLE");
+    assert.equal(calls.length, 1);
+  } finally {
+    await client.close();
+  }
+});
+
 for (const hostResult of [
   { action: "decline" },
   { action: "cancel" },
@@ -707,7 +996,9 @@ test("BCD tools map governed inputs to bridge operations", async () => {
     });
     assert.equal(gate.structuredContent.snapshot.revision, 4);
     assert.equal(calls.at(-1).operation, "confirm-gate");
-    assert.equal(calls.at(-1).user_message_ref, "chat://message/g0-accepted");
+    assert.equal(calls.at(-1).user_message_ref, "");
+    assert.equal(calls.at(-1).user_action_ref, "");
+    assert.match(calls.at(-1).host_confirmation_assertion, /^v1\./);
   } finally {
     await client.close();
   }
@@ -719,7 +1010,9 @@ test("v1.6 tools map formal review marks, internal gates, and chat delivery inpu
     const tools = await client.listTools();
     const gateTool = tools.tools.find((tool) => tool.name === "confirm_ai_ppt_gate");
     assert.deepEqual(gateTool.inputSchema.properties.gate.enum, ["G0", "G3", "G4"]);
-    assert.ok(gateTool.inputSchema.required.includes("userMessageRef"));
+    assert.ok(!gateTool.inputSchema.required.includes("userMessageRef"));
+    const reopenTool = tools.tools.find((tool) => tool.name === "reopen_ai_ppt_scope");
+    assert.deepEqual(reopenTool.inputSchema.properties.gate.enum, ["G0", "G3", "G4"]);
 
     const saved = await client.callTool({
       name: "save_review_marks",
@@ -775,6 +1068,32 @@ test("v1.6 tools map formal review marks, internal gates, and chat delivery inpu
     assert.equal(calls.at(-1).operation, "record-internal-gate");
 
     await client.callTool({
+      name: "set_ai_ppt_release_target_policy",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        policyId: "v1.6-macos-powerpoint",
+      },
+    });
+    assert.deepEqual(calls.at(-1), {
+      operation: "set-release-target-policy",
+      project_root: "/managed/project",
+      expected_revision: 3,
+      policy_id: "v1.6-macos-powerpoint",
+    });
+
+    const rejectedPolicy = await client.callTool({
+      name: "set_ai_ppt_release_target_policy",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        policyId: "ad-hoc-skip-windows",
+        requiredTargetIds: ["macos-powerpoint"],
+      },
+    });
+    assert.equal(rejectedPolicy.isError, true);
+
+    await client.callTool({
       name: "record_chat_delivery",
       arguments: {
         projectRoot: "/managed/project",
@@ -794,6 +1113,19 @@ test("v1.6 tools map formal review marks, internal gates, and chat delivery inpu
     assert.equal(delivery.structuredContent.snapshotRevision, 3);
     assert.equal(delivery._meta?.widgetData, undefined);
     assert.equal(calls.at(-1).operation, "get-delivery-status-projection");
+
+    await client.callTool({
+      name: "reopen_ai_ppt_scope",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        gate: "G3",
+        reason: "用户要求调整视觉合同",
+      },
+    });
+    assert.equal(calls.at(-1).operation, "reopen-scope");
+    assert.equal(calls.at(-1).gate, "G3");
+    assert.equal(calls.at(-1).reason, "用户要求调整视觉合同");
   } finally {
     await client.close();
   }

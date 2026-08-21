@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.application.v16_bridge import dispatch_v16
-from ai_ppt_studio.errors import ContractValidationError
+from ai_ppt_studio.errors import ContractValidationError, GateBlockedError
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 from tests.v16_visual_fixtures import (
@@ -22,6 +22,7 @@ from tests.v16_visual_fixtures import (
     prepared_visual_contracts,
     valid_visual_brief,
 )
+from tests.host_confirmation_fixtures import signed_gate_assertion
 
 
 class V16VisualBridgeTests(unittest.TestCase):
@@ -434,6 +435,46 @@ class V16VisualBridgeTests(unittest.TestCase):
                 ))["payload"]
                 self.assertEqual(task["status"], "queued")
 
+    def test_public_agent_dispatch_freezes_visual_actions_after_g2_and_g3(self) -> None:
+        visual_actions = (
+            "design-deck-system",
+            "design-slide-visuals",
+            "build-native-first",
+            "generate-image-assets",
+            "review-visual-aesthetic",
+            "review-visual-engineering",
+            "verify-target-render",
+        )
+        for stage in ("G2-passed", "G3-user-reviewable"):
+            for action in visual_actions:
+                with (
+                    self.subTest(stage=stage, action=action),
+                    tempfile.TemporaryDirectory() as temp,
+                ):
+                    project = Path(temp)
+                    visual, revision, refs = prepared_g2(
+                        project, slide_count=2
+                    )
+                    if stage == "G3-user-reviewable":
+                        revision = visual.publish_visual_review(
+                            "publish-visual-review", revision
+                        ).revision
+                    with self.assertRaises(GateBlockedError):
+                        dispatch_v16(
+                            {
+                                "operation": "request-agent-action",
+                                "project_root": str(project),
+                                "expected_revision": revision,
+                                "command_id": f"frozen-{stage}-{action}",
+                                "action_type": action,
+                                "target_refs": [refs["blueprint"]],
+                                "instructions": "继续视觉生产。",
+                            }
+                        )
+                    state = visual.kernel.load()
+                    self.assertEqual(state.revision, revision)
+                    self.assertNotIn("agent/task/active", state.artifact_heads)
+
     def test_existing_commit_and_internal_gate_operations_route_to_visual_service(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
@@ -526,19 +567,91 @@ class V16VisualBridgeTests(unittest.TestCase):
                 saved["result"]["snapshot"]["gate_state"]["gates"]["G3"],
                 "user-reviewable",
             )
+            context = dispatch_v16(
+                {
+                    "operation": "get-gate-confirmation-context",
+                    "project_root": str(project),
+                    "gate": "G3",
+                }
+            )["confirmation_context"]
             confirmed = dispatch_v16(
                 {
                     "operation": "confirm-gate",
                     "project_root": str(project),
                     "expected_revision": saved_revision,
                     "gate": "G3",
-                    "user_message_ref": "chat://message/bridge-g3-accepted",
+                    "host_confirmation_assertion": signed_gate_assertion(context),
+                    "source_version": context["source_version"],
+                    "challenge_id": context["challenge_id"],
+                    "challenge_revision": context["challenge_revision"],
                 }
             )
             self.assertEqual(
                 confirmed["result"]["snapshot"]["gate_state"]["gates"]["G3"],
                 "passed",
             )
+
+    def test_public_reopen_scope_routes_g3_to_visual_recovery(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp)
+            visual, revision, refs = prepared_g2(project, slide_count=2)
+            published = visual.publish_visual_review("bridge-publish", revision)
+            contract_ref = published.artifact_heads["visual/contract"]
+
+            reopened = dispatch_v16(
+                {
+                    "operation": "reopen-scope",
+                    "project_root": str(project),
+                    "expected_revision": published.revision,
+                    "gate": "G3",
+                    "reason": "用户要求调整整套视觉合同",
+                }
+            )["result"]["snapshot"]
+
+            self.assertEqual(reopened["gate_state"]["gates"]["G0"], "passed")
+            self.assertEqual(reopened["gate_state"]["gates"]["G1"], "open")
+            for gate in ("G2", "G3", "G4"):
+                self.assertEqual(
+                    reopened["gate_state"]["gates"][gate], "locked"
+                )
+            self.assertFalse(
+                any(slot.startswith("visual/") for slot in reopened["artifacts"])
+            )
+            self.assertIn("gate/G3/reopen", reopened["artifacts"])
+            self.assertNotIn("gate/G2/lineage", reopened["artifacts"])
+            self.assertEqual(
+                visual.kernel.artifacts.resolve(
+                    ArtifactReference.parse(contract_ref)
+                )["payload"]["status"],
+                "user-reviewable",
+            )
+
+            committed = dispatch_v16(
+                {
+                    "operation": "commit-artifact",
+                    "project_root": str(project),
+                    "expected_revision": reopened["revision"],
+                    "kind": "visual-brief",
+                    "payload": valid_visual_brief(refs["blueprint"]),
+                }
+            )
+            self.assertIn(
+                "visual/brief", committed["result"]["snapshot"]["artifacts"]
+            )
+
+            task = dispatch_v16(
+                {
+                    "operation": "request-agent-action",
+                    "project_root": str(project),
+                    "expected_revision": committed["result"]["snapshot"]["revision"],
+                    "command_id": "new-visual-task-after-g3-reopen",
+                    "action_type": "design-deck-system",
+                    "target_refs": [committed["result"]["artifact_ref"]],
+                    "instructions": "按重开后的视觉 brief 重新设计。",
+                }
+            )["result"]
+            self.assertEqual(task["task"]["status"], "queued")
+            self.assertIn("agent/task/active", task["snapshot"]["artifacts"])
 
 
 if __name__ == "__main__":

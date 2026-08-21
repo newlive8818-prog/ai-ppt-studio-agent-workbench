@@ -126,6 +126,7 @@ def build_authorized_draft(service: ContentService):
         complete_slide_draft_payload(argument_map_ref=argument, material_ref=materials),
     )
     return service.kernel.load().revision, draft, lineage
+from tests.host_confirmation_fixtures import gate_confirmation_kwargs
 
 
 def review_payload(draft_ref: str, role: str, *, passed: bool = True) -> dict:
@@ -454,10 +455,18 @@ class V16ContentAcceptanceTests(unittest.TestCase):
             )
             self.assertEqual(accepted.state.gate_status["G1"], "locked")
 
+            from tests.v16_visual_fixtures import (
+                apply_all_approved_content_review,
+            )
+
+            apply_all_approved_content_review(
+                service, accepted.blueprint_ref
+            )
+            context = service.gate_confirmation_context("G0")
             confirmed = service.confirm_g0(
                 "confirm-g0",
-                accepted.state.revision,
-                user_message_ref="chat://message/g0-accepted",
+                service.kernel.load().revision,
+                **gate_confirmation_kwargs(context),
             )
             self.assertEqual(confirmed.gate_status["G0"], "passed")
             self.assertEqual(confirmed.gate_status["G1"], "open")

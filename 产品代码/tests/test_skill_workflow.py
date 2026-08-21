@@ -44,20 +44,26 @@ class SkillWorkflowTests(unittest.TestCase):
         }
         self.assertTrue(expected.issubset({path.name for path in references.glob("*.md")}))
 
-    def test_skill_and_references_use_only_the_approved_v16_contract(self) -> None:
+    def test_skill_and_references_use_the_policy_driven_release_contract(self) -> None:
         files = [SKILL, *(SKILL.parent / "references").glob("*.md")]
         body = "\n".join(path.read_text(encoding="utf-8") for path in files)
         for value in (
             "artifact://<kind>/<sha256>",
+            "ReleaseTargetPolicy",
             "macos-powerpoint",
-            "macos-wps",
-            "windows-powerpoint",
-            "windows-wps",
             "same PPTX SHA-256",
-            "360–480px",
-            "760/1000/1440px",
+            "maximum-width sidebar",
+            "deferred",
+            "preflight-only output cannot replace desktop evidence",
+            "G4 requires a new final-PPTX macOS PowerPoint record",
         ):
             self.assertIn(value, body)
+        self.assertIn("do not claim wps or windows compatibility", body.lower())
+        main = SKILL.read_text(encoding="utf-8")
+        self.assertIn("release-target G2", main)
+        self.assertIn("release-target G4", main)
+        self.assertNotIn("four-target G2", main)
+        self.assertNotIn("four-target G4", main)
         self.assertNotIn("artifact://<kind>/vNNNN#sha256=<digest>", body)
         self.assertNotIn("Pass G1 after the main direction is selected", body)
         self.assertNotIn("Engineering samples — G2", body)
@@ -70,9 +76,13 @@ class SkillWorkflowTests(unittest.TestCase):
             "MissionConfirmation",
             "confirmable",
             "confirm_ai_ppt_mission",
-            "materials-provided",
             "no-materials-confirmed",
-            "proposal-only",
+            "material-backed",
+            "mixed-evidence",
+            "proposal-led",
+            "来源事实",
+            "材料推断",
+            "证据缺口",
             "诊断假设",
             "方案建议",
             "待联合验证",
@@ -107,6 +117,61 @@ class SkillWorkflowTests(unittest.TestCase):
         self.assertIn("never ask for more material", body)
         self.assertIn("never bypass AI PPT Studio", body)
 
+    def test_user_gate_confirmation_is_single_use_and_version_bound(self) -> None:
+        files = [SKILL, *(SKILL.parent / "references").glob("*.md")]
+        body = "\n".join(path.read_text(encoding="utf-8") for path in files)
+        for value in (
+            "one current checkpoint",
+            "`MissionConfirmation` never confirms G0, G3, or G4",
+            "sourceVersion",
+            "challenge",
+            "One Agent turn",
+            "host-native confirmation",
+        ):
+            self.assertIn(value, body)
+        self.assertIn("locks G1–G4", body)
+        self.assertIn("removes downstream current heads", body)
+
+    def test_current_content_workflow_matches_the_v21_sidebar_review_contract(self) -> None:
+        current_files = [
+            SKILL,
+            SKILL.parent / "references" / "content-workflow.md",
+            SKILL.parent / "references" / "native-workbench.md",
+            SKILL.parent / "references" / "review-and-feedback.md",
+            SKILL.parent / "references" / "runtime-workflow.md",
+        ]
+        body = "\n".join(
+            path.read_text(encoding="utf-8") for path in current_files
+        )
+        for value in (
+            "single `售前方案总师`",
+            "`事实与证据硬门`",
+            "`售前阅读与客户立场硬门`",
+            "neutral titles",
+            "maximum-width sidebar",
+            "silent page save",
+            "save_content_page_decision",
+            "submit_content_review_batch",
+            "immutable review batch",
+            "deck-level revision plan",
+            "confirm_content_batch_revision_plan",
+            "full re-review of every new source version",
+            "current source is confirmed at G0",
+            "open_content_evidence_browser",
+            "read-only evidence",
+            "G3 visual",
+            "open_ai_ppt_browser_review",
+        ):
+            self.assertIn(value, body)
+        for obsolete_current_instruction in (
+            "desired judgment/action",
+            "Run exactly the required five independent roles",
+            "Keep both review types in the 64px Header",
+            "open_ai_ppt_browser_review` opens content/visual professional review",
+            "Content actions require a current `MissionConfirmation` and Python-approved identity first, then build strategy",
+        ):
+            self.assertNotIn(obsolete_current_instruction, body)
+
     def test_skill_routes_ui_only_to_sidebar_and_codex_browser(self) -> None:
         body = SKILL.read_text(encoding="utf-8")
         workbench = (SKILL.parent / "references" / "native-workbench.md").read_text(
@@ -123,9 +188,14 @@ class SkillWorkflowTests(unittest.TestCase):
             "BROWSER_REVIEW_UNAVAILABLE",
             "BROWSER_REVIEW_SAVE_UNAVAILABLE",
             "Codex built-in Browser",
+            "review-session-ready",
+            "open-scoped-url",
+            "Agent",
         ):
             self.assertIn(value, combined)
         self.assertIn("never renders a Widget in chat", combined)
+        self.assertIn("do not claim", combined.lower())
+        self.assertIn("stdio", combined)
 
     def test_skill_governs_native_workbench_agent_loop(self) -> None:
         body = SKILL.read_text(encoding="utf-8")
@@ -155,10 +225,11 @@ class SkillWorkflowTests(unittest.TestCase):
         self.assertIn("experience-evaluate", body)
         self.assertIn("personal-memory/experience-index.json", evolution)
         self.assertIn("evaluation/applications.jsonl", evolution)
-        self.assertIn("candidate -> personal", evolution)
-        self.assertIn("personal -> candidate", evolution)
-        self.assertIn("experience-rollback", evolution)
-        self.assertIn("stable Skill core", evolution)
+        self.assertIn("`same-type`", evolution)
+        self.assertIn("`global`", evolution)
+        self.assertIn("Global promotion", evolution)
+        self.assertIn("Rollback creates a new latest version", evolution)
+        self.assertIn("Legacy candidate/personal records", evolution)
 
 
 if __name__ == "__main__":

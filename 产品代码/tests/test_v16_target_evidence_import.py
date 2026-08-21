@@ -104,6 +104,19 @@ def evidence_package(base: Path, target_id: str = "macos-powerpoint") -> tuple[P
 
 
 class TargetEvidenceImportTests(unittest.TestCase):
+    def test_each_supported_profile_remains_independently_verifiable(self) -> None:
+        for target_id in (
+            "macos-powerpoint",
+            "macos-wps",
+            "windows-powerpoint",
+            "windows-wps",
+        ):
+            with self.subTest(target_id=target_id), tempfile.TemporaryDirectory() as temp:
+                evidence, pptx = evidence_package(Path(temp), target_id)
+                payload = verify_target_evidence(evidence, pptx)
+                self.assertEqual(payload["target_id"], target_id)
+                self.assertTrue(payload["proof_eligible"])
+
     def test_verifies_every_file_but_marks_deterministic_fixture_non_proof(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             evidence, pptx = evidence_package(Path(temp))

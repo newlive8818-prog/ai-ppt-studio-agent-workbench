@@ -9,12 +9,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.application.content_service import ContentService
-from ai_ppt_studio.errors import FeedbackGovernanceError
+from ai_ppt_studio.errors import ContentWorkflowError
 from tests.test_v16_review_marks import accepted_content
 
 
 class V16FeedbackGovernanceTests(unittest.TestCase):
-    def test_raw_feedback_cannot_become_change_set_and_f2_requires_decision(
+    def test_legacy_feedback_cannot_bypass_confirmed_batch_plan(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -28,8 +28,12 @@ class V16FeedbackGovernanceTests(unittest.TestCase):
                     "target_refs": [blueprint_ref],
                 },
             )
-            with self.assertRaises(FeedbackGovernanceError):
+            with self.assertRaises(ContentWorkflowError) as raw_blocked:
                 service.create_content_change_set("c1", revision + 1, raw)
+            self.assertEqual(
+                raw_blocked.exception.code,
+                "CONTENT_BATCH_PLAN_NOT_CONFIRMED",
+            )
 
             governed = service.govern_feedback(
                 "f2",
@@ -44,8 +48,12 @@ class V16FeedbackGovernanceTests(unittest.TestCase):
                     "preserve_refs": [blueprint_ref],
                 },
             )
-            with self.assertRaises(FeedbackGovernanceError):
+            with self.assertRaises(ContentWorkflowError) as governed_blocked:
                 service.create_content_change_set("c2", revision + 2, governed)
+            self.assertEqual(
+                governed_blocked.exception.code,
+                "CONTENT_BATCH_PLAN_NOT_CONFIRMED",
+            )
 
             decided = service.decide_feedback(
                 "f3",
@@ -53,11 +61,15 @@ class V16FeedbackGovernanceTests(unittest.TestCase):
                 governed,
                 "follow-ai-recommendation",
             )
-            change = service.create_content_change_set(
-                "change-3", revision + 3, decided
+            with self.assertRaises(ContentWorkflowError) as decided_blocked:
+                service.create_content_change_set(
+                    "change-3", revision + 3, decided
+                )
+            self.assertEqual(
+                decided_blocked.exception.code,
+                "CONTENT_BATCH_PLAN_NOT_CONFIRMED",
             )
-            self.assertTrue(change.startswith("artifact://content-change-set/"))
-            self.assertEqual(service.kernel.load().revision, revision + 4)
+            self.assertEqual(service.kernel.load().revision, revision + 3)
 
 
 if __name__ == "__main__":

@@ -10,8 +10,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.application.content_service import ContentService
+from ai_ppt_studio.application.release_policy_service import ReleaseTargetPolicyService
 from ai_ppt_studio.application.v16_bridge import dispatch_v16
-from ai_ppt_studio.domains.presentation.targets import REQUIRED_TARGET_IDS
+from ai_ppt_studio.domains.presentation.release_policy import SUPPORTED_TARGET_IDS
 from tests.test_v16_review_marks import accepted_content
 from tests.v16_delivery_fixtures import prepared_delivery_ready
 
@@ -33,6 +34,9 @@ class V16WorkspaceProjectionTests(unittest.TestCase):
                     "red_lines": ["不承诺确定收益"],
                     "open_questions": ["客户当前系统边界待联合确认"],
                 },
+            )
+            ReleaseTargetPolicyService(service.kernel).bind_current_policy(
+                "bind-policy-for-mission-card", service.kernel.load().revision
             )
 
             snapshot = dispatch_v16(
@@ -75,6 +79,9 @@ class V16WorkspaceProjectionTests(unittest.TestCase):
             project = Path(temp)
             service = ContentService.initialize(project, project_id="p1")
             _revision, blueprint_ref = accepted_content(service, slide_count=2)
+            ReleaseTargetPolicyService(service.kernel).bind_current_policy(
+                "bind-policy-for-workspace", service.kernel.load().revision
+            )
 
             snapshot = dispatch_v16(
                 {
@@ -110,10 +117,31 @@ class V16WorkspaceProjectionTests(unittest.TestCase):
             self.assertEqual(
                 snapshot["workspace"]["blueprint"]["primary_action"],
                 {
-                    "kind": "open-content-review",
-                    "label": "打开内容审阅",
+                    "kind": "review-complete-deck",
+                    "label": "审核完整内容",
                     "enabled": True,
                 },
+            )
+            self.assertEqual(
+                snapshot["workspace"]["blueprint"]["phase"],
+                "full-deck-review-ready",
+            )
+            self.assertEqual(
+                snapshot["workspace"]["blueprint"]["completed_page_count"],
+                0,
+            )
+            self.assertEqual(
+                snapshot["workspace"]["blueprint"]["remaining_page_count"],
+                2,
+            )
+            self.assertNotIn(
+                "saved_mark_count", snapshot["workspace"]["blueprint"]
+            )
+            self.assertNotIn(
+                "framework_confirmed", snapshot["workspace"]["blueprint"]
+            )
+            self.assertNotIn(
+                "expansion_authorized", snapshot["workspace"]["blueprint"]
             )
             self.assertFalse(snapshot["workspace"]["visual"]["review_available"])
             self.assertEqual(
@@ -125,7 +153,7 @@ class V16WorkspaceProjectionTests(unittest.TestCase):
             self.assertNotIn("selected_direction", serialized)
             self.assertNotIn("weightedscore", serialized)
 
-    def test_delivery_projection_preserves_four_independent_same_hash_targets(self) -> None:
+    def test_delivery_projection_distinguishes_required_and_deferred_targets(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
             _delivery, _revision, refs = prepared_delivery_ready(
@@ -143,14 +171,29 @@ class V16WorkspaceProjectionTests(unittest.TestCase):
             self.assertEqual(snapshot["workspace"]["active_space"], "delivery")
             self.assertEqual(
                 [item["target_id"] for item in delivery["targets"]],
-                list(REQUIRED_TARGET_IDS),
+                list(SUPPORTED_TARGET_IDS),
             )
             self.assertEqual(
-                {item["status"] for item in delivery["targets"]}, {"passed"}
+                [item["status"] for item in delivery["targets"]],
+                ["passed", "deferred", "deferred", "deferred"],
             )
             self.assertEqual(
-                {item["pptx_sha256"] for item in delivery["targets"]},
-                {refs["pptx_sha256"]},
+                [item["pptx_sha256"] for item in delivery["targets"]],
+                [refs["pptx_sha256"], "", "", ""],
+            )
+            self.assertEqual(
+                delivery["release_target_policy"],
+                {
+                    "policy_ref": refs["release_target_policy_ref"],
+                    "policy_id": "v1.6-macos-powerpoint",
+                    "required_target_ids": ["macos-powerpoint"],
+                    "deferred_target_ids": [
+                        "macos-wps",
+                        "windows-powerpoint",
+                        "windows-wps",
+                    ],
+                    "compatibility_claim_scope": ["macos-powerpoint"],
+                },
             )
             self.assertEqual(delivery["hash_identity"], refs["pptx_sha256"])
             self.assertEqual(
