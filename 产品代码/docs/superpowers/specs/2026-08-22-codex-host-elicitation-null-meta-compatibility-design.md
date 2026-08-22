@@ -83,6 +83,20 @@ CRS Responses API
 
 CRS 替换的是模型 API 上游，不是本地 MCP 初始化者或宿主表单实现者。当前 `openai/form` 修复仍应落在 AI PPT Studio 与 ChatGPT/Codex App Server 的协议边界。真实验收必须保留当前 CRS provider 配置，证明修复在用户实际通道下成立；不能只用官方直连或测试客户端结果代替。
 
+### 2.4 第二版直接 `openai/form` 方案为什么仍失效
+
+第二版按 Codex 内置服务的模式，把请求 method 改为 `openai/form`，并为结果提供接受 `_meta:null` 的自定义 Schema。TDD 证明：
+
+1. MCP SDK Server 已经发送 `openai/form` 请求；
+2. 原始测试宿主已经收到请求并返回 `_meta:null`；
+3. 但 SDK Server 的 Protocol 在调用请求专属结果 Schema 之前，先用通用 JSON-RPC Result Schema 判断消息类型；
+4. 该通用 Schema 同样拒绝顶层 `result._meta:null`；
+5. 响应因此没有进入 pending request resolver，最终表现为请求超时。
+
+所以“只改 method + 自定义结果 Schema”仍是假修复。Codex 内置 `artifact-template-picker` 可用，是因为它使用自己的原始 JSON-RPC 循环，没有经过当前 MCP SDK 的通用响应分类。
+
+最小实验已证明：在 transport 把消息交给 SDK Protocol 之前，只针对已发出的 `openai/form` request ID，把对应成功响应的顶层 `result._meta:null` 归一为字段缺省，响应可以正常进入自定义结果 Schema，并保留原始 `action` 和 `content`。
+
 ## 3. 方案选择
 
 ### 3.1 采用：`openai/form` 优先，标准 MCP 回退
@@ -121,9 +135,14 @@ Codex Desktop 自带的 `artifact-template-picker/server.mjs` 已证明当前宿
 }
 ```
 
-插件为 `openai/form` 定义窄结果 Schema：
+插件为 `openai/form` 定义窄结果 Schema，并在 MCP transport 外围增加一个 request-ID 绑定的兼容层：
 
-- `_meta` 可缺省、为对象或为 `null`；
+- 发出 `openai/form` 前记录本次 JSON-RPC request ID；
+- 只对该 request ID 的成功响应检查顶层 `result._meta`；
+- 当且仅当其严格等于 `null` 时，复制响应并删除该可选字段；
+- 成功、错误、取消、超时或发送失败后清理 request ID；
+- 普通 MCP 消息、标准 elicitation 和其他 request ID 不经过归一化；
+- 错误响应不转换成成功响应；
 - `action` 只能是 `accept | decline | cancel`；
 - `content` 只接受表单可表达的对象；
 - `_meta` 不参与用户身份、Gate 证据或业务判断；
@@ -133,7 +152,7 @@ Codex Desktop 自带的 `artifact-template-picker/server.mjs` 已证明当前宿
 
 ### 3.3 不采用的其他方案
 
-不修改 SDK 或 `node_modules`：重新安装后会丢失，也会把宿主特定兼容逻辑混入第三方代码。
+不修改 SDK 或 `node_modules`：重新安装后会丢失，也会把宿主特定兼容逻辑混入第三方代码。兼容层由插件源码拥有并随发布物验证。
 
 不从错误文本恢复确认：JSON-RPC 错误不是可信用户动作凭据，且无法证明返回内容、确认上下文或动作唯一性。
 
@@ -143,7 +162,14 @@ Codex Desktop 自带的 `artifact-template-picker/server.mjs` 已证明当前宿
 
 ### 4.1 组件边界
 
-`mcp/server.mjs` 增加一个共享宿主表单请求辅助函数，职责仅为：
+`mcp/host-form-transport.mjs` 包装既有 MCP transport，职责仅为：
+
+1. 跟踪本插件发出的 `openai/form` request ID；
+2. 在 SDK Protocol 之前归一化对应成功响应的 `result._meta:null`；
+3. 在响应、错误、取消、关闭或发送失败时清理跟踪状态；
+4. 原样代理 transport 的 `start`、`send`、`close`、callback、session 和 protocol-version 合同。
+
+`mcp/server.mjs` 增加共享宿主表单请求辅助函数，职责仅为：
 
 1. 读取已经协商的客户端能力；
 2. 选择 `openai/form` 或标准 elicitation；
@@ -169,6 +195,7 @@ CRS provider 不进入确认断言信任链。它可以影响模型推理与工�
 -> Node MCP 检查宿主能力
 -> Codex: openai/form；其他宿主: elicitation/create
 -> 用户在真实宿主表单操作
+-> openai/form transport 只归一化当前 request ID 的 result._meta:null
 -> Node MCP 校验 action 和 confirmed
 -> confirmationAuthority 签发当前上下文断言
 -> Python Runtime 最终验签并单次消费
@@ -202,14 +229,18 @@ CRS provider 不进入确认断言信任链。它可以影响模型推理与工�
 9. 不直接修改正式项目 `state.json`；
 10. 一次失败的宿主响应不得在后续自动复用；
 11. 扩展能力存在时发生错误不得在同一次调用内自动重试标准通道；
-12. 自动化通过不得表述为真实 G0 已通过。
+12. transport 兼容层不得修改 `action`、`content`、错误响应或非 `openai/form` 消息；
+13. request ID 必须在完成、错误、取消、关闭或发送失败后清理；
+14. 自动化通过不得表述为真实 G0 已通过。
 
 ## 6. 代码边界
 
 预计只修改：
 
+- `mcp/host-form-transport.mjs`：新增 request-ID 绑定的 `openai/form` transport 兼容层；
 - `mcp/server.mjs`：增加能力路由、`openai/form` 窄结果 Schema 和共享请求辅助函数；Mission、Gate 和内容修改方案确认共用；
-- `tests/mcp-server.test.mjs`：增加自定义 `openai/form` 协议对端、`_meta:null` 回归、标准回退和失败不写入检查。
+- `tests/host-form-transport.test.mjs`：验证严格归一化范围、清理和透明代理；
+- `tests/mcp-server.test.mjs`：用 transport 级原始宿主响应夹具验证 `_meta:null`、标准回退和失败不写入。
 
 不修改：
 
@@ -238,7 +269,7 @@ CRS provider 不进入确认断言信任链。它可以影响模型推理与工�
 
 ### 8.2 `openai/form` 定向回归
 
-使用带自定义 `openai/form` Request Schema 的测试客户端，证明：
+测试必须在 SDK Client Protocol 之前拦截原始 `openai/form` 请求并返回原始 JSON-RPC 结果，不能用 SDK Client 的自定义 request handler 冒充真实宿主。必须证明：
 
 1. 客户端声明 `extensions["openai/form"]` 后，插件发送且只发送一次 `openai/form`；
 2. `accept + confirmed:true + _meta:null` 可完成断言签发和一次 Runtime 写入；
@@ -246,6 +277,13 @@ CRS provider 不进入确认断言信任链。它可以影响模型推理与工�
 4. 标准 elicitation handler 不会在扩展路径被调用；
 5. `decline`、`cancel`、`confirmed:false`、缺少 `confirmed` 均不调用权威写入；
 6. 扩展协议错误不触发标准通道自动重试。
+
+transport 单元测试还必须证明：
+
+1. 只有 tracked `openai/form` 成功响应的顶层 `result._meta:null` 被删除；
+2. 其他 request ID、嵌套 `content._meta`、`_meta:{}` 和错误响应原样保留；
+3. 响应、错误、取消、发送失败和关闭都会清理 pending ID；
+4. transport callbacks、session ID 和 protocol version 原样代理。
 
 ### 8.3 标准回退与共享调用方回归
 
