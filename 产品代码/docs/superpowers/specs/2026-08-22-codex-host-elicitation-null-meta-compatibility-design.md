@@ -59,6 +59,30 @@ server.server.request(
 - 从 `-32602` 错误文本推断用户已经确认；
 - 在失败后自动弹出第二次确认表单。
 
+### 2.3 当前 CRS API 客户端拓扑
+
+本修复必须覆盖用户当前实际使用的 CRS 通道，而不是只覆盖一个假设的官方直连环境。2026-08-22 的本机只读取证据为：
+
+- 当前 Codex 配置使用 `model_provider = "crs"`；
+- 当前模型为 `gpt-5.6-sol`，CRS provider 使用 `wire_api = "responses"`；
+- 当前前台宿主进程来自 `/Applications/ChatGPT.app`；
+- MCP/App Server 子进程来自 `/Applications/ChatGPT.app/Contents/Resources/codex`；
+- 旧的 `/Applications/Codex API Client.app` 已安装，但不是当前运行的 MCP 宿主进程；
+- 当前宿主使用 `/Users/defei/Library/Application Support/Codex API Client/codex-home` 作为 Codex home；
+- 同一个 `com.openai.codex` 桌面日志记录了 `mcpServer/elicitation/request` 以及 `{"action":"accept","content":{"confirmed":true},"_meta":null}`。
+
+因此当前组件边界是：
+
+```text
+CRS Responses API
+-> 模型推理与工具选择
+-> ChatGPT/Codex App Server
+-> 本地 MCP stdio
+-> AI PPT Studio
+```
+
+CRS 替换的是模型 API 上游，不是本地 MCP 初始化者或宿主表单实现者。当前 `openai/form` 修复仍应落在 AI PPT Studio 与 ChatGPT/Codex App Server 的协议边界。真实验收必须保留当前 CRS provider 配置，证明修复在用户实际通道下成立；不能只用官方直连或测试客户端结果代替。
+
 ## 3. 方案选择
 
 ### 3.1 采用：`openai/form` 优先，标准 MCP 回退
@@ -134,6 +158,8 @@ Mission、Gate 和整套内容修改方案三个调用方继续负责：
 - 交给现有 `confirmationAuthority` 签发版本绑定断言。
 
 Python Runtime 继续负责最终验签、revision/challenge 校验、防重放和权威写入。
+
+CRS provider 不进入确认断言信任链。它可以影响模型推理与工具选择，但不能签发、修改或替代宿主动作、challenge、断言或 Runtime 写入。
 
 ### 4.2 成功数据流
 
@@ -245,12 +271,14 @@ Python Runtime 继续负责最终验签、revision/challenge 校验、防重放�
 ### 8.5 真实宿主验收
 
 1. 构建并安装当前插件发布候选；
-2. 完全重启 Codex/MCP，证明新任务加载当前插件；
-3. 重新读取正式项目的当前 revision 和 G0，不沿用历史 revision 假设；
-4. 只发起一次当前 revision 的 G0 宿主确认；
-5. 用户在真实宿主表单中确认；
-6. 再次读取项目权威快照；
-7. 只有工具成功、revision 前进、G0 在权威快照中为 confirmed/passed，且 Runtime history 绑定本次 challenge，才能宣布真实宿主验收通过并进入视觉阶段。
+2. 保持 `model_provider = "crs"` 和 `wire_api = "responses"`，不切换成另一 API 通道规避问题；
+3. 完全重启 Codex/MCP，证明新任务加载当前插件；
+4. 复核当前运行宿主仍是 ChatGPT/Codex App Server，并记录插件加载证据；
+5. 重新读取正式项目的当前 revision 和 G0，不沿用历史 revision 假设；
+6. 只发起一次当前 revision 的 G0 宿主确认；
+7. 用户在真实宿主表单中确认；
+8. 再次读取项目权威快照；
+9. 只有工具成功、revision 前进、G0 在权威快照中为 confirmed/passed，且 Runtime history 绑定本次 challenge，才能宣布当前 CRS 通道下的真实宿主验收通过并进入视觉阶段。
 
 ## 9. 非根因项
 

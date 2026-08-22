@@ -1,249 +1,461 @@
-# Codex Host Elicitation Null Meta Compatibility Implementation Plan
+# Codex Host Form Compatibility Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Allow AI PPT Studio to consume a real Codex Desktop form-elicitation acceptance when the host returns `_meta: null`, without weakening Gate confirmation or Runtime verification.
+**Goal:** Route Codex Desktop confirmations through its negotiated `openai/form` extension so a real `_meta:null` acceptance reaches AI PPT Studio, while preserving standard MCP elicitation for other hosts and every existing Gate safety check.
 
-**Architecture:** Add one narrow response schema and one shared host-form request helper at the Node MCP boundary. The helper continues to use the MCP SDK Server's public `request()` method and the standard `elicitation/create` method, while accepting only the host's nullable metadata variation; Mission, Gate, and revision-plan flows retain their existing explicit `accept` and `confirmed === true` checks and their existing signed assertion path.
+**Architecture:** Add one narrow host-form transport selector and one request helper in the Node MCP boundary. The helper prefers `capabilities.extensions["openai/form"]`, falls back to SDK `elicitInput()` only when the extension is absent and standard elicitation is present, and never retries a second channel after a response error. Mission, Gate, and revision-plan callers keep their explicit `accept && confirmed === true` checks and existing version-bound assertion path; Python Runtime remains the final verifier and writer.
 
-**Tech Stack:** Node.js ESM, `@modelcontextprotocol/sdk` 1.30.0, Zod, Node test runner, Python Runtime regression suite.
+**Tech Stack:** Node.js ESM, `@modelcontextprotocol/sdk` 1.30.0, Zod 4, Node test runner, Python Runtime regression suite.
 
 ---
 
 ## File map
 
-- Modify `mcp/server.mjs`: define the compatible elicitation-result schema and shared request helper; route the three existing host-confirmation functions through it.
-- Modify `tests/mcp-server.test.mjs`: reproduce Codex Desktop's `_meta: null` response and prove the Gate write remains version-bound; prove non-confirmations make no write.
-- No Runtime, UI, project-state, package-lock, or third-party dependency file changes.
+- Modify `mcp/server.mjs`: define the `openai/form` result Schema, select the negotiated transport, send one form request, and route the three existing confirmation functions through it.
+- Modify `tests/mcp-server.test.mjs`: define a custom `openai/form` request Schema and add extension success, priority, standard failure evidence, no-write, and no-auto-retry regressions.
+- No Runtime, UI, project-state, package-lock, dependency, Codex application, or installed-plugin source edits.
 
-### Task 1: Reproduce the Codex Desktop response at the MCP boundary
+## Current CRS acceptance topology
+
+Implementation and release acceptance must preserve the user's current environment:
+
+```text
+config model_provider=crs, wire_api=responses
+-> /Applications/ChatGPT.app
+-> /Applications/ChatGPT.app/Contents/Resources/codex
+-> local MCP stdio
+-> AI PPT Studio
+```
+
+The CRS provider is the model API upstream; current process and desktop-log evidence show that ChatGPT/Codex App Server remains the MCP client and form host. No production test should send project material, confirmation content, assertions, or secrets directly to CRS. Automated protocol tests remain local and in-memory. The final real G0 test must run with the current CRS configuration unchanged.
+
+### Task 1: Establish the protocol fixtures and RED evidence
 
 **Files:**
 - Modify: `tests/mcp-server.test.mjs`
 - Test: `tests/mcp-server.test.mjs`
 
-- [ ] **Step 1: Change the host-native Gate test to return the real desktop response**
+- [ ] **Step 1: Import Zod and define the custom Codex request Schema**
 
-In `host-native Gate confirmation signs a host action for the current revision`, change the elicitation handler to:
+Add:
 
 ```js
-client.setRequestHandler(ElicitRequestSchema, async (request) => {
-  elicitations.push(request.params);
-  return {
-    action: "accept",
-    content: { confirmed: true },
-    _meta: null,
-  };
+import { z } from "zod";
+
+const OpenAIFormRequestSchema = z.object({
+  method: z.literal("openai/form"),
+  params: z.looseObject({
+    message: z.string(),
+    requestedSchema: z.record(z.string(), z.unknown()),
+  }),
 });
 ```
 
-Keep all existing assertions that require one `confirm-gate` call, a signed host assertion, the exact source version, revision, evidence refs, and challenge.
+This Schema intentionally uses a non-standard method name, so SDK Client does not wrap its handler with the standard `ElicitResultSchema`.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [ ] **Step 2: Add a reusable Gate context fixture**
+
+Add beside the existing snapshot fixture:
+
+```js
+function gateConfirmationContext() {
+  return {
+    project_id: "p1",
+    project_root: "/managed/project",
+    gate: "G0",
+    scope_kind: "gate",
+    scope_id: "G0",
+    source_version: "content-v1",
+    evidence_refs: ["artifact://test-evidence/" + "b".repeat(64)],
+    challenge_id: "a".repeat(64),
+    challenge_revision: 3,
+    review_summary: "G0 当前完整审阅源。",
+  };
+}
+```
+
+Use this fixture in newly added tests; do not mechanically rewrite unrelated existing tests.
+
+- [ ] **Step 3: Add the desired Codex extension success test**
+
+Add before the existing standard host-native Gate test:
+
+```js
+test("Codex openai/form Gate confirmation accepts nullable metadata once", async () => {
+  const calls = [];
+  const forms = [];
+  const server = createAiPptMcpServer({
+    invokeBridge: async (request) => {
+      calls.push(request);
+      if (request.operation === "get-gate-confirmation-context") {
+        return { ok: true, confirmation_context: gateConfirmationContext() };
+      }
+      return { ok: true, result: { snapshot: { ...snapshot, revision: 4 } } };
+    },
+  });
+  const client = new Client(
+    { name: "gate-openai-form-test", version: "0.1.0" },
+    { capabilities: { extensions: { "openai/form": {} } } },
+  );
+  client.setRequestHandler(OpenAIFormRequestSchema, async (request) => {
+    forms.push(request.params);
+    return {
+      action: "accept",
+      content: { confirmed: true },
+      _meta: null,
+    };
+  });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "confirm_ai_ppt_gate",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        gate: "G0",
+      },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(forms.length, 1);
+    assert.match(forms[0].message, /G0 当前完整审阅源/);
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["get-gate-confirmation-context", "confirm-gate"],
+    );
+    const write = calls.at(-1);
+    assert.equal(write.source_version, "content-v1");
+    assert.equal(write.challenge_id, "a".repeat(64));
+    assert.equal(write.challenge_revision, 3);
+    const [, payloadSegment] = write.host_confirmation_assertion.split(".");
+    const payload = JSON.parse(
+      Buffer.from(payloadSegment, "base64url").toString("utf8"),
+    );
+    assert.equal(payload.identity_type, "host-action");
+    assert.match(payload.identity_ref, /^host-elicitation:\/\//);
+  } finally {
+    await client.close();
+  }
+});
+```
+
+- [ ] **Step 4: Run the extension test and verify RED**
 
 Run:
 
 ```bash
-node --test --test-name-pattern='host-native Gate confirmation' tests/mcp-server.test.mjs
+node --test --test-name-pattern='Codex openai/form Gate confirmation' tests/mcp-server.test.mjs
 ```
 
-Expected: FAIL because the current SDK `ElicitResultSchema` rejects `_meta: null`; the tool returns `HOST_CONFIRMATION_UNAVAILABLE` instead of calling `confirm-gate`.
+Expected: FAIL because current production code checks only `capabilities.elicitation` and returns `HOST_CONFIRMATION_UNAVAILABLE`; no `openai/form` request or `confirm-gate` write occurs.
 
-- [ ] **Step 3: Record the RED evidence before production changes**
+- [ ] **Step 5: Lock in the first design's upstream failure**
 
-Confirm the failure is a result-schema failure, not a test setup or assertion typo. Do not modify `mcp/server.mjs` until this failure is observed.
+Add:
 
-### Task 2: Add the narrow compatible host-form request boundary
+```js
+test("standard elicitation rejects nullable metadata before the plugin can consume it", async () => {
+  const calls = [];
+  const server = createAiPptMcpServer({
+    invokeBridge: async (request) => {
+      calls.push(request);
+      if (request.operation === "get-gate-confirmation-context") {
+        return { ok: true, confirmation_context: gateConfirmationContext() };
+      }
+      throw new Error("nullable standard response must not reach confirm-gate");
+    },
+  });
+  const client = new Client(
+    { name: "gate-standard-null-test", version: "0.1.0" },
+    { capabilities: { elicitation: { form: {} } } },
+  );
+  client.setRequestHandler(ElicitRequestSchema, async () => ({
+    action: "accept",
+    content: { confirmed: true },
+    _meta: null,
+  }));
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "confirm_ai_ppt_gate",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        gate: "G0",
+      },
+    });
+    assert.equal(result.isError, true);
+    assert.equal(
+      result.structuredContent.error.code,
+      "HOST_CONFIRMATION_UNAVAILABLE",
+    );
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["get-gate-confirmation-context"],
+    );
+  } finally {
+    await client.close();
+  }
+});
+```
+
+Run:
+
+```bash
+node --test --test-name-pattern='standard elicitation rejects nullable metadata' tests/mcp-server.test.mjs
+```
+
+Expected: PASS as a documented negative capability test. It proves the standard channel cannot deliver this host variation and must not be interpreted as a confirmation.
+
+- [ ] **Step 6: Commit the test-only RED checkpoint**
+
+```bash
+git add tests/mcp-server.test.mjs
+git commit -m "test: reproduce Codex host form protocol boundary"
+```
+
+The desired extension test remains failing at this checkpoint; do not run the full suite or represent the branch as green.
+
+### Task 2: Implement one-shot host-form transport selection
 
 **Files:**
 - Modify: `mcp/server.mjs`
 - Test: `tests/mcp-server.test.mjs`
 
-- [ ] **Step 1: Import Zod and define the compatible result schema**
+- [ ] **Step 1: Import Zod and define the extension result Schema**
 
-Add the import:
+Add:
 
 ```js
 import { z } from "zod";
+
+const OpenAIFormResultSchema = z.looseObject({
+  _meta: z.record(z.string(), z.unknown()).nullable().optional(),
+  action: z.enum(["accept", "decline", "cancel"]),
+  content: z.record(z.string(), z.unknown()).nullable().optional(),
+});
 ```
 
-After the plugin manifest initialization, add:
+The Schema accepts only the host's nullable metadata variation. It does not manufacture an action, confirmation, identity, revision, challenge, or assertion.
+
+- [ ] **Step 2: Add the transport selector**
+
+Add after the manifest initialization:
 
 ```js
-const HostElicitResultSchema = z.looseObject({
-  _meta: z.record(z.string(), z.unknown()).nullish(),
-  action: z.enum(["accept", "decline", "cancel"]),
-  content: z
-    .record(
-      z.string(),
-      z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]),
-    )
-    .nullish(),
-});
-
-async function requestHostForm(server, params) {
-  return server.server.request(
-    {
-      method: "elicitation/create",
-      params: { ...params, mode: "form" },
-    },
-    HostElicitResultSchema,
-  );
+function hostFormTransport(server) {
+  const capabilities = server.server.getClientCapabilities() || {};
+  if (capabilities.extensions?.["openai/form"]) return "openai-form";
+  if (capabilities.elicitation) return "standard-elicitation";
+  return null;
 }
 ```
 
-This accepts only the metadata difference. It does not manufacture an acceptance, identity reference, assertion, revision, or challenge.
+Extension priority is deliberate. Do not use truthiness of a form result to select or switch channels.
 
-- [ ] **Step 2: Route all three host confirmation forms through the helper**
+- [ ] **Step 3: Add the one-shot request helper**
 
-In these functions:
-
-```text
-requestHostMissionConfirmation
-requestHostGateConfirmation
-requestHostRevisionPlanConfirmation
-```
-
-replace only:
+Add:
 
 ```js
-server.server.elicitInput({
+async function requestHostForm(server, params, transport) {
+  if (transport === "openai-form") {
+    return server.server.request(
+      { method: "openai/form", params },
+      OpenAIFormResultSchema,
+    );
+  }
+  if (transport === "standard-elicitation") {
+    return server.server.elicitInput({ ...params, mode: "form" });
+  }
+  throw new Error("Host form transport is unavailable");
+}
 ```
 
-with:
+The helper sends exactly one request. It contains no catch-and-fallback path.
+
+- [ ] **Step 4: Route Mission confirmation through the helper**
+
+At the start of `requestHostMissionConfirmation`:
+
+```js
+const transport = hostFormTransport(server);
+if (!transport) {
+  return {
+    ok: false,
+    error: {
+      code: "HOST_CONFIRMATION_UNAVAILABLE",
+      message: "当前宿主未提供原生确认能力；任务卡已保留，可在能力可用后重试。",
+      details: {},
+    },
+  };
+}
+```
+
+Replace `server.server.elicitInput({...})` with:
 
 ```js
 requestHostForm(server, {
+  message: prompt.message,
+  requestedSchema: {
+    type: "object",
+    properties: {
+      confirmed: {
+        type: "boolean",
+        title: "确认当前任务卡并继续",
+        default: false,
+      },
+    },
+    required: ["confirmed"],
+  },
+}, transport)
 ```
 
-Keep each function's existing requested schema, message, capability check, decline/cancel handling, `confirmed === true` check, and identity/assertion logic unchanged.
-
-- [ ] **Step 3: Make protocol-phase failures diagnosable without changing write behavior**
-
-Change the three elicitation catch blocks so their details include the phase while preserving their current error codes and user messages. Gate example:
+In the catch result, use:
 
 ```js
-details: { gate: context.gate, phase: "elicitation-response" },
+details: { phase: "host-form-response", transport },
 ```
 
-Mission example:
+- [ ] **Step 5: Route Gate and revision-plan confirmations identically**
+
+For `requestHostGateConfirmation` and `requestHostRevisionPlanConfirmation`, replace the old capability check with `hostFormTransport(server)`, call `requestHostForm(server, params, transport)`, and add only non-sensitive diagnostics:
 
 ```js
-details: { phase: "elicitation-response" },
+details: {
+  gate: context.gate,
+  phase: "host-form-response",
+  transport,
+}
 ```
-
-Revision-plan example:
 
 ```js
 details: {
   planRef: context.scope_id,
-  phase: "elicitation-response",
-},
+  phase: "host-form-response",
+  transport,
+}
 ```
 
-Do not include raw form content, signed assertions, secrets, or user data in error details.
+Keep all existing decline/cancel handling, `confirmed === true` checks, identity generation, assertion signing, and Runtime request construction unchanged.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [ ] **Step 6: Run the desired extension test and verify GREEN**
 
 Run:
 
 ```bash
-node --test --test-name-pattern='host-native Gate confirmation' tests/mcp-server.test.mjs
+node --test --test-name-pattern='Codex openai/form Gate confirmation' tests/mcp-server.test.mjs
 ```
 
-Expected: PASS. The handler receives one form request; the tool performs exactly one `confirm-gate` call; the assertion identity type remains `host-action`.
+Expected: PASS; one `openai/form` request and one `confirm-gate` write occur.
 
-### Task 3: Lock down decline, cancel, false, and malformed confirmation behavior
+- [ ] **Step 7: Run the standard nullable negative test**
+
+Run:
+
+```bash
+node --test --test-name-pattern='standard elicitation rejects nullable metadata' tests/mcp-server.test.mjs
+```
+
+Expected: PASS; standard SDK validation still prevents the write, and production code does not infer acceptance from the error.
+
+### Task 3: Verify extension priority, no-write outcomes, and no automatic retry
 
 **Files:**
 - Modify: `tests/mcp-server.test.mjs`
 - Test: `tests/mcp-server.test.mjs`
 
-- [ ] **Step 1: Add a table-driven no-write regression**
+- [ ] **Step 1: Add extension-priority coverage**
 
-Add a test beside the host-native Gate success test:
+Add a test client with both capabilities:
 
 ```js
-test("host-native Gate confirmation rejects non-confirming form responses without a write", async () => {
-  const responses = [
-    { name: "decline", response: { action: "decline", content: null, _meta: null } },
-    { name: "cancel", response: { action: "cancel", content: null, _meta: null } },
-    {
-      name: "confirmed false",
-      response: { action: "accept", content: { confirmed: false }, _meta: null },
-    },
-    {
-      name: "confirmed missing",
-      response: { action: "accept", content: {}, _meta: null },
-    },
-  ];
-
-  for (const { name, response } of responses) {
-    const calls = [];
-    const server = createAiPptMcpServer({
-      invokeBridge: async (request) => {
-        calls.push(request);
-        if (request.operation !== "get-gate-confirmation-context") {
-          throw new Error(`${name} must not reach confirm-gate`);
-        }
-        return {
-          ok: true,
-          confirmation_context: {
-            project_id: "p1",
-            project_root: "/managed/project",
-            gate: "G0",
-            scope_kind: "gate",
-            scope_id: "G0",
-            source_version: "content-v1",
-            evidence_refs: ["artifact://test-evidence/" + "b".repeat(64)],
-            challenge_id: "a".repeat(64),
-            challenge_revision: 3,
-            review_summary: "G0 当前完整审阅源。",
-          },
-        };
-      },
-    });
-    const client = new Client(
-      { name: `gate-${name}-test`, version: "0.1.0" },
-      { capabilities: { elicitation: { form: {} } } },
-    );
-    client.setRequestHandler(ElicitRequestSchema, async () => response);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
-    try {
-      const result = await client.callTool({
-        name: "confirm_ai_ppt_gate",
-        arguments: {
-          projectRoot: "/managed/project",
-          expectedRevision: 3,
-          gate: "G0",
-        },
-      });
-      assert.equal(result.isError, true, name);
-      assert.equal(result.structuredContent.error.code, "HOST_CONFIRMATION_DECLINED", name);
-      assert.deepEqual(
-        calls.map((call) => call.operation),
-        ["get-gate-confirmation-context"],
-        name,
-      );
-    } finally {
-      await client.close();
-    }
-  }
-});
+{
+  capabilities: {
+    extensions: { "openai/form": {} },
+    elicitation: { form: {} },
+  },
+}
 ```
 
-- [ ] **Step 2: Run the two focused host-native tests**
+Register both request handlers. Return success from `openai/form`; increment a counter and throw from the standard handler. Assert:
+
+```js
+assert.equal(openAIFormCount, 1);
+assert.equal(standardElicitationCount, 0);
+assert.deepEqual(
+  calls.map((call) => call.operation),
+  ["get-gate-confirmation-context", "confirm-gate"],
+);
+```
+
+- [ ] **Step 2: Add table-driven extension no-write coverage**
+
+Use these responses:
+
+```js
+[
+  { name: "decline", response: { action: "decline", content: null, _meta: null } },
+  { name: "cancel", response: { action: "cancel", content: null, _meta: null } },
+  {
+    name: "confirmed false",
+    response: { action: "accept", content: { confirmed: false }, _meta: null },
+  },
+  {
+    name: "confirmed missing",
+    response: { action: "accept", content: {}, _meta: null },
+  },
+]
+```
+
+For each response, call `confirm_ai_ppt_gate` and assert:
+
+```js
+assert.equal(result.isError, true, name);
+assert.equal(
+  result.structuredContent.error.code,
+  "HOST_CONFIRMATION_DECLINED",
+  name,
+);
+assert.deepEqual(
+  calls.map((call) => call.operation),
+  ["get-gate-confirmation-context"],
+  name,
+);
+```
+
+- [ ] **Step 3: Add protocol-error no-auto-retry coverage**
+
+Create a client that declares both capabilities. Make `openai/form` throw `new Error("host form failed")`; register a standard handler that increments `standardElicitationCount`. Assert:
+
+```js
+assert.equal(result.isError, true);
+assert.equal(
+  result.structuredContent.error.code,
+  "HOST_CONFIRMATION_UNAVAILABLE",
+);
+assert.equal(result.structuredContent.error.details.transport, "openai-form");
+assert.equal(result.structuredContent.error.details.phase, "host-form-response");
+assert.equal(standardElicitationCount, 0);
+assert.deepEqual(
+  calls.map((call) => call.operation),
+  ["get-gate-confirmation-context"],
+);
+```
+
+- [ ] **Step 4: Run all focused host-form tests**
 
 Run:
 
 ```bash
-node --test --test-name-pattern='host-native Gate confirmation' tests/mcp-server.test.mjs
+node --test --test-name-pattern='openai/form|standard elicitation rejects nullable metadata|host form' tests/mcp-server.test.mjs
 ```
 
-Expected: both the successful nullable-metadata case and all four no-write cases PASS.
+Expected: all matching tests PASS with no unhandled rejection.
 
-- [ ] **Step 3: Run the complete MCP server test file**
+- [ ] **Step 5: Run the complete MCP server test file**
 
 Run:
 
@@ -251,7 +463,16 @@ Run:
 node --test tests/mcp-server.test.mjs
 ```
 
-Expected: all tests in `tests/mcp-server.test.mjs` PASS with no unhandled rejection or warning.
+Expected: all tests PASS. Existing standard host-native Mission, Gate, and revision-plan confirmation tests prove fallback compatibility.
+
+- [ ] **Step 6: Commit the implementation**
+
+```bash
+git add mcp/server.mjs tests/mcp-server.test.mjs
+git commit -m "fix: route Codex confirmations through openai form"
+```
+
+Do not amend the design or plan commits, and do not stage generated output or formal project data.
 
 ### Task 4: Complete engineering verification
 
@@ -259,8 +480,6 @@ Expected: all tests in `tests/mcp-server.test.mjs` PASS with no unhandled reject
 - Verify only; no planned additional production files.
 
 - [ ] **Step 1: Run the complete Node, MCP, Widget, typecheck, and build quality suite**
-
-Run:
 
 ```bash
 npm run quality
@@ -270,8 +489,6 @@ Expected: typecheck, production build, Node/MCP/Review Bridge tests, and Widget 
 
 - [ ] **Step 2: Run the complete Python Runtime regression**
 
-Run:
-
 ```bash
 npm run test:python
 ```
@@ -280,45 +497,28 @@ Expected: all Python tests PASS.
 
 - [ ] **Step 3: Verify repository hygiene**
 
-Run:
-
 ```bash
 git diff --check
 git status --short
 ```
 
-Expected: `git diff --check` emits no output; `git status --short` lists only the planned `mcp/server.mjs`, `tests/mcp-server.test.mjs`, and this implementation-plan commit if it has not yet been committed.
+Expected: `git diff --check` emits no output and `git status --short` is empty after the implementation commit.
 
-- [ ] **Step 4: Commit the implementation**
-
-Stage exact files only:
-
-```bash
-git add mcp/server.mjs tests/mcp-server.test.mjs
-git commit -m "fix: accept nullable host elicitation metadata"
-```
-
-Do not amend an unrelated commit and do not stage generated output or user project data.
-
-### Task 5: Build, install, and perform the single real G0 retry
+### Task 5: Build, verify, and install the release candidate
 
 **Files:**
-- Verify release/install scripts already present in the repository; do not edit formal project state directly.
+- Verify release and install scripts already present; do not edit formal project state.
 
 - [ ] **Step 1: Build and verify the plugin release candidate**
-
-Run:
 
 ```bash
 npm run release -- --output /private/tmp/ai-ppt-studio-null-meta-release
 npm run verify:release -- --release /private/tmp/ai-ppt-studio-null-meta-release/ai-ppt-studio
 ```
 
-Expected: both commands exit zero; verification reports `ok: true`, the plugin identity `ai-ppt-studio`, a release-manifest SHA-256, and a passing MCP probe.
+Expected: both commands exit zero; verification reports `ok: true`, plugin identity `ai-ppt-studio`, a release-manifest SHA-256, and a passing MCP probe.
 
-- [ ] **Step 2: Install the verified release candidate**
-
-Run:
+- [ ] **Step 2: Install the verified release**
 
 ```bash
 npm run install:plugin -- \
@@ -326,9 +526,9 @@ npm run install:plugin -- \
   --target /Users/defei/plugins/AI-PPT-Studio-Codex-Plugin-0.4.0/plugins/ai-ppt-studio
 ```
 
-Expected: command exits zero and returns `ok: true` with the exact target as `installRoot`. Do not manually patch the installed `node_modules` or installed `mcp/server.mjs`.
+Expected: command exits zero and returns `ok: true` with the exact target as `installRoot`. Do not manually patch installed source or dependencies.
 
-Verify the installed source identity:
+- [ ] **Step 3: Compare release and installed source**
 
 ```bash
 shasum -a 256 \
@@ -338,46 +538,63 @@ shasum -a 256 \
 
 Expected: the two SHA-256 values are identical.
 
-- [ ] **Step 3: Restart Codex/MCP and verify the loaded plugin identity**
+### Task 6: Perform the single real G0 host retry
 
-After installation, fully quit and reopen Codex so the stdio MCP process cannot retain the pre-install module. Resume this task, call the AI PPT project snapshot tool once, and inspect the new desktop startup log under:
+**Files:**
+- No source edits and no direct project-state edits.
+
+- [ ] **Step 1: Completely restart Codex/MCP**
+
+Before restart, read only these non-secret configuration keys and confirm they remain:
+
+```text
+model_provider = "crs"
+wire_api = "responses"
+```
+
+Do not print or copy the CRS credential, token, authorization header, or full process environment.
+
+Fully quit and reopen Codex so the stdio MCP process cannot retain the pre-install module. Resume this task and verify one AI PPT project tool is callable. Inspect the new desktop startup log under:
 
 ```text
 /Users/defei/Library/Logs/com.openai.codex/2026/08/22/
 ```
 
-Expected: the tool is callable and the loader selects `ai-ppt-studio@defei-ai-ppt-studio-040`. Treat the separate skipped duplicate `ai-ppt-studio@personal` warning as a later cleanup item.
+Expected:
 
-- [ ] **Step 4: Refresh the formal project before confirmation**
+```text
+running host = /Applications/ChatGPT.app
+MCP/App Server = /Applications/ChatGPT.app/Contents/Resources/codex
+model provider = crs
+wire API = responses
+loaded plugin = ai-ppt-studio@defei-ai-ppt-studio-040
+```
 
-Read the formal project snapshot at:
+The skipped duplicate `ai-ppt-studio@personal` warning remains a separate cleanup item.
+
+- [ ] **Step 2: Refresh the formal project snapshot**
+
+Read:
 
 ```text
 /Users/defei/Documents/AI-PPT-Workspace/projects/project-b0974a94f2a7
 ```
 
-Expected before the retry unless another authorized process changed it:
+Do not assume the historical `revision = 23` remains current. Resolve the current revision, Gate status, sourceVersion, evidence refs, and challenge immediately before the retry.
 
-```text
-revision = 23
-G0 = user-reviewable
-```
+- [ ] **Step 3: Perform exactly one real host-native G0 confirmation**
 
-If revision or Gate differs, stop and re-resolve the current confirmation context; do not reuse revision 23 assumptions.
+With the CRS configuration still active, call `confirm_ai_ppt_gate` with the refreshed current revision and `gate = G0`. The user must take the real host form action. Do not provide a fabricated `userMessageRef`, receipt, or assertion.
 
-- [ ] **Step 5: Perform exactly one real host-native G0 confirmation**
-
-Call `confirm_ai_ppt_gate` with the refreshed current revision and `gate = G0`. The user must take the real host form action. Do not provide a fabricated `userMessageRef`, receipt, or assertion.
-
-- [ ] **Step 6: Refresh the snapshot and classify the result**
+- [ ] **Step 4: Refresh the authoritative snapshot and classify the result**
 
 Success requires all of:
 
 ```text
 the tool returns success
 revision advances
-G0 is confirmed in the refreshed authoritative snapshot
-the Runtime history records the confirmation against the current challenge
+G0 is confirmed/passed in the refreshed authoritative snapshot
+Runtime history binds the confirmation to the current challenge
 ```
 
-If any item is missing, report the exact failing boundary and do not enter visual production. If all items hold, mark real G0 host acceptance complete and proceed to the already-approved visual-production sequence.
+If any item is missing, report the exact failing boundary and do not enter visual production. If all items hold, classify real G0 host acceptance under the current CRS channel as complete and proceed to the already-approved visual-production sequence.
