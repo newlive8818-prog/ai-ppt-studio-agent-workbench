@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
 
+import { createOpenAIFormCompatibleTransport } from "./host-form-transport.mjs";
 import { readProjectAsset } from "./project-asset.mjs";
 import { invokePythonBridge } from "./runtime-bridge/python-runtime.mjs";
 import {
@@ -22,6 +24,32 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifest = JSON.parse(
   readFileSync(path.join(ROOT, ".codex-plugin", "plugin.json"), "utf8"),
 );
+
+const OpenAIFormResultSchema = z.looseObject({
+  _meta: z.record(z.string(), z.unknown()).nullable().optional(),
+  action: z.enum(["accept", "decline", "cancel"]),
+  content: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+
+function hostFormTransport(server) {
+  const capabilities = server.server.getClientCapabilities() || {};
+  if (capabilities.extensions?.["openai/form"]) return "openai-form";
+  if (capabilities.elicitation) return "standard-elicitation";
+  return null;
+}
+
+async function requestHostForm(server, params, transport) {
+  if (transport === "openai-form") {
+    return server.server.request(
+      { method: "openai/form", params },
+      OpenAIFormResultSchema,
+    );
+  }
+  if (transport === "standard-elicitation") {
+    return server.server.elicitInput({ ...params, mode: "form" });
+  }
+  throw new Error("Host form transport is unavailable");
+}
 
 function requestForProject(operation, input = {}) {
   return {
@@ -91,7 +119,8 @@ function nativeMissionConfirmationMessage(input) {
 }
 
 async function requestHostMissionConfirmation(server, input) {
-  if (!server.server.getClientCapabilities()?.elicitation) {
+  const transport = hostFormTransport(server);
+  if (!transport) {
     return {
       ok: false,
       error: {
@@ -105,8 +134,7 @@ async function requestHostMissionConfirmation(server, input) {
   if (!prompt.ok) return prompt;
   let result;
   try {
-    result = await server.server.elicitInput({
-      mode: "form",
+    result = await requestHostForm(server, {
       message: prompt.message,
       requestedSchema: {
         type: "object",
@@ -119,14 +147,14 @@ async function requestHostMissionConfirmation(server, input) {
         },
         required: ["confirmed"],
       },
-    });
+    }, transport);
   } catch (_error) {
     return {
       ok: false,
       error: {
         code: "HOST_CONFIRMATION_UNAVAILABLE",
         message: "宿主原生确认暂时不可用；任务卡已保留。",
-        details: {},
+        details: { phase: "host-form-response", transport },
       },
     };
   }
@@ -144,7 +172,8 @@ async function requestHostMissionConfirmation(server, input) {
 }
 
 async function requestHostGateConfirmation(server, context) {
-  if (!server.server.getClientCapabilities()?.elicitation) {
+  const transport = hostFormTransport(server);
+  if (!transport) {
     return {
       ok: false,
       error: {
@@ -156,8 +185,7 @@ async function requestHostGateConfirmation(server, context) {
   }
   let result;
   try {
-    result = await server.server.elicitInput({
-      mode: "form",
+    result = await requestHostForm(server, {
       message: [
         `请确认当前 AI PPT Studio ${context.gate} 用户检查点：`,
         context.review_summary,
@@ -175,14 +203,18 @@ async function requestHostGateConfirmation(server, context) {
         },
         required: ["confirmed"],
       },
-    });
+    }, transport);
   } catch (_error) {
     return {
       ok: false,
       error: {
         code: "HOST_CONFIRMATION_UNAVAILABLE",
         message: "宿主原生 Gate 确认暂时不可用；项目状态未改变。",
-        details: { gate: context.gate },
+        details: {
+          gate: context.gate,
+          phase: "host-form-response",
+          transport,
+        },
       },
     };
   }
@@ -200,7 +232,8 @@ async function requestHostGateConfirmation(server, context) {
 }
 
 async function requestHostRevisionPlanConfirmation(server, context) {
-  if (!server.server.getClientCapabilities()?.elicitation) {
+  const transport = hostFormTransport(server);
+  if (!transport) {
     return {
       ok: false,
       error: {
@@ -212,8 +245,7 @@ async function requestHostRevisionPlanConfirmation(server, context) {
   }
   let result;
   try {
-    result = await server.server.elicitInput({
-      mode: "form",
+    result = await requestHostForm(server, {
       message: [
         "请确认当前整套内容修改方案：",
         context.review_summary,
@@ -231,14 +263,18 @@ async function requestHostRevisionPlanConfirmation(server, context) {
         },
         required: ["confirmed"],
       },
-    });
+    }, transport);
   } catch (_error) {
     return {
       ok: false,
       error: {
         code: "HOST_CONFIRMATION_UNAVAILABLE",
         message: "宿主原生整套修改方案确认暂时不可用；项目状态未改变。",
-        details: { planRef: context.scope_id },
+        details: {
+          planRef: context.scope_id,
+          phase: "host-form-response",
+          transport,
+        },
       },
     };
   }
@@ -635,6 +671,8 @@ export function createAiPptMcpServer(options = {}) {
 
 export async function startServer() {
   const server = createAiPptMcpServer();
-  await server.connect(new StdioServerTransport());
+  await server.connect(
+    createOpenAIFormCompatibleTransport(new StdioServerTransport()),
+  );
   return server;
 }

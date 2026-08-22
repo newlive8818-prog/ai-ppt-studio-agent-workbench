@@ -5,22 +5,14 @@ import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
 
+import { createOpenAIFormCompatibleTransport } from "../mcp/host-form-transport.mjs";
 import { createAiPptMcpServer } from "../mcp/server.mjs";
 import {
   PUBLIC_TOOL_CATALOG,
   PUBLIC_TOOL_CATALOG_SHA256,
 } from "../mcp/tool-catalog.mjs";
 import { PythonBridgeError } from "../mcp/runtime-bridge/python-runtime.mjs";
-
-const OpenAIFormRequestSchema = z.object({
-  method: z.literal("openai/form"),
-  params: z.looseObject({
-    message: z.string(),
-    requestedSchema: z.record(z.string(), z.unknown()),
-  }),
-});
 
 const snapshot = {
   schema_version: "3.0",
@@ -56,6 +48,30 @@ function gateConfirmationContext() {
     challenge_id: "a".repeat(64),
     challenge_revision: 3,
     review_summary: "G0 当前完整审阅源。",
+  };
+}
+
+function installRawOpenAIFormHost(clientTransport, handler) {
+  const forward = clientTransport.onmessage;
+  clientTransport.onmessage = (message, extra) => {
+    if (message?.jsonrpc !== "2.0" || message?.method !== "openai/form") {
+      forward?.(message, extra);
+      return;
+    }
+    Promise.resolve(handler(message.params))
+      .then((result) => clientTransport.send({
+        jsonrpc: "2.0",
+        id: message.id,
+        result,
+      }))
+      .catch((error) => clientTransport.send({
+        jsonrpc: "2.0",
+        id: message.id,
+        error: {
+          code: -32603,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      }));
   };
 }
 
@@ -1107,16 +1123,19 @@ test("Codex openai/form Gate confirmation accepts nullable metadata once", async
     { name: "gate-openai-form-test", version: "0.1.0" },
     { capabilities: { extensions: { "openai/form": {} } } },
   );
-  client.setRequestHandler(OpenAIFormRequestSchema, async (request) => {
-    forms.push(request.params);
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([
+    client.connect(clientTransport),
+    server.connect(createOpenAIFormCompatibleTransport(serverTransport)),
+  ]);
+  installRawOpenAIFormHost(clientTransport, async (params) => {
+    forms.push(params);
     return {
       action: "accept",
       content: { confirmed: true },
       _meta: null,
     };
   });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
   try {
     const result = await client.callTool({
       name: "confirm_ai_ppt_gate",
@@ -1143,6 +1162,192 @@ test("Codex openai/form Gate confirmation accepts nullable metadata once", async
     );
     assert.equal(payload.identity_type, "host-action");
     assert.match(payload.identity_ref, /^host-elicitation:\/\//);
+  } finally {
+    await client.close();
+  }
+});
+
+test("Codex openai/form takes priority over standard elicitation", async () => {
+  const calls = [];
+  let openAIFormCount = 0;
+  let standardElicitationCount = 0;
+  const server = createAiPptMcpServer({
+    invokeBridge: async (request) => {
+      calls.push(request);
+      if (request.operation === "get-gate-confirmation-context") {
+        return { ok: true, confirmation_context: gateConfirmationContext() };
+      }
+      return { ok: true, result: { snapshot: { ...snapshot, revision: 4 } } };
+    },
+  });
+  const client = new Client(
+    { name: "gate-openai-form-priority-test", version: "0.1.0" },
+    {
+      capabilities: {
+        extensions: { "openai/form": {} },
+        elicitation: { form: {} },
+      },
+    },
+  );
+  client.setRequestHandler(ElicitRequestSchema, async () => {
+    standardElicitationCount += 1;
+    throw new Error("standard elicitation must not be called");
+  });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([
+    client.connect(clientTransport),
+    server.connect(createOpenAIFormCompatibleTransport(serverTransport)),
+  ]);
+  installRawOpenAIFormHost(clientTransport, async () => {
+    openAIFormCount += 1;
+    return {
+      action: "accept",
+      content: { confirmed: true },
+      _meta: null,
+    };
+  });
+  try {
+    const result = await client.callTool({
+      name: "confirm_ai_ppt_gate",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        gate: "G0",
+      },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(openAIFormCount, 1);
+    assert.equal(standardElicitationCount, 0);
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["get-gate-confirmation-context", "confirm-gate"],
+    );
+  } finally {
+    await client.close();
+  }
+});
+
+test("Codex openai/form non-confirmations never write the Gate", async () => {
+  const cases = [
+    { name: "decline", response: { action: "decline", content: null, _meta: null } },
+    { name: "cancel", response: { action: "cancel", content: null, _meta: null } },
+    {
+      name: "confirmed false",
+      response: { action: "accept", content: { confirmed: false }, _meta: null },
+    },
+    {
+      name: "confirmed missing",
+      response: { action: "accept", content: {}, _meta: null },
+    },
+  ];
+
+  for (const { name, response } of cases) {
+    const calls = [];
+    const server = createAiPptMcpServer({
+      invokeBridge: async (request) => {
+        calls.push(request);
+        if (request.operation === "get-gate-confirmation-context") {
+          return { ok: true, confirmation_context: gateConfirmationContext() };
+        }
+        throw new Error(`${name} must not reach confirm-gate`);
+      },
+    });
+    const client = new Client(
+      { name: `gate-openai-form-${name}`, version: "0.1.0" },
+      { capabilities: { extensions: { "openai/form": {} } } },
+    );
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([
+      client.connect(clientTransport),
+      server.connect(createOpenAIFormCompatibleTransport(serverTransport)),
+    ]);
+    installRawOpenAIFormHost(clientTransport, async () => response);
+    try {
+      const result = await client.callTool({
+        name: "confirm_ai_ppt_gate",
+        arguments: {
+          projectRoot: "/managed/project",
+          expectedRevision: 3,
+          gate: "G0",
+        },
+      });
+      assert.equal(result.isError, true, name);
+      assert.equal(
+        result.structuredContent.error.code,
+        "HOST_CONFIRMATION_DECLINED",
+        name,
+      );
+      assert.deepEqual(
+        calls.map((call) => call.operation),
+        ["get-gate-confirmation-context"],
+        name,
+      );
+    } finally {
+      await client.close();
+    }
+  }
+});
+
+test("Codex openai/form protocol failure does not retry standard elicitation", async () => {
+  const calls = [];
+  let standardElicitationCount = 0;
+  const server = createAiPptMcpServer({
+    invokeBridge: async (request) => {
+      calls.push(request);
+      if (request.operation === "get-gate-confirmation-context") {
+        return { ok: true, confirmation_context: gateConfirmationContext() };
+      }
+      throw new Error("protocol failure must not reach confirm-gate");
+    },
+  });
+  const client = new Client(
+    { name: "gate-openai-form-error-test", version: "0.1.0" },
+    {
+      capabilities: {
+        extensions: { "openai/form": {} },
+        elicitation: { form: {} },
+      },
+    },
+  );
+  client.setRequestHandler(ElicitRequestSchema, async () => {
+    standardElicitationCount += 1;
+    return { action: "accept", content: { confirmed: true } };
+  });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([
+    client.connect(clientTransport),
+    server.connect(createOpenAIFormCompatibleTransport(serverTransport)),
+  ]);
+  installRawOpenAIFormHost(clientTransport, async () => {
+    throw new Error("host form failed");
+  });
+  try {
+    const result = await client.callTool({
+      name: "confirm_ai_ppt_gate",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        gate: "G0",
+      },
+    });
+    assert.equal(result.isError, true);
+    assert.equal(
+      result.structuredContent.error.code,
+      "HOST_CONFIRMATION_UNAVAILABLE",
+    );
+    assert.equal(
+      result.structuredContent.error.details.transport,
+      "openai-form",
+    );
+    assert.equal(
+      result.structuredContent.error.details.phase,
+      "host-form-response",
+    );
+    assert.equal(standardElicitationCount, 0);
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["get-gate-confirmation-context"],
+    );
   } finally {
     await client.close();
   }
