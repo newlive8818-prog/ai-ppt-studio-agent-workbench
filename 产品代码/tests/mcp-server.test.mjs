@@ -5,6 +5,7 @@ import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 
 import { createAiPptMcpServer } from "../mcp/server.mjs";
 import {
@@ -12,6 +13,14 @@ import {
   PUBLIC_TOOL_CATALOG_SHA256,
 } from "../mcp/tool-catalog.mjs";
 import { PythonBridgeError } from "../mcp/runtime-bridge/python-runtime.mjs";
+
+const OpenAIFormRequestSchema = z.object({
+  method: z.literal("openai/form"),
+  params: z.looseObject({
+    message: z.string(),
+    requestedSchema: z.record(z.string(), z.unknown()),
+  }),
+});
 
 const snapshot = {
   schema_version: "3.0",
@@ -34,6 +43,21 @@ const snapshot = {
   experience: {},
   allowed_next_actions: ["submit-human-decision"],
 };
+
+function gateConfirmationContext() {
+  return {
+    project_id: "p1",
+    project_root: "/managed/project",
+    gate: "G0",
+    scope_kind: "gate",
+    scope_id: "G0",
+    source_version: "content-v1",
+    evidence_refs: ["artifact://test-evidence/" + "b".repeat(64)],
+    challenge_id: "a".repeat(64),
+    challenge_revision: 3,
+    review_summary: "G0 当前完整审阅源。",
+  };
+}
 
 const review = {
   review_type: "content",
@@ -1062,6 +1086,108 @@ test("host-native Gate confirmation signs a host action for the current revision
     const payload = JSON.parse(Buffer.from(payloadSegment, "base64url").toString("utf8"));
     assert.equal(payload.identity_type, "host-action");
     assert.match(payload.identity_ref, /^host-elicitation:\/\//);
+  } finally {
+    await client.close();
+  }
+});
+
+test("Codex openai/form Gate confirmation accepts nullable metadata once", async () => {
+  const calls = [];
+  const forms = [];
+  const server = createAiPptMcpServer({
+    invokeBridge: async (request) => {
+      calls.push(request);
+      if (request.operation === "get-gate-confirmation-context") {
+        return { ok: true, confirmation_context: gateConfirmationContext() };
+      }
+      return { ok: true, result: { snapshot: { ...snapshot, revision: 4 } } };
+    },
+  });
+  const client = new Client(
+    { name: "gate-openai-form-test", version: "0.1.0" },
+    { capabilities: { extensions: { "openai/form": {} } } },
+  );
+  client.setRequestHandler(OpenAIFormRequestSchema, async (request) => {
+    forms.push(request.params);
+    return {
+      action: "accept",
+      content: { confirmed: true },
+      _meta: null,
+    };
+  });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "confirm_ai_ppt_gate",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        gate: "G0",
+      },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(forms.length, 1);
+    assert.match(forms[0].message, /G0 当前完整审阅源/);
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["get-gate-confirmation-context", "confirm-gate"],
+    );
+    const write = calls.at(-1);
+    assert.equal(write.source_version, "content-v1");
+    assert.equal(write.challenge_id, "a".repeat(64));
+    assert.equal(write.challenge_revision, 3);
+    const [, payloadSegment] = write.host_confirmation_assertion.split(".");
+    const payload = JSON.parse(
+      Buffer.from(payloadSegment, "base64url").toString("utf8"),
+    );
+    assert.equal(payload.identity_type, "host-action");
+    assert.match(payload.identity_ref, /^host-elicitation:\/\//);
+  } finally {
+    await client.close();
+  }
+});
+
+test("standard elicitation rejects nullable metadata before the plugin can consume it", async () => {
+  const calls = [];
+  const server = createAiPptMcpServer({
+    invokeBridge: async (request) => {
+      calls.push(request);
+      if (request.operation === "get-gate-confirmation-context") {
+        return { ok: true, confirmation_context: gateConfirmationContext() };
+      }
+      throw new Error("nullable standard response must not reach confirm-gate");
+    },
+  });
+  const client = new Client(
+    { name: "gate-standard-null-test", version: "0.1.0" },
+    { capabilities: { elicitation: { form: {} } } },
+  );
+  client.setRequestHandler(ElicitRequestSchema, async () => ({
+    action: "accept",
+    content: { confirmed: true },
+    _meta: null,
+  }));
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "confirm_ai_ppt_gate",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        gate: "G0",
+      },
+    });
+    assert.equal(result.isError, true);
+    assert.equal(
+      result.structuredContent.error.code,
+      "HOST_CONFIRMATION_UNAVAILABLE",
+    );
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["get-gate-confirmation-context"],
+    );
   } finally {
     await client.close();
   }
