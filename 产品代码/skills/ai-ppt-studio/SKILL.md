@@ -24,7 +24,6 @@ Act as the principal strategist and maker. Let the user supply goals, sources, c
 - Formal Agent tasks bind one approved role, exact input refs, bounded instructions, output contract, exclusions, and isolation rules.
 - Keep producer and reviewer contexts isolated. Applicable hard checks are binary; scores or votes cannot compensate for a failure.
 - Bind every user confirmation to one current checkpoint, exact `sourceVersion`, current revision, and single-use challenge. `MissionConfirmation` never confirms G0, G3, or G4; an old, reused, replayed, or model-invented message/action cannot pass a Gate.
-- Permit `legacy-credential-upgrade` only for an already-passed historical G0 whose frozen acceptance and blueprint refs still equal current heads and whose credential is strictly old-format. Require a fresh host confirmation of the current challenge, replace only the credential, and use the normal G0 reopen path after any content drift.
 - Resolve the immutable project-bound `ReleaseTargetPolicy` before G2 and again before G4. Its `required_target_ids` are the only Gate target source; the public Agent cannot supply arbitrary targets or shrink, expand, or replace the policy.
 
 ## Route capabilities honestly

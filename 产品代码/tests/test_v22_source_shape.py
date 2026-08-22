@@ -14,6 +14,17 @@ WIDGET = ROOT / "widget" / "src"
 
 
 class V22SourceShapeTests(unittest.TestCase):
+    def test_public_gate_contract_excludes_retired_legacy_workflow(self) -> None:
+        paths = (
+            ROOT / "skills" / "ai-ppt-studio" / "SKILL.md",
+            ROOT / "skills" / "ai-ppt-studio" / "references" / "runtime-workflow.md",
+            SRC / "application" / "gate_confirmation.py",
+        )
+        skill_text = "\n".join(path.read_text(encoding="utf-8") for path in paths)
+        self.assertNotIn("legacy-credential-upgrade", skill_text)
+        self.assertNotIn("legacy_confirmation_ref", skill_text)
+        self.assertNotIn("supersedes_confirmation_ref", skill_text)
+
     def test_retired_python_write_modules_are_absent_and_not_imported(self) -> None:
         retired = (
             SRC / "application" / "workspace_projection.py",
@@ -137,7 +148,8 @@ class V22SourceShapeTests(unittest.TestCase):
     def test_visual_route_uses_the_closed_page_view_model(self) -> None:
         router = (WIDGET / "ReviewSurfaceRouter.tsx").read_text(encoding="utf-8")
         self.assertIn("toVisualReviewPageViewModel", router)
-        self.assertIn("initialViewModel={toVisualReviewPageViewModel(validated)}", router)
+        self.assertIn("const initialViewModel = toVisualReviewPageViewModel(validated)", router)
+        self.assertIn("initialViewModel={initialViewModel}", router)
 
 
 if __name__ == "__main__":

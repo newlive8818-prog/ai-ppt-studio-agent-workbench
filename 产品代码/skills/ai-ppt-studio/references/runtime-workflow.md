@@ -29,7 +29,6 @@ The formal semantics are stricter than the tool names:
 - The chief saves one whole-deck revision plan; user confirmation is required before applying it. Every new source version receives full re-review with no inherited approvals.
 - Visual ReviewMarks bind exact field/text anchors, prefix, suffix, comment, source version, and revision. A stale anchor conflicts; saving marks never confirms G3.
 - `record_internal_gate` is restricted to authorized G1/G2 reviewers and exact current evidence heads. `confirm_ai_ppt_gate` accepts only G0/G3/G4, resolves the exact current source version, revision, evidence refs, and single-use challenge, and requires a verified current user action or fresh host-native confirmation. `MissionConfirmation` never confirms a Gate.
-- `legacy-credential-upgrade` may replace only the credential of an already-passed historical G0 when its frozen acceptance and blueprint refs still equal current heads and its credential is strictly old-format. It requires a fresh host confirmation of the current challenge. Content drift requires normal G0 reopen and atomic downstream invalidation.
 
 One Agent turn stops at the next later user Gate unless a new host verification or elicitation result arrives after the current review source is published. Never replay an older message or infer a Gate from task or Mission approval. `HOST_CONFIRMATION_DECLINED` and `HOST_CONFIRMATION_UNAVAILABLE` cause zero Gate business writes.
 

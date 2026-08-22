@@ -50,7 +50,6 @@ class GateConfirmationPolicy:
             "gate": identity,
             "review_summary": "当前 Gate 的可信确认上下文。",
             "confirmation_mode": "confirm-gate",
-            "legacy_confirmation_ref": "",
         }
 
     def confirmation_payload(
@@ -95,10 +94,6 @@ class GateConfirmationPolicy:
             "gate": gate,
             "confirmation_mode": current["confirmation_mode"],
         }
-        if current["confirmation_mode"] == "legacy-credential-upgrade":
-            payload["supersedes_confirmation_ref"] = current[
-                "legacy_confirmation_ref"
-            ]
         return payload, consumptions
 
     def _was_consumed(self, identity: str) -> bool:
