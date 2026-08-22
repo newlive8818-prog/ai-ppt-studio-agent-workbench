@@ -102,7 +102,6 @@ function longProjectionHtml(sourceHtml, reviewType, count) {
         slide_id: `S${String(index + 1).padStart(3, "0")}`,
         order: index + 1,
         neutral_title: `第 ${index + 1} 页视觉合同完整性验收`,
-        page_task: `完整保留第 ${index + 1} 页视觉需求`,
       }));
     }
   });
@@ -128,7 +127,7 @@ function savedUnverifiedProjectionHtml(sourceHtml) {
         target_type: "contract-field",
         slide_id: slide.slide_id,
         deck_section_id: "",
-        target_key: "page_task",
+        target_key: "core_claim",
         selected_text: "",
         context_before: "",
         context_after: "",

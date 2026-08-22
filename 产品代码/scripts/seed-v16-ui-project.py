@@ -114,7 +114,7 @@ def _prepare_g2_review(project_root: Path):
         "ui-seed-publish-visual-review",
         state.revision,
     )
-    return visual, state, refs
+    return visual, state, refs, state.revision
 
 
 def _reopen_content_review_fixture(kernel, state):
@@ -209,7 +209,7 @@ def main() -> int:
     workspace_config = base / "workspace.json"
     config.save(workspace_config)
     project_root = base / "projects" / "schema3-ui-project"
-    visual, state, refs = _prepare_g2_review(project_root)
+    visual, state, refs, visual_publication_revision = _prepare_g2_review(project_root)
     atomic_write_json(
         project_root / "project.json",
         {
@@ -231,7 +231,7 @@ def main() -> int:
         review_type="visual-professional",
         target_artifact_ref=contract_ref,
         source_version=str(contract.get("source_version") or contract_ref),
-        source_revision=state.revision,
+        source_revision=visual_publication_revision,
         open_policy="notify-only",
     )
     content_projection = visual.kernel.artifacts.resolve(
