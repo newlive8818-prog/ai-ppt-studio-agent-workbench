@@ -43,18 +43,10 @@ class V16DeliveryContractTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp:
             delivery, revision, refs = prepared_g3(Path(temp), slide_count=2)
-            mismatched = build_artifacts(
+            artifacts = build_artifacts(
                 delivery, refs["slide_ids"], sha256="7" * 64
             )
-            with self.assertRaises(ContractValidationError):
-                delivery.register_build(
-                    "g2-g4-hash-mismatch",
-                    revision,
-                    valid_build_payload(refs, mismatched),
-                )
-            artifacts = build_artifacts(
-                delivery, refs["slide_ids"], sha256=refs["pptx_sha256"]
-            )
+            self.assertNotEqual(artifacts["pptx_sha256"], refs["pptx_sha256"])
             valid = valid_build_payload(refs, artifacts)
             invalid_payloads = []
             for changes in (

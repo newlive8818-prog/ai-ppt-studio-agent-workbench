@@ -12,11 +12,14 @@ sys.path.insert(0, str(ROOT / "src"))
 from ai_ppt_studio.errors import ContractValidationError, GateBlockedError
 from ai_ppt_studio.kernel.references import ArtifactReference
 from tests.v16_delivery_fixtures import (
+    build_artifacts,
     package_artifacts,
     prepared_build,
     prepared_delivery_ready,
+    prepared_g3,
     prepared_qa,
     rich_g4_target_payload,
+    valid_build_payload,
     valid_package_payload,
     valid_deck_qa,
     valid_slide_qa,
@@ -25,6 +28,24 @@ from tests.host_confirmation_fixtures import gate_confirmation_kwargs
 
 
 class V16DeliveryG4Tests(unittest.TestCase):
+    def test_full_deck_build_may_have_a_new_hash_after_g2_anchor_acceptance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            delivery, revision, refs = prepared_g3(Path(temp), slide_count=2)
+            final_artifacts = build_artifacts(
+                delivery,
+                refs["slide_ids"],
+                sha256="9" * 64,
+            )
+
+            build_ref = delivery.register_build(
+                "full-deck-with-new-hash",
+                revision,
+                valid_build_payload(refs, final_artifacts),
+            )
+
+            self.assertTrue(build_ref.startswith("artifact://presentation-build/"))
+            self.assertNotEqual(final_artifacts["pptx_sha256"], refs["pptx_sha256"])
+
     def test_slide_and_deck_qa_are_binary_complete_and_current(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             delivery, revision, refs = prepared_build(Path(temp), slide_count=2)

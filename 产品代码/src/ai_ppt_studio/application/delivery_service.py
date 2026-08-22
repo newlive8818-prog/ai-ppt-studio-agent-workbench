@@ -97,20 +97,14 @@ class DeliveryService:
                 )
             except (ValueError, GateBlockedError) as error:
                 raise ContractValidationError(
-                    "Final build requires valid same-hash G2 target evidence"
+                    "Final build requires valid G2 target evidence"
                 ) from error
         try:
-            g2_matrix = validate_required_targets(
-                g2_evidence, policy.required_target_ids
-            )
+            validate_required_targets(g2_evidence, policy.required_target_ids)
         except GateBlockedError as error:
             raise ContractValidationError(
-                "Final build requires valid same-hash G2 target evidence"
+                "Final build requires valid G2 target evidence"
             ) from error
-        if normalized["pptx_sha256"] != g2_matrix.pptx_sha256:
-            raise ContractValidationError(
-                "G2 and G4 must reference the same PPTX SHA-256"
-            )
         pptx = self._resolve_kind(normalized["source_pptx_ref"], "final-pptx")[
             "payload"
         ]
