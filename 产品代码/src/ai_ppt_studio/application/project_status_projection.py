@@ -52,6 +52,11 @@ class ProjectStatusProjectionService:
         state = self.kernel.load()
         candidates: list[dict[str, Any]] = []
         for review_type in ("content-full-deck", "visual-professional"):
+            if (
+                review_type == "content-full-deck"
+                and state.gate_status.get("G0") == "passed"
+            ):
+                continue
             ref = state.review_session_ref(review_type)
             if not ref:
                 continue

@@ -14,6 +14,9 @@ from ai_ppt_studio.application.content_review.decision_service import ContentDec
 from ai_ppt_studio.application.content_review.planning_service import ContentRevisionPlanningService
 from ai_ppt_studio.application.content_review.projection_service import ContentReviewProjectionService
 from ai_ppt_studio.application.presales_content_service import PresalesContentService
+from ai_ppt_studio.application.project_status_projection import (
+    ProjectStatusProjectionService,
+)
 from ai_ppt_studio.application.review_session_service import ReviewSessionService
 from ai_ppt_studio.application.v16_bridge import dispatch_v16
 from ai_ppt_studio.errors import (
@@ -829,6 +832,11 @@ class ContentReviewProjectionTests(unittest.TestCase):
             )
             self.assertEqual(confirmed.gate_status["G0"], "passed")
             self.assertEqual(confirmed.gate_status["G1"], "open")
+            projected_status = ProjectStatusProjectionService(kernel).project()
+            self.assertEqual(projected_status["object_type"], "runtime-task")
+            self.assertNotEqual(
+                projected_status["reason"], "审核反馈已保存并提交"
+            )
             confirmation_ref = confirmed.artifact_heads["gate/G0/confirmation"]
             confirmation = kernel.artifacts.resolve(
                 ArtifactReference.parse(confirmation_ref)
