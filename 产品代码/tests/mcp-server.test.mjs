@@ -31,15 +31,15 @@ const snapshot = {
 };
 
 const review = {
-  review_type: "content",
+  review_type: "visual",
   display_policy: "professional-review",
   project_id: "p1",
   project_name: "测试项目",
-  title: "内容蓝图专业审阅",
-  source_version: "content-v0001-abc123",
-  source_refs: ["content-blueprint:v0001:abc123"],
-  sections: [{ anchor: "content-overview", title: "整套内容", value: {} }],
-  outline: [{ anchor: "content-overview", title: "整套内容" }],
+  title: "视觉合同专业审阅",
+  source_version: "visual-v0001-abc123",
+  source_refs: ["visual-contract:v0001:abc123"],
+  sections: [{ anchor: "visual-overview", title: "完整视觉合同", value: {} }],
+  outline: [{ anchor: "visual-overview", title: "完整视觉合同" }],
   mark_set: { marks: [] },
 };
 
@@ -122,20 +122,28 @@ test("MCP exposes data contracts without rendering a Widget in chat", async () =
         "commit_ai_ppt_artifact",
         "confirm_ai_ppt_gate",
         "confirm_ai_ppt_mission",
+        "confirm_content_batch_revision_plan",
         "create_ai_ppt_project",
+        "create_content_batch_change_set",
         "get_ai_ppt_project_snapshot",
         "get_ai_ppt_sidebar_projection",
+        "get_content_sidebar_review_projection",
         "get_delivery_status_projection",
         "open_ai_ppt_browser_review",
+        "open_content_evidence_browser",
         "read_ai_ppt_project_asset",
         "record_chat_delivery",
         "record_internal_gate",
         "reopen_ai_ppt_scope",
         "request_ai_ppt_agent_action",
         "save_ai_ppt_mission_draft",
+        "save_content_batch_revision_plan",
+        "save_content_page_decision",
         "save_review_marks",
         "set_ai_ppt_release_target_policy",
         "submit_ai_ppt_human_decision",
+        "submit_content_review_batch",
+        "withdraw_content_review_batch",
       ],
     );
     const readTool = tools.tools.find((tool) => tool.name === "get_ai_ppt_project_snapshot");
@@ -231,8 +239,8 @@ test("MCP exposes data contracts without rendering a Widget in chat", async () =
       name: "open_ai_ppt_browser_review",
       arguments: {
         projectRoot: "/managed/project",
-        reviewType: "content",
-        sourceVersion: "content-v0001-abc123",
+        reviewType: "visual",
+        sourceVersion: "visual-v0001-abc123",
       },
     });
     assert.equal(browserResult.isError, undefined);
@@ -274,8 +282,8 @@ test("Browser review opens a scoped loopback session only through a host adapter
     },
     reviewBridgeFactory: (scope) => ({
       async start() {
-        assert.equal(scope.reviewType, "content");
-        assert.equal(scope.sourceVersion, "content-v0001-abc123");
+        assert.equal(scope.reviewType, "visual");
+        assert.equal(scope.sourceVersion, "visual-v0001-abc123");
         assert.equal(scope.expectedRevision, 3);
         return {
           url: "http://127.0.0.1:43123/#token=short-lived-token",
@@ -297,14 +305,14 @@ test("Browser review opens a scoped loopback session only through a host adapter
       name: "open_ai_ppt_browser_review",
       arguments: {
         projectRoot: "/managed/project",
-        reviewType: "content",
-        sourceVersion: "content-v0001-abc123",
+        reviewType: "visual",
+        sourceVersion: "visual-v0001-abc123",
       },
     });
     assert.equal(result.isError, undefined);
     assert.equal(result.structuredContent.opened, true);
-    assert.equal(result.structuredContent.reviewType, "content");
-    assert.equal(result.structuredContent.sourceVersion, "content-v0001-abc123");
+    assert.equal(result.structuredContent.reviewType, "visual");
+    assert.equal(result.structuredContent.sourceVersion, "visual-v0001-abc123");
     assert.equal(result.structuredContent.revision, 3);
     assert.equal(result.structuredContent.expiresAt, 123456);
     assert.deepEqual(opened, [
@@ -318,27 +326,15 @@ test("Browser review opens a scoped loopback session only through a host adapter
   }
 });
 
-test("Browser review switch resolves the target scope from the authoritative projection", async () => {
-  const calls = [];
-  const scopes = [];
+test("visual Browser review rejects switching to the content review surface", async () => {
   let createReviewSession;
   const server = createAiPptMcpServer({
-    invokeBridge: async (request) => {
-      calls.push(request);
-      const target = request.review_type === "visual";
-      return {
-        ok: true,
-        selected_project_root: "/managed/project",
-        review: {
-          ...review,
-          review_type: target ? "visual" : "content",
-          source_version: target
-            ? "visual-authoritative-v2"
-            : "content-v0001-abc123",
-        },
-        snapshot_revision: target ? 9 : 3,
-      };
-    },
+    invokeBridge: async () => ({
+      ok: true,
+      selected_project_root: "/managed/project",
+      review,
+      snapshot_revision: 3,
+    }),
     browserSurfaceAdapter: {
       canOpen: true,
       canSave: true,
@@ -347,16 +343,11 @@ test("Browser review switch resolves the target scope from the authoritative pro
       },
     },
     reviewBridgeFactory: (scope) => {
-      scopes.push(scope);
-      if (scope.reviewType === "content") {
-        createReviewSession = scope.createReviewSession;
-      }
+      createReviewSession = scope.createReviewSession;
       return {
         async start() {
           return {
-            url: scope.reviewType === "content"
-              ? "http://127.0.0.1:43123/#token=content-token"
-              : "http://127.0.0.1:43124/#token=visual-token",
+            url: "http://127.0.0.1:43124/#token=visual-token",
             expiresAt: 123456,
             reviewType: scope.reviewType,
             sourceVersion: scope.sourceVersion,
@@ -375,26 +366,20 @@ test("Browser review switch resolves the target scope from the authoritative pro
       name: "open_ai_ppt_browser_review",
       arguments: {
         projectRoot: "/managed/project",
-        reviewType: "content",
-        sourceVersion: "content-v0001-abc123",
+        reviewType: "visual",
+        sourceVersion: "visual-v0001-abc123",
       },
     });
     assert.equal(opened.isError, undefined);
     assert.equal(typeof createReviewSession, "function");
 
-    const target = await createReviewSession({
-      projectRoot: "/managed/project",
-      reviewType: "visual",
-    });
-
-    assert.equal(calls.at(-1).operation, "get-review-projection");
-    assert.equal(calls.at(-1).review_type, "visual");
-    assert.equal(scopes.at(-1).projectRoot, "/managed/project");
-    assert.equal(scopes.at(-1).reviewType, "visual");
-    assert.equal(scopes.at(-1).sourceVersion, "visual-authoritative-v2");
-    assert.equal(scopes.at(-1).expectedRevision, 9);
-    assert.equal(target.sourceVersion, "visual-authoritative-v2");
-    assert.equal(target.expectedRevision, 9);
+    await assert.rejects(
+      createReviewSession({
+        projectRoot: "/managed/project",
+        reviewType: "content",
+      }),
+      (error) => error.code === "INVALID_REVIEW_SWITCH",
+    );
   } finally {
     await client.close();
   }
@@ -433,8 +418,8 @@ test("Browser review save capability belongs to the Review Bridge, not the open 
       name: "open_ai_ppt_browser_review",
       arguments: {
         projectRoot: "/managed/project",
-        reviewType: "content",
-        sourceVersion: "content-v0001-abc123",
+        reviewType: "visual",
+        sourceVersion: "visual-v0001-abc123",
       },
     });
     assert.equal(result.isError, undefined);
@@ -481,8 +466,8 @@ test("Browser adapter failure keeps the scoped session ready for Agent Browser h
       name: "open_ai_ppt_browser_review",
       arguments: {
         projectRoot: "/managed/project",
-        reviewType: "content",
-        sourceVersion: "content-v0001-abc123",
+        reviewType: "visual",
+        sourceVersion: "visual-v0001-abc123",
       },
     });
     assert.equal(result.isError, undefined);
