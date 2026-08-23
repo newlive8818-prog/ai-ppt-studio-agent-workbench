@@ -6,23 +6,15 @@ import { compactWidgetData, hostBridge } from "./test-fixtures";
 
 afterEach(cleanup);
 
-describe("content sidebar and visual Browser routing", () => {
-  it("loads content through its sidebar projection rather than professional Browser", async () => {
+describe("content conversation and visual Browser routing", () => {
+  it("keeps content review out of the professional Browser route", async () => {
     const initial = compactWidgetData("blueprint");
     const host = hostBridge(initial);
-    host.callTool.mockResolvedValue({
-      display_policy: "content-sidebar-progress",
-      phase: "content-producing",
-      project_id: "p1",
-      revision: 12,
-      mission_summary: {},
-      next_action: "continue-content-production",
-    });
     render(<App initialData={initial} bridge={host.bridge} />);
 
-    await waitFor(() => expect(host.callTool).toHaveBeenCalledWith(
-      "get_content_sidebar_review_projection",
-      { projectRoot: "/managed/project" },
+    fireEvent.click(screen.getByRole("button", { name: "审核完整内容" }));
+    await waitFor(() => expect(host.bridge.sendFollowUp).toHaveBeenCalledWith(
+      "继续 AI PPT 项目：先证明运营断点，再给出低风险建设路径。",
     ));
     expect(host.callTool).not.toHaveBeenCalledWith(
       "open_ai_ppt_browser_review",
@@ -43,16 +35,4 @@ describe("content sidebar and visual Browser routing", () => {
     }));
   });
 
-  it("keeps the current snapshot when the content projection cannot load", async () => {
-    const initial = compactWidgetData("blueprint");
-    const host = hostBridge(initial);
-    host.callTool.mockRejectedValue(Object.assign(new Error("unavailable"), {
-      code: "CONTENT_REVIEW_CONFLICT",
-    }));
-    render(<App initialData={initial} bridge={host.bridge} />);
-
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("内容审核数据未能加载"));
-    expect(host.callTool).toHaveBeenCalledOnce();
-    expect(screen.getByText("revision 12")).toBeInTheDocument();
-  });
 });

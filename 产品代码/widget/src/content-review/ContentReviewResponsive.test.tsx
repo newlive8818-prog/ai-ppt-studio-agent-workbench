@@ -1,8 +1,8 @@
-import { readFileSync } from "node:fs";
-
 import { describe, expect, it } from "vitest";
 
-const css = readFileSync(`${process.cwd()}/widget/src/styles.css`, "utf8");
+declare const __AI_PPT_CONTENT_REVIEW_CSS__: string;
+
+const css = __AI_PPT_CONTENT_REVIEW_CSS__;
 
 describe("maximum-width content review responsive contract", () => {
   it("uses the entire sidebar width and never centers the document in a max-width wrapper", () => {
