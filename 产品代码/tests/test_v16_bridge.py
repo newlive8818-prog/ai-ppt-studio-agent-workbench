@@ -15,6 +15,8 @@ from ai_ppt_studio.application.release_policy_service import (
 from ai_ppt_studio.application.v16_bridge import dispatch_v16
 from ai_ppt_studio.application.project_service import ProjectService
 from ai_ppt_studio.config import RuntimeConfig
+from ai_ppt_studio.errors import ContractValidationError
+from ai_ppt_studio.kernel.transactions import ProjectKernel
 from ai_ppt_studio.workbench_bridge import dispatch
 from tests.test_v16_project_service import runtime_config
 from tests.test_v16_review_marks import accepted_content
@@ -23,6 +25,154 @@ from tests.v16_visual_fixtures import apply_all_approved_content_review
 
 
 class V16BridgeTests(unittest.TestCase):
+    def test_bridge_exposes_authoritative_review_session_and_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp)
+            kernel = ProjectKernel.initialize(project, project_id="review-bridge")
+            state = kernel.commit(
+                command_id="seed-review-target",
+                expected_revision=0,
+                event_type="test.review-target-created",
+                artifact_updates={
+                    "content/reading-deck-blueprint": (
+                        "reading-deck-blueprint",
+                        {"title": "完整内容", "slides": [{"slide_id": "s1"}]},
+                    )
+                },
+            )
+            target_ref = state.artifact_heads[
+                "content/reading-deck-blueprint"
+            ]
+            opened = dispatch_v16(
+                {
+                    "operation": "open-or-resume-review-session",
+                    "project_root": str(project),
+                    "command_id": "bridge-open-review",
+                    "expected_revision": state.revision,
+                    "review_type": "content-full-deck",
+                    "target_artifact_ref": target_ref,
+                    "source_version": "content-v1",
+                    "target_revision": state.revision,
+                    "open_policy": "foreground-if-waiting",
+                }
+            )
+            session = opened["session"]
+            self.assertEqual(session["review_type"], "content-full-deck")
+            self.assertEqual(opened["snapshot_revision"], state.revision + 1)
+
+            status = dispatch_v16(
+                {
+                    "operation": "get-project-user-status",
+                    "project_root": str(project),
+                }
+            )
+            self.assertEqual(status["status"]["status"], "需要你处理")
+
+            host_open = dispatch_v16(
+                {
+                    "operation": "record-review-host-open",
+                    "project_root": str(project),
+                    "command_id": "bridge-record-host-open",
+                    "expected_revision": opened["snapshot_revision"],
+                    "review_session_id": session["review_session_id"],
+                    "result": "opened",
+                    "receipt_ref": "host-receipt://open/001",
+                }
+            )
+            self.assertEqual(host_open["session"]["host_open_status"], "opened")
+
+            notified = dispatch_v16(
+                {
+                    "operation": "record-review-host-notification",
+                    "project_root": str(project),
+                    "command_id": "bridge-record-notification",
+                    "expected_revision": host_open["snapshot_revision"],
+                    "review_session_id": session["review_session_id"],
+                    "result": "sent",
+                    "receipt_ref": "host-receipt://notification/001",
+                }
+            )
+            self.assertEqual(
+                notified["session"]["host_notification_status"], "sent"
+            )
+
+            received = dispatch_v16(
+                {
+                    "operation": "record-review-ai-receipt",
+                    "project_root": str(project),
+                    "command_id": "bridge-record-ai-receipt",
+                    "expected_revision": notified["snapshot_revision"],
+                    "review_session_id": session["review_session_id"],
+                    "result": "received",
+                    "receipt_ref": "ai-receipt://001",
+                }
+            )
+            self.assertEqual(
+                received["session"]["ai_receipt_status"], "received"
+            )
+
+    def test_bridge_rejects_client_owned_session_status_without_writes(self) -> None:
+        for index, (field, value) in enumerate(
+            (
+                ("status", "opened"),
+                ("host_open_status", "opened"),
+                ("persistence_status", "saved"),
+                ("host_notification_status", "sent"),
+                ("ai_receipt_status", "received"),
+            )
+        ):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as temp:
+                project = Path(temp)
+                kernel = ProjectKernel.initialize(
+                    project,
+                    project_id=f"forged-review-{index}",
+                )
+                state = kernel.commit(
+                    command_id="seed-target",
+                    expected_revision=0,
+                    event_type="test.target-created",
+                    artifact_updates={
+                        "visual/contract": (
+                            "visual-contract",
+                            {"title": "视觉合同"},
+                        )
+                    },
+                )
+                target_ref = state.artifact_heads["visual/contract"]
+                before_objects = tuple(
+                    sorted(
+                        str(path.relative_to(kernel.artifacts.objects_root))
+                        for path in kernel.artifacts.objects_root.rglob("*")
+                        if path.is_file()
+                    )
+                )
+                request = {
+                    "operation": "open-or-resume-review-session",
+                    "project_root": str(project),
+                    "command_id": f"forged-{field}",
+                    "expected_revision": state.revision,
+                    "review_type": "visual-professional",
+                    "target_artifact_ref": target_ref,
+                    "source_version": "visual-v1",
+                    "target_revision": state.revision,
+                    "open_policy": "foreground-if-waiting",
+                    field: value,
+                }
+                with self.assertRaisesRegex(
+                    ContractValidationError,
+                    f"{field} is Runtime-owned",
+                ):
+                    dispatch_v16(request)
+                self.assertEqual(kernel.load(), state)
+                after_objects = tuple(
+                    sorted(
+                        str(path.relative_to(kernel.artifacts.objects_root))
+                        for path in kernel.artifacts.objects_root.rglob("*")
+                        if path.is_file()
+                    )
+                )
+                self.assertEqual(after_objects, before_objects)
+
     def test_bridge_binds_only_the_known_macos_powerpoint_policy(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             config, _profile = runtime_config(Path(temp))

@@ -21,6 +21,12 @@ from ai_ppt_studio.application.gate_confirmation import GateConfirmationPolicy
 from ai_ppt_studio.application.delivery_service import DeliveryService
 from ai_ppt_studio.application.experience_service import ExperienceService
 from ai_ppt_studio.application.review_service import ReviewService
+from ai_ppt_studio.application.review_session_service import (
+    ReviewSessionService,
+)
+from ai_ppt_studio.application.project_status_projection import (
+    ProjectStatusProjectionService,
+)
 from ai_ppt_studio.application.project_service import ProjectCommandService
 from ai_ppt_studio.application.release_policy_service import (
     ReleaseTargetPolicyService,
@@ -121,6 +127,8 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
     project_commands = ProjectCommandService(kernel)
     content_review = ContentReviewService(kernel)
     batch_planning = ContentBatchPlanningService(kernel)
+    review_sessions = ReviewSessionService(kernel)
+    status_projection = ProjectStatusProjectionService(kernel)
 
     if operation == "get-project-snapshot":
         return {
@@ -128,6 +136,97 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
             "operation": operation,
             "selected_project_root": str(project_root),
             "snapshot": _snapshot(kernel.load(), project_root),
+        }
+    if operation == "get-project-user-status":
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "status": status_projection.project(),
+        }
+    if operation == "open-or-resume-review-session":
+        for field in (
+            "status",
+            "host_open_status",
+            "persistence_status",
+            "host_notification_status",
+            "ai_receipt_status",
+            "created_at",
+            "last_opened_at",
+            "submitted_at",
+        ):
+            if field in request:
+                raise ContractValidationError(
+                    f"{field} is Runtime-owned and cannot be supplied by the client"
+                )
+        session, state = review_sessions.open_or_resume(
+            command_id=_command_id(operation, request),
+            expected_revision=int(request["expected_revision"]),
+            review_type=str(request.get("review_type") or ""),
+            target_artifact_ref=str(
+                request.get("target_artifact_ref") or ""
+            ),
+            source_version=str(request.get("source_version") or ""),
+            target_revision=int(request["target_revision"]),
+            open_policy=str(request.get("open_policy") or ""),
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "session": session,
+            "snapshot_revision": state.revision,
+        }
+    if operation == "record-review-host-open":
+        session, state = review_sessions.record_host_open_receipt(
+            command_id=_command_id(operation, request),
+            expected_revision=int(request["expected_revision"]),
+            review_session_id=str(
+                request.get("review_session_id") or ""
+            ),
+            result=str(request.get("result") or ""),
+            receipt_ref=str(request.get("receipt_ref") or ""),
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "session": session,
+            "snapshot_revision": state.revision,
+        }
+    if operation == "record-review-host-notification":
+        session, state = review_sessions.record_host_notification_receipt(
+            command_id=_command_id(operation, request),
+            expected_revision=int(request["expected_revision"]),
+            review_session_id=str(
+                request.get("review_session_id") or ""
+            ),
+            result=str(request.get("result") or ""),
+            receipt_ref=str(request.get("receipt_ref") or ""),
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "session": session,
+            "snapshot_revision": state.revision,
+        }
+    if operation == "record-review-ai-receipt":
+        session, state = review_sessions.record_ai_receipt(
+            command_id=_command_id(operation, request),
+            expected_revision=int(request["expected_revision"]),
+            review_session_id=str(
+                request.get("review_session_id") or ""
+            ),
+            result=str(request.get("result") or ""),
+            receipt_ref=str(request.get("receipt_ref") or ""),
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "session": session,
+            "snapshot_revision": state.revision,
         }
     if operation == "set-release-target-policy":
         policy_id = str(request.get("policy_id") or "")
