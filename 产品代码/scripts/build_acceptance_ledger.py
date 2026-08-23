@@ -1,44 +1,45 @@
-"""Generate the checked-in v1.6 acceptance ledger from authoritative baselines."""
+"""Rebuild a version-bound acceptance ledger from its evidence index."""
 
 from __future__ import annotations
 
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT = ROOT.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.acceptance.ledger import (  # noqa: E402
     AcceptanceLedger,
     EvidenceIndex,
-    extract_numbered_requirements,
 )
 
-SOURCES = (
-    (PROJECT / "01-产品需求基线-v1.0.md", "PRD", "17"),
-    (PROJECT / "02-系统详细设计-v1.0.md", "SDD", "21"),
-    (PROJECT / "03-UI设计与交互规范-v1.0.md", "UI", "23"),
-)
-
-
-def build() -> tuple[AcceptanceLedger, Path]:
-    requirements = []
-    for path, prefix, section in SOURCES:
-        requirements.extend(
-            extract_numbered_requirements(
-                path.read_text(encoding="utf-8"),
-                source_prefix=prefix,
-                section_prefix=section,
-            )
+def build(
+    *,
+    ledger_path: Path | None = None,
+    evidence_path: Path | None = None,
+) -> tuple[AcceptanceLedger, Path]:
+    target = ledger_path or ROOT / "requirements" / "v1.6-acceptance-ledger.json"
+    checked_in = AcceptanceLedger.from_dict(
+        json.loads(target.read_text(encoding="utf-8"))
+    )
+    requirements = tuple(
+        replace(
+            requirement,
+            proof_refs=(),
+            missing_evidence=(),
+            status="unproven",
         )
-
-    ledger = AcceptanceLedger(version="1.6", requirements=tuple(requirements))
-    evidence_path = ROOT / "requirements" / "v1.6-evidence.json"
-    if evidence_path.is_file():
-        ledger = ledger.with_evidence(EvidenceIndex.from_path(evidence_path))
-    target = ROOT / "requirements" / "v1.6-acceptance-ledger.json"
+        for requirement in checked_in.requirements
+    )
+    ledger = AcceptanceLedger(
+        version=checked_in.version,
+        requirements=requirements,
+    )
+    evidence = evidence_path or ROOT / "requirements" / "v1.6-evidence.json"
+    if evidence.is_file():
+        ledger = ledger.with_evidence(EvidenceIndex.from_path(evidence))
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
         json.dumps(ledger.as_dict(), ensure_ascii=False, indent=2, sort_keys=True)

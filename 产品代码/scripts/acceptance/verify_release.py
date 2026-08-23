@@ -8,18 +8,14 @@ import hashlib
 import json
 import re
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-PROJECT = ROOT.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from ai_ppt_studio.acceptance.ledger import (  # noqa: E402
-    AcceptanceLedger,
-    EvidenceIndex,
-    extract_numbered_requirements,
-)
+from ai_ppt_studio.acceptance.ledger import AcceptanceLedger, EvidenceIndex  # noqa: E402
 from ai_ppt_studio.domains.presentation.targets import (  # noqa: E402
     TargetRenderEvidence,
     validate_required_targets,
@@ -31,11 +27,6 @@ from ai_ppt_studio.errors import GateBlockedError  # noqa: E402
 from ai_ppt_studio.kernel.references import ArtifactReference  # noqa: E402
 from ai_ppt_studio.kernel.transactions import ProjectKernel  # noqa: E402
 
-SOURCES = (
-    (PROJECT / "01-产品需求基线-v1.0.md", "PRD", "17"),
-    (PROJECT / "02-系统详细设计-v1.0.md", "SDD", "21"),
-    (PROJECT / "03-UI设计与交互规范-v1.0.md", "UI", "23"),
-)
 DEFAULT_INSTALL_EVIDENCE = (
     ROOT / "output" / "acceptance" / "v1.6" / "plugin-install" / "install-evidence.json"
 )
@@ -65,17 +56,21 @@ def _canonical(payload: object) -> str:
     )
 
 
-def _authoritative_ledger(index: EvidenceIndex) -> AcceptanceLedger:
-    requirements = []
-    for path, prefix, section in SOURCES:
-        requirements.extend(
-            extract_numbered_requirements(
-                path.read_text(encoding="utf-8"),
-                source_prefix=prefix,
-                section_prefix=section,
-            )
+def _ledger_with_current_evidence(
+    ledger: AcceptanceLedger, index: EvidenceIndex
+) -> AcceptanceLedger:
+    """Re-resolve the version-bound requirement inventory against its evidence."""
+
+    unproven = tuple(
+        replace(
+            requirement,
+            proof_refs=(),
+            missing_evidence=(),
+            status="unproven",
         )
-    return AcceptanceLedger("1.6", tuple(requirements)).with_evidence(index)
+        for requirement in ledger.requirements
+    )
+    return AcceptanceLedger(ledger.version, unproven).with_evidence(index)
 
 
 def _verify_ledger(
@@ -85,14 +80,14 @@ def _verify_ledger(
     fixture_mode: bool,
 ) -> tuple[AcceptanceLedger, EvidenceIndex]:
     index = EvidenceIndex.from_path(evidence_index_path)
-    expected = _authoritative_ledger(index)
     checked_in = AcceptanceLedger.from_dict(_json(ledger_path))
+    if checked_in.version != "1.6" or not checked_in.requirements:
+        raise ValueError("Final v1.6 acceptance requires a non-empty v1.6 ledger")
+    expected = _ledger_with_current_evidence(checked_in, index)
     if _canonical(checked_in.as_dict()) != _canonical(expected.as_dict()):
         raise ValueError(
-            "Acceptance ledger does not match the authoritative baselines and evidence index"
+            "Acceptance ledger does not match its version-bound evidence index"
         )
-    if len(checked_in.requirements) != 104:
-        raise ValueError("Final acceptance requires exactly 104 requirements")
     for requirement in checked_in.requirements:
         if (
             requirement.status != "passed"

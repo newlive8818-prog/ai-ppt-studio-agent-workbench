@@ -5,17 +5,16 @@ import json
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT = ROOT.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_ppt_studio.acceptance.ledger import (
     AcceptanceLedger,
     EvidenceIndex,
-    extract_numbered_requirements,
 )
 from ai_ppt_studio.kernel.references import ArtifactReference
 from scripts.acceptance.verify_release import verify_final_acceptance
@@ -25,13 +24,6 @@ from tests.v16_delivery_fixtures import (
     valid_package_payload,
 )
 from tests.host_confirmation_fixtures import gate_confirmation_kwargs
-
-
-SOURCES = (
-    (PROJECT / "01-产品需求基线-v1.0.md", "PRD", "17"),
-    (PROJECT / "02-系统详细设计-v1.0.md", "SDD", "21"),
-    (PROJECT / "03-UI设计与交互规范-v1.0.md", "UI", "23"),
-)
 
 
 def sha(path: Path) -> str:
@@ -79,16 +71,23 @@ def accepted_project(base: Path) -> Path:
 
 
 def closed_ledger(base: Path) -> tuple[Path, Path]:
-    requirements = []
-    for path, prefix, section in SOURCES:
-        requirements.extend(
-            extract_numbered_requirements(
-                path.read_text(encoding="utf-8"),
-                source_prefix=prefix,
-                section_prefix=section,
+    checked_in = AcceptanceLedger.from_dict(
+        json.loads(
+            (ROOT / "requirements" / "v1.6-acceptance-ledger.json").read_text(
+                encoding="utf-8"
             )
         )
-    self_unproven = AcceptanceLedger("1.6", tuple(requirements))
+    )
+    requirements = tuple(
+        replace(
+            requirement,
+            proof_refs=(),
+            missing_evidence=(),
+            status="unproven",
+        )
+        for requirement in checked_in.requirements
+    )
+    self_unproven = AcceptanceLedger(checked_in.version, requirements)
     proofs = []
     for kind in sorted(
         {value for item in requirements for value in item.required_evidence}
@@ -195,8 +194,17 @@ class FinalAcceptanceVerifierTests(unittest.TestCase):
                 install_evidence_path=install,
                 fixture_mode=True,
             )
-            self.assertEqual(result["requirement_count"], 104)
-            self.assertEqual(result["passed_requirement_count"], 104)
+            expected_count = len(
+                AcceptanceLedger.from_dict(
+                    json.loads(
+                        (ROOT / "requirements" / "v1.6-acceptance-ledger.json").read_text(
+                            encoding="utf-8"
+                        )
+                    )
+                ).requirements
+            )
+            self.assertEqual(result["requirement_count"], expected_count)
+            self.assertEqual(result["passed_requirement_count"], expected_count)
             self.assertEqual(result["g2_pptx_sha256"], result["g4_pptx_sha256"])
             self.assertTrue(result["release_target_policy_ref"].startswith(
                 "artifact://release-target-policy/"

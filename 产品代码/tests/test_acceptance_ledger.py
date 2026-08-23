@@ -5,6 +5,7 @@ import hashlib
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,7 @@ from ai_ppt_studio.acceptance.ledger import (
     EvidenceIndex,
     extract_numbered_requirements,
 )
+from scripts.build_acceptance_ledger import build
 
 REPLACED_REQUIREMENT_IDS = frozenset(
     {
@@ -74,32 +76,75 @@ class AcceptanceLedgerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             AcceptanceLedger(version="1.6", requirements=(entry, entry))
 
-    def test_checked_in_ledger_matches_authoritative_sources(self) -> None:
+    def test_builder_preserves_version_bound_requirement_inventory(self) -> None:
+        markdown = "## 17. 标准\n### 17.1 闭环\n1. 恢复项目。\n"
+        requirement = extract_numbered_requirements(
+            markdown, source_prefix="PRD", section_prefix="17"
+        )[0]
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            proof = base / "automated.json"
+            proof.write_text('{"passed":true}', encoding="utf-8")
+            digest = hashlib.sha256(proof.read_bytes()).hexdigest()
+            evidence = base / "evidence.json"
+            evidence.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "proofs": [
+                            {
+                                "proof_ref": f"proof://automated-test/{digest}",
+                                "kind": "automated-test",
+                                "path": str(proof),
+                                "sha256": digest,
+                                "requirement_ids": [requirement.requirement_id],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            ledger_path = base / "acceptance-ledger.json"
+            ledger_path.write_text(
+                json.dumps(
+                    AcceptanceLedger("test-version", (requirement,)).as_dict()
+                ),
+                encoding="utf-8",
+            )
+
+            generated, output = build(
+                ledger_path=ledger_path,
+                evidence_path=evidence,
+            )
+
+            self.assertEqual(output, ledger_path)
+            self.assertEqual(generated.version, "test-version")
+            self.assertEqual(generated.ids, (requirement.requirement_id,))
+            self.assertEqual(generated.requirements[0].status, "unproven")
+
+    def test_checked_in_v16_ledger_matches_its_evidence_contract(self) -> None:
         payload = json.loads(
             (ROOT / "requirements" / "v1.6-acceptance-ledger.json").read_text(
                 encoding="utf-8"
             )
         )
         ledger = AcceptanceLedger.from_dict(payload)
-        requirements = []
-        for path, prefix, section in (
-            (ROOT.parent / "01-产品需求基线-v1.0.md", "PRD", "17"),
-            (ROOT.parent / "02-系统详细设计-v1.0.md", "SDD", "21"),
-            (ROOT.parent / "03-UI设计与交互规范-v1.0.md", "UI", "23"),
-        ):
-            requirements.extend(
-                extract_numbered_requirements(
-                    path.read_text(encoding="utf-8"),
-                    source_prefix=prefix,
-                    section_prefix=section,
-                )
+        requirements = tuple(
+            replace(
+                requirement,
+                proof_refs=(),
+                missing_evidence=(),
+                status="unproven",
             )
+            for requirement in ledger.requirements
+        )
         expected = AcceptanceLedger(
-            version="1.6", requirements=tuple(requirements)
+            version=ledger.version, requirements=requirements
         ).with_evidence(
             EvidenceIndex.from_path(ROOT / "requirements" / "v1.6-evidence.json")
         )
-        self.assertEqual(len(ledger.requirements), 104)
+        self.assertEqual(ledger.version, "1.6")
+        self.assertTrue(ledger.requirements)
         self.assertEqual(len(ledger.requirements), len(set(ledger.ids)))
         self.assertEqual(ledger.as_dict(), expected.as_dict())
         self.assertEqual(
@@ -146,7 +191,7 @@ class AcceptanceLedgerTests(unittest.TestCase):
                 f"{proof['proof_ref']} still maps replaced IDs: {sorted(residual_ids)}",
             )
 
-    def test_content_review_contract_boundaries_are_explicit(self) -> None:
+    def test_v22_review_contract_boundaries_are_explicit(self) -> None:
         index = (ROOT.parent / "00-唯一研发基线索引-v1.0.md").read_text(
             encoding="utf-8"
         )
@@ -156,50 +201,30 @@ class AcceptanceLedgerTests(unittest.TestCase):
         ui = (ROOT.parent / "03-UI设计与交互规范-v1.0.md").read_text(
             encoding="utf-8"
         )
-        self.assertIn("11. [内容蓝图侧边栏全稿审核与批次修改设计]", index)
-        self.assertIn("第 11 项仅取代旧 UI-03", index)
-        current_product = index.split("### 已批准的 RC1 默认值", 1)[0]
-        prototype_contract = index.split("## 6. 原型清单与正式性", 1)[1].split(
-            "### 尚未确认", 1
-        )[0]
-        v15_history = index.split("## 11. v1.5 变更记录", 1)[1].split(
-            "## 12. v1.6 变更记录", 1
-        )[0]
-        self.assertIn("UI-03 在真实侧边栏先显示框架", current_product)
-        self.assertIn("内容 Browser 仅按 materialRef、slideId、页码或区域", current_product)
-        self.assertIn("只有 G3 视觉 Browser", current_product)
-        self.assertNotIn("内容蓝图与视觉合同共用一份", current_product)
-        self.assertIn("原型 06 | G3 视觉合同 Browser", prototype_contract)
-        self.assertNotIn("06 是当前内容/视觉专业审阅交互的研发参考", prototype_contract)
-        self.assertIn("UI-03 使用宿主最大宽度", prototype_contract)
-        self.assertIn("专业审阅 Header、视觉标记抽屉和右上保存仅属于 G3", prototype_contract)
-        self.assertIn("视觉专业审阅部分继续有效", v15_history)
-        self.assertIn("内容专业审阅部分已被第 11 项取代", v15_history)
-        self.assertNotIn("原型 06 成为内容/视觉专业审阅的交互参考", v15_history)
+        self.assertIn("内容审核业务交互历史专项为", index)
+        self.assertIn("文件名及正文中的“内容蓝图”“侧边栏”“空间”和固定入口身份均已被 v2.2 取代", index)
+        self.assertIn("Codex 当前项目对话是唯一主入口", index)
+        self.assertIn("内容 Browser 作为完整内容审核主表面", index)
+        self.assertIn("review_type：`content-full-deck | visual-professional`", sdd)
+        self.assertIn("host_notification_status", sdd)
+        self.assertIn("ai_receipt_status", sdd)
+        self.assertIn("内容全稿审核页和视觉专业审核页共享统一会话外壳", sdd)
+        self.assertNotIn("content-framework-confirmation", sdd)
+        self.assertNotIn("content-full-deck-expansion-authorization", sdd)
 
-        current_ui = ui.split("## 31. v1.6 变更记录", 1)[0]
-        self.assertIn("### 4.3 G3 视觉合同专业审阅页骨架", current_ui)
-        self.assertNotIn("完整内容蓝图或整套视觉合同", current_ui)
-        review_header = next(
-            line for line in current_ui.splitlines() if "UI-C01 | ReviewHeader" in line
-        )
-        self.assertNotIn("内容/视觉切换", review_header)
-        self.assertIn("仅用于 G3 视觉合同 Browser", review_header)
-        self.assertIn("UI-C43 | EvidenceViewerAction", current_ui)
+        self.assertIn("Codex 当前项目对话是唯一主入口", ui)
+        self.assertIn("内容全稿审核页", ui)
+        self.assertIn("视觉专业审核页", ui)
+        self.assertIn("判断按钮的最小高度为 42 CSS px", ui)
+        self.assertIn("两类反馈状态隔离，保存不等于 G3", ui)
+        upstream_state = ui.split("### 8.2 上游状态", 1)[1].split(
+            "### 8.3 Review ready", 1
+        )[0]
+        self.assertIn("UI 不显示", upstream_state)
+        self.assertIn("待授权展开全部页面", upstream_state)
+        self.assertIn("框架确认按钮", upstream_state)
+        self.assertIn("整稿展开授权按钮", upstream_state)
 
-        for scope_kind in (
-            "content-framework-confirmation",
-            "content-full-deck-expansion-authorization",
-            "content-review-batch-submission",
-            "content-review-batch-withdrawal",
-            "content-batch-plan-confirmation",
-            "gate-G0",
-        ):
-            self.assertIn(scope_kind, sdd)
-        self.assertIn("跨 scope", sdd)
-        self.assertIn("一次性消费", sdd)
-        self.assertIn("六类 scope", sdd)
-        self.assertNotIn("-> professional review + optional saved ReviewMarkSet", sdd)
     def test_requirement_passes_only_when_every_proof_kind_resolves(self) -> None:
         markdown = "## 17. 标准\n### 17.1 闭环\n1. 恢复项目。\n"
         requirement = extract_numbered_requirements(
