@@ -18,6 +18,7 @@ from ai_ppt_studio.kernel.transactions import ProjectKernel
 from tests.v16_visual_fixtures import (
     confirmed_g0,
     passing_visual_review,
+    prepared_g1_anchor,
     prepared_g2,
     prepared_visual_contracts,
     valid_visual_brief,
@@ -395,7 +396,7 @@ class V16VisualBridgeTests(unittest.TestCase):
         for action, label, wrong_kind, wrong_role in cases:
             with self.subTest(action=action), tempfile.TemporaryDirectory() as temp:
                 project = Path(temp)
-                visual, revision, refs = prepared_g2(project, slide_count=2)
+                visual, revision, refs = prepared_g1_anchor(project, slide_count=2)
                 requested = dispatch_v16({
                     "operation": "request-agent-action",
                     "project_root": str(project),
