@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import json
 import sys
 import tempfile
@@ -18,6 +19,10 @@ from ai_ppt_studio.errors import (  # noqa: E402
 )
 from ai_ppt_studio.kernel.references import ArtifactReference  # noqa: E402
 from ai_ppt_studio.kernel.transactions import ProjectKernel  # noqa: E402
+from ai_ppt_studio.application.content_service import ContentService  # noqa: E402
+from ai_ppt_studio.application.mission_readiness import (  # noqa: E402
+    MissionReadinessPolicy,
+)
 from tests.test_v22_content_contracts import (  # noqa: E402
     MATERIAL_MODES,
     valid_blueprint,
@@ -37,6 +42,19 @@ def service_type() -> type[Any]:
     candidate = getattr(module, "PresalesContentService", None)
     if not isinstance(candidate, type):
         raise AssertionError("missing v2.2 PresalesContentService")
+    return candidate
+
+
+def application_service_type(module_name: str, class_name: str) -> type[Any]:
+    try:
+        module = importlib.import_module(
+            f"ai_ppt_studio.application.{module_name}"
+        )
+    except ModuleNotFoundError as exc:
+        raise AssertionError(f"missing v2.2 {class_name}") from exc
+    candidate = getattr(module, class_name, None)
+    if not isinstance(candidate, type):
+        raise AssertionError(f"missing v2.2 {class_name}")
     return candidate
 
 
@@ -204,6 +222,139 @@ class PresalesChiefServiceTests(unittest.TestCase):
             after = kernel.load()
             self.assertEqual(after.revision, before.revision)
             self.assertEqual(after.artifact_heads, before.artifact_heads)
+
+
+class MissionMaterialAndFeedbackBoundaryTests(unittest.TestCase):
+    mission = {
+        "topic": "经营审批协同",
+        "primary_audience": "业务负责人",
+        "desired_judgment_or_action": "确认一期联合验证范围",
+    }
+    materials = {
+        "sources": [
+            {
+                "source_id": "source-1",
+                "origin": "user-provided",
+                "kind": "text",
+                "locator": "inline://source-1",
+                "sha256": "a" * 64,
+            }
+        ]
+    }
+
+    def test_formal_mission_service_confirms_only_the_three_v22_modes(self) -> None:
+        service_class = application_service_type(
+            "mission_material_service", "MissionMaterialService"
+        )
+        for mode in MATERIAL_MODES:
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temp:
+                kernel = ProjectKernel.initialize(Path(temp), project_id=f"mission-{mode}")
+                service = service_class(kernel)
+                draft_ref = service.save_mission_draft(
+                    "draft", kernel.load().revision, self.mission
+                )
+                materials_ref = ""
+                if mode != "proposal-led":
+                    materials_ref = service.register_materials(
+                        "materials", kernel.load().revision, self.materials
+                    )
+                service.confirm_mission(
+                    "confirm",
+                    kernel.load().revision,
+                    mission_draft_ref=draft_ref,
+                    material_mode=mode,
+                    material_inventory_ref=materials_ref,
+                    user_action_ref=f"test-user-action://confirm-{mode}",
+                    user_message_ref="",
+                )
+                ready = MissionReadinessPolicy(kernel).require_ready()
+                self.assertEqual(ready.content_identity_mode, mode)
+
+    def test_formal_mission_service_rejects_legacy_material_modes(self) -> None:
+        service_class = application_service_type(
+            "mission_material_service", "MissionMaterialService"
+        )
+        for legacy_mode in ("materials-provided", "no-materials-confirmed"):
+            with self.subTest(mode=legacy_mode), tempfile.TemporaryDirectory() as temp:
+                kernel = ProjectKernel.initialize(Path(temp), project_id="legacy-mode")
+                service = service_class(kernel)
+                draft_ref = service.save_mission_draft("draft", 0, self.mission)
+                before = kernel.load()
+                with self.assertRaisesRegex(Exception, "v2.2 material mode"):
+                    service.confirm_mission(
+                        "confirm",
+                        before.revision,
+                        mission_draft_ref=draft_ref,
+                        material_mode=legacy_mode,
+                        material_inventory_ref="",
+                        user_action_ref="test-user-action://legacy-mode",
+                        user_message_ref="",
+                    )
+                self.assertEqual(kernel.load().revision, before.revision)
+
+    def test_feedback_service_owns_capture_govern_and_decide(self) -> None:
+        feedback_class = application_service_type(
+            "feedback_service", "FeedbackService"
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            kernel = ProjectKernel.initialize(Path(temp), project_id="feedback-v22")
+            state = kernel.commit(
+                command_id="seed-target",
+                expected_revision=0,
+                event_type="test.seed-target",
+                artifact_updates={
+                    "content/reading-deck-blueprint": (
+                        "reading-deck-blueprint",
+                        {"project_id": "feedback-v22"},
+                    )
+                },
+            )
+            target_ref = state.artifact_heads["content/reading-deck-blueprint"]
+            service = feedback_class(kernel)
+            raw_ref = service.capture_feedback(
+                "capture",
+                state.revision,
+                {"raw_feedback": "调整问题说明", "target_refs": [target_ref]},
+            )
+            governed_ref = service.govern_feedback(
+                "govern",
+                kernel.load().revision,
+                {
+                    "raw_feedback_ref": raw_ref,
+                    "feedback_level": "F2",
+                    "diagnosis": "当前问题说明不够完整",
+                    "scope": "page-family",
+                    "counterexamples": ["事实页不应扩大结论"],
+                    "ai_recommendation": "补充约束和未知",
+                    "preserve_refs": [target_ref],
+                },
+            )
+            decided_ref = service.decide_feedback(
+                "decide",
+                kernel.load().revision,
+                governed_ref,
+                "follow-ai-recommendation",
+            )
+            self.assertEqual(
+                kernel.load().artifact_heads["feedback/governance"],
+                decided_ref,
+            )
+
+    def test_legacy_content_service_methods_are_thin_compatibility_delegates(self) -> None:
+        method_targets = {
+            "save_mission_draft": "MissionMaterialService",
+            "confirm_mission": "MissionMaterialService",
+            "register_materials": "MissionMaterialService",
+            "capture_feedback": "FeedbackService",
+            "govern_feedback": "FeedbackService",
+            "decide_feedback": "FeedbackService",
+            "create_content_change_set": "FeedbackService",
+        }
+        for method_name, target in method_targets.items():
+            with self.subTest(method=method_name):
+                source = inspect.getsource(getattr(ContentService, method_name))
+                self.assertIn(target, source)
+                self.assertNotIn("kernel.commit", source)
 
     def test_gate_reviewer_cannot_write_content_and_failure_is_zero_write(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

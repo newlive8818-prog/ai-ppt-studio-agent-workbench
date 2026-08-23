@@ -14,7 +14,17 @@ REQUIRED_FIELDS = (
 
 
 MATERIAL_MODES = frozenset(
-    {"materials-provided", "no-materials-confirmed"}
+    {
+        "material-backed",
+        "mixed-evidence",
+        "proposal-led",
+        "materials-provided",
+        "no-materials-confirmed",
+    }
+)
+
+MATERIAL_BOUND_MODES = frozenset(
+    {"material-backed", "mixed-evidence", "materials-provided"}
 )
 
 
@@ -90,11 +100,11 @@ def validate_mission_confirmation(payload: dict[str, Any]) -> dict[str, Any]:
         "confirmed_at": confirmed_at,
         "status": "confirmed",
     }
-    if material_mode == "materials-provided":
+    if material_mode in MATERIAL_BOUND_MODES:
         material_ref = str(payload.get("material_inventory_ref") or "").strip()
         if not material_ref:
             raise ContractValidationError(
-                "materials-provided confirmation requires material_inventory_ref"
+                "material-backed confirmation requires material_inventory_ref"
             )
         normalized["material_inventory_ref"] = material_ref
         normalized.pop("empty_material_identity", None)

@@ -17,18 +17,6 @@ from ai_ppt_studio.domains.content.contracts import (
     validate_content_stage,
     validate_content_review,
 )
-from ai_ppt_studio.domains.materials.contracts import (
-    validate_material_inventory,
-)
-from ai_ppt_studio.domains.mission.contracts import (
-    validate_mission_confirmation,
-    validate_mission_draft,
-)
-from ai_ppt_studio.domains.feedback.contracts import (
-    decide_feedback as apply_feedback_decision,
-    validate_feedback_governance,
-    validate_raw_feedback,
-)
 from ai_ppt_studio.domains.content.review_contracts import (
     validate_content_blueprint,
     validate_content_review_batch,
@@ -38,7 +26,6 @@ from ai_ppt_studio.errors import (
     ConfirmationTransactionError,
     ContentWorkflowError,
     ContractValidationError,
-    FeedbackGovernanceError,
     GateBlockedError,
 )
 from ai_ppt_studio.application.gate_evaluator import GateEvaluator
@@ -204,18 +191,13 @@ class ContentService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
-        state = self.kernel.commit(
-            command_id=command_id,
-            expected_revision=expected_revision,
-            event_type="mission.draft-saved",
-            artifact_updates={
-                "mission/draft": (
-                    "mission-draft",
-                    validate_mission_draft(payload),
-                )
-            },
+        from ai_ppt_studio.application.mission_material_service import (
+            MissionMaterialService,
         )
-        return state.artifact_heads["mission/draft"]
+
+        return MissionMaterialService(
+            self.kernel, allow_legacy_modes=True
+        ).save_mission_draft(command_id, expected_revision, payload)
 
     def register_mission(
         self,
@@ -225,7 +207,13 @@ class ContentService:
     ) -> str:
         """Compatibility entry point with MissionDraft-only semantics."""
 
-        return self.save_mission_draft(command_id, expected_revision, payload)
+        from ai_ppt_studio.application.mission_material_service import (
+            MissionMaterialService,
+        )
+
+        return MissionMaterialService(
+            self.kernel, allow_legacy_modes=True
+        ).register_mission(command_id, expected_revision, payload)
 
     def confirm_mission(
         self,
@@ -238,66 +226,21 @@ class ContentService:
         user_action_ref: str,
         user_message_ref: str,
     ) -> str:
-        draft_ref = self._require_exact_ref(
-            mission_draft_ref, "mission/draft", "mission-draft"
-        )
-        draft = self.kernel.artifacts.resolve(
-            ArtifactReference.parse(draft_ref)
-        )["payload"]
-        from ai_ppt_studio.errors import (
-            MaterialModeUnconfirmedError,
-            MissionNotConfirmedError,
+        from ai_ppt_studio.application.mission_material_service import (
+            MissionMaterialService,
         )
 
-        if draft.get("status") != "confirmable":
-            raise MissionNotConfirmedError(
-                "MISSION_NOT_CONFIRMED: MissionDraft is not confirmable"
-            )
-        mode = material_mode.strip()
-        policy = MissionReadinessPolicy(self.kernel)
-        payload: dict[str, Any] = {
-            "mission_draft_ref": draft_ref,
-            "material_mode": mode,
-            "user_action_ref": user_action_ref.strip(),
-            "user_message_ref": user_message_ref.strip(),
-            "revision": expected_revision,
-            "confirmed_at": datetime.now(timezone.utc).isoformat(),
-        }
-        if mode == "materials-provided":
-            current = self.kernel.load().artifact_heads.get("materials", "")
-            if not current or material_inventory_ref != current:
-                raise MaterialModeUnconfirmedError(
-                    "MATERIAL_MODE_UNCONFIRMED: current material inventory is required"
-                )
-            self._require_exact_ref(
-                current, "materials", "material-inventory"
-            )
-            payload["material_inventory_ref"] = current
-        elif mode == "no-materials-confirmed":
-            if self.kernel.load().artifact_heads.get("materials"):
-                raise MaterialModeUnconfirmedError(
-                    "MATERIAL_MODE_UNCONFIRMED: materials already exist"
-                )
-            payload["empty_material_identity"] = policy.empty_material_identity(
-                draft_ref
-            )
-        else:
-            raise MaterialModeUnconfirmedError(
-                "MATERIAL_MODE_UNCONFIRMED: choose materials-provided or no-materials-confirmed"
-            )
-        normalized = validate_mission_confirmation(payload)
-        state = self.kernel.commit(
-            command_id=command_id,
-            expected_revision=expected_revision,
-            event_type="mission.confirmed",
-            artifact_updates={
-                "mission/confirmation": (
-                    "mission-confirmation",
-                    normalized,
-                )
-            },
+        return MissionMaterialService(
+            self.kernel, allow_legacy_modes=True
+        ).confirm_mission(
+            command_id,
+            expected_revision,
+            mission_draft_ref=mission_draft_ref,
+            material_mode=material_mode,
+            material_inventory_ref=material_inventory_ref,
+            user_action_ref=user_action_ref,
+            user_message_ref=user_message_ref,
         )
-        return state.artifact_heads["mission/confirmation"]
 
     def register_materials(
         self,
@@ -305,18 +248,13 @@ class ContentService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
-        state = self.kernel.commit(
-            command_id=command_id,
-            expected_revision=expected_revision,
-            event_type="materials.registered",
-            artifact_updates={
-                "materials": (
-                    "material-inventory",
-                    validate_material_inventory(payload),
-                )
-            },
+        from ai_ppt_studio.application.mission_material_service import (
+            MissionMaterialService,
         )
-        return state.artifact_heads["materials"]
+
+        return MissionMaterialService(
+            self.kernel, allow_legacy_modes=True
+        ).register_materials(command_id, expected_revision, payload)
 
     def register_content_stage(
         self,
@@ -643,16 +581,11 @@ class ContentService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
-        normalized = validate_raw_feedback(payload)
-        for value in normalized["target_refs"]:
-            self.kernel.artifacts.resolve(ArtifactReference.parse(value))
-        state = self.kernel.commit(
-            command_id=command_id,
-            expected_revision=expected_revision,
-            event_type="feedback.captured",
-            artifact_updates={"feedback/raw": ("raw-feedback", normalized)},
+        from ai_ppt_studio.application.feedback_service import FeedbackService
+
+        return FeedbackService(self.kernel).capture_feedback(
+            command_id, expected_revision, payload
         )
-        return state.artifact_heads["feedback/raw"]
 
     def govern_feedback(
         self,
@@ -660,23 +593,11 @@ class ContentService:
         expected_revision: int,
         payload: dict[str, Any],
     ) -> str:
-        normalized = validate_feedback_governance(payload)
-        raw_ref = normalized["raw_feedback_ref"]
-        self._require_exact_ref(raw_ref, "feedback/raw", "raw-feedback")
-        for value in normalized["preserve_refs"]:
-            self.kernel.artifacts.resolve(ArtifactReference.parse(value))
-        state = self.kernel.commit(
-            command_id=command_id,
-            expected_revision=expected_revision,
-            event_type="feedback.governed",
-            artifact_updates={
-                "feedback/governance": (
-                    "feedback-governance-record",
-                    normalized,
-                )
-            },
+        from ai_ppt_studio.application.feedback_service import FeedbackService
+
+        return FeedbackService(self.kernel).govern_feedback(
+            command_id, expected_revision, payload
         )
-        return state.artifact_heads["feedback/governance"]
 
     def decide_feedback(
         self,
@@ -685,27 +606,11 @@ class ContentService:
         governance_ref: str,
         choice: str,
     ) -> str:
-        self._require_exact_ref(
-            governance_ref,
-            "feedback/governance",
-            "feedback-governance-record",
+        from ai_ppt_studio.application.feedback_service import FeedbackService
+
+        return FeedbackService(self.kernel).decide_feedback(
+            command_id, expected_revision, governance_ref, choice
         )
-        current = self.kernel.artifacts.resolve(
-            ArtifactReference.parse(governance_ref)
-        )["payload"]
-        decided = apply_feedback_decision(current, choice)
-        state = self.kernel.commit(
-            command_id=command_id,
-            expected_revision=expected_revision,
-            event_type="feedback.decision-recorded",
-            artifact_updates={
-                "feedback/governance": (
-                    "feedback-governance-record",
-                    decided,
-                )
-            },
-        )
-        return state.artifact_heads["feedback/governance"]
 
     def create_content_change_set(
         self,
@@ -714,103 +619,14 @@ class ContentService:
         governance_ref: str,
         plan_confirmation_ref: str = "",
     ) -> str:
-        current_confirmation = self.kernel.load().artifact_heads.get(
-            "content/batch-plan-confirmation", ""
-        )
-        if (
-            not plan_confirmation_ref
-            or plan_confirmation_ref != current_confirmation
-        ):
-            raise ContentWorkflowError(
-                "CONTENT_BATCH_PLAN_NOT_CONFIRMED",
-                "CONTENT_BATCH_PLAN_NOT_CONFIRMED: ContentChangeSet requires "
-                "the current exact whole-deck plan confirmation",
-                {
-                    "current_plan_confirmation_ref": current_confirmation,
-                    "provided_plan_confirmation_ref": plan_confirmation_ref,
-                },
-            )
-        try:
-            self._require_exact_ref(
-                governance_ref,
-                "feedback/governance",
-                "feedback-governance-record",
-            )
-        except ArtifactReferenceError as exc:
-            raise FeedbackGovernanceError(
-                "ContentChangeSet requires the current governed feedback record"
-            ) from exc
-        governance = self.kernel.artifacts.resolve(
-            ArtifactReference.parse(governance_ref)
-        )["payload"]
-        if governance.get("plan_confirmation_ref") != plan_confirmation_ref:
-            raise ContentWorkflowError(
-                "CONTENT_BATCH_PLAN_NOT_CONFIRMED",
-                "CONTENT_BATCH_PLAN_NOT_CONFIRMED: governance is not bound "
-                "to the current exact plan confirmation",
-                {"governance_ref": governance_ref},
-            )
-        from ai_ppt_studio.application.content_batch_planning_service import (
-            ContentBatchPlanningService,
-        )
+        from ai_ppt_studio.application.feedback_service import FeedbackService
 
-        confirmation = ContentBatchPlanningService(
-            self.kernel
-        ).require_current_plan_confirmation(plan_confirmation_ref)
-        plan_ref = str(governance.get("revision_plan_ref") or "")
-        if (
-            confirmation.get("revision_plan_ref") != plan_ref
-            or self.kernel.load().artifact_heads.get(
-                "content/batch-revision-plan"
-            )
-            != plan_ref
-        ):
-            raise ContentWorkflowError(
-                "CONTENT_BATCH_PLAN_NOT_CONFIRMED",
-                "CONTENT_BATCH_PLAN_NOT_CONFIRMED: governance and current "
-                "confirmation do not bind the same revision plan",
-                {"governance_ref": governance_ref},
-            )
-        plan = self.kernel.artifacts.resolve(
-            ArtifactReference.parse(plan_ref)
-        )["payload"]
-        if governance.get("status") != "executable":
-            raise FeedbackGovernanceError(
-                "Feedback requires governance and any mandatory user decision"
-            )
-        raw = self.kernel.artifacts.resolve(
-            ArtifactReference.parse(governance["raw_feedback_ref"])
-        )["payload"]
-        choice = governance.get("user_decision")
-        governed_intent = (
-            raw["raw_feedback"]
-            if choice == "follow-user-instruction"
-            else governance["ai_recommendation"]
+        return FeedbackService(self.kernel).create_content_change_set(
+            command_id,
+            expected_revision,
+            governance_ref,
+            plan_confirmation_ref,
         )
-        change = {
-            "feedback_governance_record_ref": governance_ref,
-            "governed_intent": governed_intent,
-            "target_refs": raw["target_refs"],
-            "preserve_refs": governance["preserve_refs"],
-            "scope": governance["scope"],
-            "required_role_runs": ["content-repair-specialist"],
-            "review_route": governance["full_deck_re_review_route"],
-            "affected_refs": list(governance["affected_refs"]),
-            "review_batch_ref": governance["review_batch_ref"],
-            "revision_plan_ref": plan_ref,
-            "plan_confirmation_ref": plan_confirmation_ref,
-            "source_blueprint_ref": plan["source_version"],
-            "status": "ready",
-        }
-        state = self.kernel.commit(
-            command_id=command_id,
-            expected_revision=expected_revision,
-            event_type="content.change-set-created",
-            artifact_updates={
-                "content/change-set": ("content-change-set", change)
-            },
-        )
-        return state.artifact_heads["content/change-set"]
 
     def commit_public_artifact(
         self,

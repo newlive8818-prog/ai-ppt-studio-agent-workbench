@@ -60,7 +60,11 @@ class MissionReadinessPolicy:
             )
         mode = str(confirmation.get("material_mode") or "")
         current_materials = state.artifact_heads.get("materials", "")
-        if mode == "materials-provided":
+        if mode in {
+            "material-backed",
+            "mixed-evidence",
+            "materials-provided",
+        }:
             confirmed_materials = str(
                 confirmation.get("material_inventory_ref") or ""
             )
@@ -73,10 +77,12 @@ class MissionReadinessPolicy:
                 mission_draft_ref=draft_ref,
                 mission_confirmation_ref=confirmation_ref,
                 material_mode=mode,
-                content_identity_mode="material-backed",
+                content_identity_mode=(
+                    "material-backed" if mode == "materials-provided" else mode
+                ),
                 material_inventory_ref=current_materials,
             )
-        if mode == "no-materials-confirmed":
+        if mode in {"proposal-led", "no-materials-confirmed"}:
             expected_empty = self.empty_material_identity(draft_ref)
             if current_materials or confirmation.get(
                 "empty_material_identity"
@@ -88,7 +94,11 @@ class MissionReadinessPolicy:
                 mission_draft_ref=draft_ref,
                 mission_confirmation_ref=confirmation_ref,
                 material_mode=mode,
-                content_identity_mode="proposal-only",
+                content_identity_mode=(
+                    "proposal-only"
+                    if mode == "no-materials-confirmed"
+                    else "proposal-led"
+                ),
                 empty_material_identity=expected_empty,
             )
         raise MaterialModeUnconfirmedError(
