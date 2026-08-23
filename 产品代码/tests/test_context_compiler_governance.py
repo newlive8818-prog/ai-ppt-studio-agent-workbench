@@ -37,6 +37,78 @@ def make_project(base: Path, name: str = "测试项目"):
 
 
 class ContextCompilerGovernanceTests(unittest.TestCase):
+    def test_presales_chief_context_excludes_legacy_persuasion_and_workflow(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = make_project(Path(temp), name="总师上下文项目")
+            state = project.load()
+            project.commit(
+                command_id="seed-v22-chief-context",
+                expected_revision=state.revision,
+                event_type="test.seed-v22-chief-context",
+                artifact_updates={
+                    "mission/draft": (
+                        "mission-draft",
+                        {
+                            "topic": "经营审批协同",
+                            "primary_audience": "业务负责人",
+                            "desired_judgment_or_action": "接受供应商结论",
+                        },
+                    ),
+                    "materials": (
+                        "material-inventory",
+                        {"sources": []},
+                    ),
+                    "content/framework-draft": (
+                        "content-framework",
+                        {"persuasion_proposition": "旧说服命题"},
+                    ),
+                    "content/presales-evidence-book": (
+                        "presales-evidence-book",
+                        {"source_version": "source-v2"},
+                    ),
+                },
+            )
+            state = project.load()
+            pack = ContextCompiler(project).compile_role_task(
+                role_id="presales-solution-chief",
+                task_type="build-reading-deck-blueprint",
+                project_revision=state.revision,
+                target_refs=[
+                    state.artifact_heads["mission/draft"],
+                    state.artifact_heads["materials"],
+                    state.artifact_heads["content/presales-evidence-book"],
+                ],
+                instructions="继续建立完整阅读内容",
+            )
+
+            serialized = json.dumps(pack, ensure_ascii=False)
+            self.assertNotIn("desired_judgment", serialized)
+            self.assertNotIn("接受供应商结论", serialized)
+            self.assertNotIn("persuasion_proposition", serialized)
+            self.assertNotIn("旧说服命题", serialized)
+            self.assertNotIn("content_workflow", pack["layers"])
+            workflow = pack["layers"]["presales_content_workflow"]
+            self.assertEqual(
+                set(workflow),
+                {
+                    "source_version",
+                    "evidence_book_ref",
+                    "decision_context_ref",
+                    "problem_solution_fit_ref",
+                    "reading_blueprint_ref",
+                    "evidence_gate_ref",
+                    "reading_gate_ref",
+                    "review_batch_ref",
+                    "revision_plan_ref",
+                },
+            )
+            active = pack["layers"]["current_state"]["active_head_refs"]
+            self.assertNotIn("content/framework-draft", active)
+            self.assertEqual(
+                active["content/presales-evidence-book"],
+                state.artifact_heads["content/presales-evidence-book"],
+            )
+
     def test_formal_strategy_context_uses_only_policy_active_heads(self) -> None:
         with tempfile.TemporaryDirectory() as temp, patch.dict(
             os.environ, {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET}, clear=False
@@ -86,23 +158,26 @@ class ContextCompilerGovernanceTests(unittest.TestCase):
             self.assertEqual(workflow["batch_revision_plan_ref"], "")
             self.assertEqual(workflow["batch_plan_confirmation_ref"], "")
 
-    def test_content_workflow_layer_is_total_without_fabricated_refs(self) -> None:
+    def test_presales_content_workflow_is_total_without_fabricated_refs(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = make_project(Path(temp))
             pack = ContextCompiler(project).compile_role_task(
-                role_id="presales-content-strategist",
-                task_type="build-strategy",
+                role_id="presales-solution-chief",
+                task_type="build-reading-deck-blueprint",
                 project_revision=project.load().revision,
                 target_refs=[],
                 instructions="先讨论框架",
             )
-            self.assertEqual(pack["layers"]["content_workflow"], {
-                "framework_ref": "",
-                "framework_confirmation_ref": "",
-                "full_deck_expansion_authorization_ref": "",
+            self.assertEqual(pack["layers"]["presales_content_workflow"], {
+                "source_version": "",
+                "evidence_book_ref": "",
+                "decision_context_ref": "",
+                "problem_solution_fit_ref": "",
+                "reading_blueprint_ref": "",
+                "evidence_gate_ref": "",
+                "reading_gate_ref": "",
                 "review_batch_ref": "",
-                "batch_revision_plan_ref": "",
-                "batch_plan_confirmation_ref": "",
+                "revision_plan_ref": "",
             })
 
     def test_framework_context_excludes_all_formal_page_content_heads(self) -> None:
@@ -216,8 +291,8 @@ class ContextCompilerGovernanceTests(unittest.TestCase):
             project = make_project(Path(temp))
             compiler = ContextCompiler(project)
             pack = compiler.compile_role_task(
-                role_id="presales-content-strategist",
-                task_type="build-strategy",
+                role_id="presales-solution-chief",
+                task_type="build-reading-deck-blueprint",
                 project_revision=project.load().revision,
                 target_refs=[],
                 instructions="",
@@ -246,8 +321,8 @@ class ContextCompilerGovernanceTests(unittest.TestCase):
             project = make_project(Path(temp))
             compiler = ContextCompiler(project)
             pack = compiler.compile_role_task(
-                role_id="presales-content-strategist",
-                task_type="build-strategy",
+                role_id="presales-solution-chief",
+                task_type="build-reading-deck-blueprint",
                 project_revision=project.load().revision,
                 target_refs=[],
                 instructions="",
@@ -262,8 +337,8 @@ class ContextCompilerGovernanceTests(unittest.TestCase):
             project = make_project(Path(temp))
             compiler = ContextCompiler(project)
             pack = compiler.compile_role_task(
-                role_id="content-fact-checker",
-                task_type="review-content",
+                role_id="content-evidence-gate-reviewer",
+                task_type="run-content-evidence-gate",
                 project_revision=project.load().revision,
                 target_refs=[],
                 instructions="",
@@ -352,8 +427,8 @@ class ContextCompilerGovernanceTests(unittest.TestCase):
             compiler = ContextCompiler(project)
             # 直接带 raw_feedback 字段的 payload 不应出现在生产层
             pack = compiler.compile_role_task(
-                role_id="presales-content-strategist",
-                task_type="build-strategy",
+                role_id="presales-solution-chief",
+                task_type="build-reading-deck-blueprint",
                 project_revision=project.load().revision,
                 target_refs=[],
                 instructions="修改客户需求",

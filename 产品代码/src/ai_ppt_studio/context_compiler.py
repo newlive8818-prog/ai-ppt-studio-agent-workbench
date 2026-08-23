@@ -32,6 +32,27 @@ FOUR_TARGETS = (
     "windows-wps",
 )
 
+V22_CONTENT_ROLE_IDS = frozenset(
+    {
+        "presales-solution-chief",
+        "content-evidence-gate-reviewer",
+        "content-presales-reading-gate-reviewer",
+    }
+)
+V22_CONTENT_HEAD_SLOTS = (
+    "mission/draft",
+    "mission/confirmation",
+    "materials",
+    "content/presales-evidence-book",
+    "content/customer-decision-context",
+    "content/problem-solution-fit-map",
+    "content/reading-deck-blueprint",
+    "content/gate/evidence",
+    "content/gate/presales-reading",
+    "content/review-batch",
+    "content/batch-revision-plan",
+)
+
 class ContextCompiler:
     """Build the minimum governed context required by one formal role task."""
 
@@ -56,8 +77,13 @@ class ContextCompiler:
             raise WorkbenchValidationError(
                 "Context Pack project_revision must equal the current revision"
             )
-        role = RoleRegistry.default().get(role_id)
         action_contract = content_action_contract(task_type)
+        try:
+            role = RoleRegistry.default().get(role_id)
+        except KeyError:
+            if action_contract is None:
+                raise
+            role = RoleRegistry.legacy().get(role_id)
         if action_contract is not None:
             if role_id != action_contract.role_id:
                 raise WorkbenchValidationError(
@@ -121,7 +147,11 @@ class ContextCompiler:
                 "preflight_evidence_forbidden": True,
                 "deferred_compatibility_claims_forbidden": True,
             }
-        repair = task_type in {"repair-content", "govern-feedback"}
+        repair = task_type in {
+            "repair-content",
+            "repair-reading-deck-blueprint",
+            "govern-feedback",
+        }
         repair_contract = {
             "required": repair,
             "failure_conditions": list(failure_conditions or []),
@@ -149,6 +179,38 @@ class ContextCompiler:
                 "content/batch-plan-confirmation", ""
             ),
         }
+        presales_content_workflow = {
+            "source_version": str(
+                self._optional_payload(
+                    "content/presales-evidence-book", "presales-evidence-book"
+                ).get("source_version")
+                or ""
+            ),
+            "evidence_book_ref": state.artifact_heads.get(
+                "content/presales-evidence-book", ""
+            ),
+            "decision_context_ref": state.artifact_heads.get(
+                "content/customer-decision-context", ""
+            ),
+            "problem_solution_fit_ref": state.artifact_heads.get(
+                "content/problem-solution-fit-map", ""
+            ),
+            "reading_blueprint_ref": state.artifact_heads.get(
+                "content/reading-deck-blueprint", ""
+            ),
+            "evidence_gate_ref": state.artifact_heads.get(
+                "content/gate/evidence", ""
+            ),
+            "reading_gate_ref": state.artifact_heads.get(
+                "content/gate/presales-reading", ""
+            ),
+            "review_batch_ref": state.artifact_heads.get(
+                "content/review-batch", ""
+            ),
+            "revision_plan_ref": state.artifact_heads.get(
+                "content/batch-revision-plan", ""
+            ),
+        }
         if action_contract is not None:
             workflow_keys_by_slot = {
                 "content/framework-draft": "framework_ref",
@@ -171,17 +233,15 @@ class ContextCompiler:
         active_head_slots = (
             set(action_contract.active_head_slots)
             if action_contract is not None
-            else None
+            else (
+                set(V22_CONTENT_HEAD_SLOTS)
+                if role_id in V22_CONTENT_ROLE_IDS
+                else None
+            )
         )
-        return {
-            "schema_version": "3.0",
-            "project_id": state.project_id,
-            "project_revision": project_revision,
-            "artifact_version_refs": list(target_refs),
-            "compiled_at": datetime.now(timezone.utc).isoformat(),
-            "layers": {
+        layers = {
                 "governance": {
-                    "stable_governance_version": "ai-ppt-governance/v1.6",
+                    "stable_governance_version": "ai-ppt-governance/v2.2",
                     "production_route": production_route,
                     "content_before_visual": True,
                     "immutable_references_required": True,
@@ -196,7 +256,7 @@ class ContextCompiler:
                 },
                 "scenario_pack": {
                     "pack_id": pack.pack_id,
-                    "version": "1.0",
+                    "version": "2.2",
                     "scene": pack.scene,
                     "task_type": pack.task_type,
                     "display_name": pack.display_name,
@@ -204,7 +264,7 @@ class ContextCompiler:
                 "role_contract": {
                     "role_id": role.role_id,
                     "display_name": role.display_name,
-                    "version": f"role-contract/{role.role_id}/v1",
+                    "version": f"role-contract/{role.role_id}/v2.2",
                     "authority": role.authority,
                     "isolation_group": role.isolation_group,
                     "can_self_approve": role.can_self_approve,
@@ -212,7 +272,7 @@ class ContextCompiler:
                 },
                 "task_contract": {
                     "task_type": task_type,
-                    "version": f"task-contract/{task_type}/v1",
+                    "version": f"task-contract/{task_type}/v2.2",
                     "target_refs": list(target_refs),
                     "instructions": instructions.strip()[:2000],
                     "expected_deliverable": "governed-content-addressed-artifact",
@@ -251,7 +311,6 @@ class ContextCompiler:
                         for key in (
                             "topic",
                             "primary_audience",
-                            "desired_judgment_or_action",
                         )
                         if key in mission
                     },
@@ -269,7 +328,6 @@ class ContextCompiler:
                         ],
                     },
                 },
-                "content_workflow": content_workflow,
                 "experience_slice": experience_slice,
                 "repair_contract": repair_contract,
                 "target_render_contract": target_contract,
@@ -290,7 +348,18 @@ class ContextCompiler:
                     "preserve_unchanged_refs": True,
                 },
                 "exclusions": self._exclusions(role.authority, role.role_group),
-            },
+            }
+        if role_id in V22_CONTENT_ROLE_IDS:
+            layers["presales_content_workflow"] = presales_content_workflow
+        else:
+            layers["content_workflow"] = content_workflow
+        return {
+            "schema_version": "3.0",
+            "project_id": state.project_id,
+            "project_revision": project_revision,
+            "artifact_version_refs": list(target_refs),
+            "compiled_at": datetime.now(timezone.utc).isoformat(),
+            "layers": layers,
         }
 
     def _payload(self, slot: str, kind: str) -> dict[str, Any]:

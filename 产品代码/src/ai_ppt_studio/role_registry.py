@@ -49,10 +49,8 @@ class SupportRole:
     pass
 
 
-# 已批准的正式角色列表
-# 按基线 v1.5 定义：内容 5 生产 + 5 审查 + 总编辑；视觉 4 生产 + 3 审查；
-# 反馈治理 1 + 经验进化 2；交付 1。
-_APPROVED_ROLES: list[RoleContract] = [
+# v1.6 角色仅供显式 legacy adapter 解析历史任务。
+_LEGACY_AND_CURRENT_ROLES: list[RoleContract] = [
     # ===== 内容生产 =====
     RoleContract(
         role_id="presales-content-strategist",
@@ -285,6 +283,74 @@ _APPROVED_ROLES: list[RoleContract] = [
 ]
 
 
+_LEGACY_CONTENT_ROLE_IDS = frozenset(
+    {
+        "presales-content-strategist",
+        "claim-evidence-analyst",
+        "deck-narrative-architect",
+        "slide-copywriter",
+        "content-repair-specialist",
+        "presales-content-reviewer",
+        "content-fact-checker",
+        "argument-logic-reviewer",
+        "audience-decision-reviewer",
+        "reading-experience-reviewer",
+        "deck-coherence-editor",
+    }
+)
+
+_V22_CONTENT_ROLES = [
+    RoleContract(
+        role_id="presales-solution-chief",
+        display_name="售前方案总师",
+        description="对证据、决策语境、问题方案映射和完整阅读内容承担唯一生产责任。",
+        role_group="content",
+        authority="producer",
+        isolation_group="presales-content-chief",
+        tags=frozenset({"presales", "evidence-first", "reading-first"}),
+        experience_access=frozenset({"mechanisms", "preferences"}),
+    ),
+    RoleContract(
+        role_id="content-evidence-gate-reviewer",
+        display_name="事实与证据硬门审查员",
+        description="隔离检查来源、身份、外推、诊断和问题方案追溯，只输出硬门记录。",
+        role_group="content",
+        authority="reviewer",
+        isolation_group="content-evidence-gate",
+        tags=frozenset({"presales", "evidence-gate", "independent"}),
+        experience_access=frozenset({"anti-patterns", "mechanisms"}),
+    ),
+    RoleContract(
+        role_id="content-presales-reading-gate-reviewer",
+        display_name="售前阅读与客户立场硬门审查员",
+        description="隔离检查客户立场、中立标题、完整阅读和整套连贯性，只输出硬门记录。",
+        role_group="content",
+        authority="reviewer",
+        isolation_group="content-presales-reading-gate",
+        tags=frozenset({"presales", "reading-gate", "independent"}),
+        experience_access=frozenset({"anti-patterns", "preferences"}),
+    ),
+    RoleContract(
+        role_id="presales-risk-specialist/*",
+        display_name="售前风险专业顾问",
+        description="仅在明确行业、业务架构、数据口径或合规风险下按需提供边界建议。",
+        role_group="content",
+        authority="support",
+        isolation_group="presales-risk-specialist",
+        tags=frozenset({"presales", "risk", "on-demand"}),
+        experience_access=frozenset({"mechanisms", "anti-patterns"}),
+    ),
+]
+
+_APPROVED_ROLES = [
+    role
+    for role in _LEGACY_AND_CURRENT_ROLES
+    if role.role_id not in _LEGACY_CONTENT_ROLE_IDS
+] + _V22_CONTENT_ROLES
+
+_LEGACY_ROLES = list(_LEGACY_AND_CURRENT_ROLES)
+
+
 class RoleRegistry:
     """已批准角色的注册表。"""
 
@@ -294,6 +360,12 @@ class RoleRegistry:
     @classmethod
     def default(cls) -> "RoleRegistry":
         return cls(list(_APPROVED_ROLES))
+
+    @classmethod
+    def legacy(cls) -> "RoleRegistry":
+        """Return v1.6 role IDs only for an explicit compatibility adapter."""
+
+        return cls(list(_LEGACY_ROLES))
 
     def get(self, role_id: str) -> RoleContract:
         if role_id not in self._roles:

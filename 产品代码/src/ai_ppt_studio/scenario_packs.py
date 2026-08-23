@@ -17,6 +17,7 @@ class PresalesScenarioPack:
     production_roles: tuple[str, ...]
     review_roles: tuple[str, ...]
     editor_role: str
+    risk_specialist_role_pattern: str
     g0_required: bool = True
     g1_required: bool = True
     g2_required: bool = True
@@ -41,26 +42,21 @@ _register(PresalesScenarioPack(
     display_name="售前阅读优先解决方案汇报",
     description="面向客户决策者的阅读优先售前方案汇报，内容先于视觉，G0/G3 需用户确认。",
     production_roles=(
-        "presales-content-strategist",
-        "claim-evidence-analyst",
-        "deck-narrative-architect",
-        "slide-copywriter",
+        "presales-solution-chief",
         "deck-designer",
         "slide-visual-designer",
         "native-first-engineer",
         "image-asset-producer",
     ),
     review_roles=(
-        "presales-content-reviewer",
-        "content-fact-checker",
-        "argument-logic-reviewer",
-        "audience-decision-reviewer",
-        "reading-experience-reviewer",
+        "content-evidence-gate-reviewer",
+        "content-presales-reading-gate-reviewer",
         "visual-aesthetic-reviewer",
         "visual-engineering-reviewer",
         "target-render-verifier",
     ),
-    editor_role="deck-coherence-editor",
+    editor_role="content-presales-reading-gate-reviewer",
+    risk_specialist_role_pattern="presales-risk-specialist/*",
 ))
 
 
