@@ -47,6 +47,11 @@ SAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 ACTION_ROLES = {
     **CONTENT_ACTION_ROLES,
+    "run-content-evidence-gate": "content-evidence-gate-reviewer",
+    "run-content-presales-reading-gate": (
+        "content-presales-reading-gate-reviewer"
+    ),
+    "repair-reading-deck-blueprint": "presales-solution-chief",
     "design-deck-system": "deck-designer",
     "design-slide-visuals": "slide-visual-designer",
     "build-native-first": "native-first-engineer",
@@ -61,6 +66,15 @@ ACTION_ROLES = {
 }
 
 NONCONTENT_RESULT_CONTRACTS = {
+    "run-content-evidence-gate": frozenset(
+        {("content-hard-gate-record", "")}
+    ),
+    "run-content-presales-reading-gate": frozenset(
+        {("content-hard-gate-record", "")}
+    ),
+    "repair-reading-deck-blueprint": frozenset(
+        {("content-blueprint", "reading-deck-blueprint")}
+    ),
     "design-deck-system": frozenset({
         ("visual-brief", ""),
         ("visual-contract", "deck-design-system"),
@@ -107,6 +121,14 @@ VISUAL_ACTIONS = frozenset(
         "review-visual-aesthetic",
         "review-visual-engineering",
         "verify-target-render",
+    }
+)
+
+V22_CONTENT_ACTIONS = frozenset(
+    {
+        "run-content-evidence-gate",
+        "run-content-presales-reading-gate",
+        "repair-reading-deck-blueprint",
     }
 )
 
@@ -481,7 +503,9 @@ class ProjectCommandService:
             raise ContractValidationError(
                 "Content action role registry conflicts with the action policy"
             )
-        if action in FRAMEWORK_ACTIONS:
+        if action in V22_CONTENT_ACTIONS:
+            self._validate_v22_content_action_targets(action, target_refs)
+        elif action in FRAMEWORK_ACTIONS:
             from ai_ppt_studio.application.mission_readiness import (
                 MissionReadinessPolicy,
             )
@@ -547,6 +571,59 @@ class ProjectCommandService:
             },
         )
         return state.artifact_heads["agent/task/active"], task, state
+
+    def _validate_v22_content_action_targets(
+        self, action: str, target_refs: list[str]
+    ) -> None:
+        heads = self.kernel.load().artifact_heads
+        blueprint_ref = heads.get("content/reading-deck-blueprint", "")
+        expected = [blueprint_ref]
+        if action == "run-content-presales-reading-gate":
+            evidence_ref = heads.get("content/gate/evidence", "")
+            try:
+                evidence_reference = ArtifactReference.parse(evidence_ref)
+                evidence_record = self.kernel.artifacts.resolve(
+                    evidence_reference
+                )["payload"]
+            except ArtifactReferenceError as exc:
+                raise ContractValidationError(
+                    "Presales reading gate requires current evidence gate passed"
+                ) from exc
+            if (
+                evidence_reference.kind != "content-hard-gate-record"
+                or evidence_record.get("input_source_version") != blueprint_ref
+                or evidence_record.get("overall_result") != "passed"
+            ):
+                raise ContractValidationError(
+                    "Presales reading gate requires current evidence gate passed"
+                )
+            expected.append(evidence_ref)
+        if action == "repair-reading-deck-blueprint":
+            for value in (
+                heads.get("content/gate/evidence", ""),
+                heads.get("content/gate/presales-reading", ""),
+            ):
+                if not value:
+                    continue
+                reference = ArtifactReference.parse(value)
+                if reference.kind != "content-hard-gate-record":
+                    raise ContractValidationError(
+                        "Current content hard-gate head has the wrong kind"
+                    )
+                record = self.kernel.artifacts.resolve(reference)["payload"]
+                if (
+                    record.get("input_source_version") == blueprint_ref
+                    and record.get("overall_result") == "failed"
+                ):
+                    expected.append(value)
+            if len(expected) == 1:
+                raise ContractValidationError(
+                    "Reading blueprint repair requires current failed hard-gate records"
+                )
+        if not blueprint_ref or target_refs != expected:
+            raise ContractValidationError(
+                f"{action} must bind its exact current v2.2 content targets"
+            )
 
     def require_active_agent_task(self, task_id: str) -> dict[str, Any]:
         """Resolve one exact active task before accepting its result."""
@@ -959,6 +1036,37 @@ class ProjectCommandService:
             for value in list(task.get("target_refs") or []):
                 self.kernel.artifacts.resolve(ArtifactReference.parse(value))
             self.validate_noncontent_agent_result_kind(task, request_kind, payload)
+            if action in {
+                "run-content-evidence-gate",
+                "run-content-presales-reading-gate",
+            }:
+                input_reference = ArtifactReference.parse(
+                    str(payload.get("input_source_version") or "")
+                )
+                if (
+                    str(payload.get("reviewer_role_id") or "")
+                    != task.get("role_id")
+                    or str(payload.get("context_pack_ref") or "") != context_ref
+                    or str(payload.get("context_sha256") or "")
+                    != context_reference.sha256
+                    or str(payload.get("input_source_version") or "")
+                    != list(task.get("target_refs") or [""])[0]
+                    or str(payload.get("input_hash") or "")
+                    != input_reference.sha256
+                    or (
+                        action == "run-content-presales-reading-gate"
+                        and payload.get("evidence_gate_ref")
+                        != list(task.get("target_refs") or ["", ""])[1]
+                    )
+                ):
+                    raise ValueError(
+                        "Content hard-gate result does not match task provenance"
+                    )
+                if payload.get("reviewer_mode") == "independent-agent":
+                    raise ContractValidationError(
+                        "Independent Agent execution receipt is unavailable; "
+                        "use isolated-review-task"
+                    )
         except (ArtifactReferenceError, KeyError, TypeError, ValueError) as error:
             raise ContractValidationError(
                 "Agent result provenance is stale or inconsistent"
@@ -970,16 +1078,45 @@ class ProjectCommandService:
         *,
         command_id: str,
         expected_revision: int,
+        task: dict[str, Any],
         request_kind: str,
         payload: dict[str, Any],
     ) -> PreparedArtifactTransaction:
         """Run the established public route against a no-write kernel."""
 
         preparation = _PreparationKernel(self.kernel)
+        from ai_ppt_studio.application.content_hard_gate_service import (
+            ContentHardGateService,
+        )
         from ai_ppt_studio.application.content_service import ContentService
+        from ai_ppt_studio.application.presales_content_service import (
+            PresalesContentService,
+        )
         from ai_ppt_studio.application.visual_service import VisualService
 
-        if request_kind in {
+        action = str(task.get("action_type") or "")
+        target_refs = list(task.get("target_refs") or [])
+        if action in {
+            "run-content-evidence-gate",
+            "run-content-presales-reading-gate",
+        }:
+            result_ref = ContentHardGateService(preparation).submit_record(
+                command_id=command_id,
+                expected_revision=expected_revision,
+                actor_role_id=str(task.get("role_id") or ""),
+                agent_task_id=str(task.get("task_id") or ""),
+                payload=payload,
+            )
+        elif action == "repair-reading-deck-blueprint":
+            result_ref = PresalesContentService(preparation).repair_reading_blueprint(
+                command_id=command_id,
+                expected_revision=expected_revision,
+                actor_role_id=str(task.get("role_id") or ""),
+                source_blueprint_ref=target_refs[0],
+                failed_gate_refs=target_refs[1:],
+                payload=payload,
+            )
+        elif request_kind in {
             "material-findings",
             "content-blueprint",
             "content-acceptance",
@@ -1033,6 +1170,7 @@ class ProjectCommandService:
         prepared = self._prepare_noncontent_agent_result(
             command_id=command_id,
             expected_revision=expected_revision,
+            task=task,
             request_kind=request_kind,
             payload=raw_request_payload,
         )
@@ -1106,6 +1244,13 @@ class ProjectCommandService:
         """Bind a validated immutable result and complete the active task."""
 
         task = self.require_active_agent_task(task_id)
+        if task.get("action_type") in {
+            "run-content-evidence-gate",
+            "run-content-presales-reading-gate",
+        }:
+            raise ContractValidationError(
+                "Content hard-gate tasks require the controlled result transaction"
+            )
         self.kernel.artifacts.resolve(ArtifactReference.parse(result_ref))
         result_refs = list(task.get("result_refs") or [])
         if result_ref not in result_refs:

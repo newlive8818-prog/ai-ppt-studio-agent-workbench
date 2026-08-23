@@ -25,6 +25,12 @@ class GateEvaluator:
     def content_user_reviewable(
         self, acceptance_ref: str, blueprint_ref: str
     ) -> GateMutation:
+        if self.kernel.load().artifact_heads.get(
+            "content/reading-deck-blueprint", ""
+        ):
+            raise GateBlockedError(
+                "G0", ("v22-content-hard-gates-required",)
+            )
         acceptance = self._resolve(acceptance_ref, "content-acceptance")
         blueprint = self._resolve(blueprint_ref, "content-blueprint")
         blockers: list[str] = []

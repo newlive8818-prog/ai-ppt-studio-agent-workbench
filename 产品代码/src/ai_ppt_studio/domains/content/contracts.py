@@ -5,12 +5,15 @@ from __future__ import annotations
 import copy
 import json
 import re
+from datetime import datetime
 from typing import Any
 
 from ai_ppt_studio.errors import (
+    ArtifactReferenceError,
     ContractValidationError,
     ProposalOnlyIdentityViolationError,
 )
+from ai_ppt_studio.kernel.references import ArtifactReference
 
 CONTENT_STAGES: dict[str, tuple[str, str]] = {
     "strategy": ("content/strategy", "presales-content-strategy"),
@@ -943,4 +946,227 @@ def validate_reading_deck_blueprint(payload: dict[str, Any]) -> dict[str, Any]:
             "slide order must be unique and contiguous from 1"
         )
     normalized["slides"] = normalized_slides
+    return normalized
+
+
+V22_CONTENT_GATE_ROLES = {
+    "evidence": "content-evidence-gate-reviewer",
+    "presales-reading": "content-presales-reading-gate-reviewer",
+}
+V22_REVIEWER_MODES = frozenset(
+    {"independent-agent", "isolated-review-task"}
+)
+V22_CONTENT_GATE_CRITERIA = {
+    "evidence": frozenset(
+        {
+            "source-resolution",
+            "excluded-materials",
+            "content-identity",
+            "diagnosis-traceability",
+            "selective-evidence",
+            "causal-leap",
+            "unsupported-capability-result-or-commitment",
+            "problem-requirement-solution-traceability",
+            "material-mode-honesty",
+        }
+    ),
+    "presales-reading": frozenset(
+        {
+            "customer-decision-stance",
+            "current-state-and-problem-completeness",
+            "symptom-cause-impact-constraint-unknown",
+            "problem-requirement-solution-mapping",
+            "neutral-title",
+            "no-conclusion-first",
+            "independent-reading-without-notes",
+            "deck-coherence",
+            "meaningless-repetition",
+            "boundaries-risks-validation-and-next-actions",
+        }
+    ),
+}
+
+
+def _contract_artifact_reference(value: str, field: str) -> ArtifactReference:
+    try:
+        return ArtifactReference.parse(value)
+    except ArtifactReferenceError as exc:
+        raise ContractValidationError(
+            f"{field} must be an artifact reference"
+        ) from exc
+
+
+def validate_content_hard_gate_record(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate one non-compensatory v2.2 content hard-gate result."""
+
+    if not isinstance(payload, dict):
+        raise ContractValidationError("ContentHardGateRecord must be an object")
+    gate_type = _text(payload, "gate_type")
+    if gate_type not in V22_CONTENT_GATE_ROLES:
+        raise ContractValidationError("gate_type is invalid")
+    reviewer_role = _text(payload, "reviewer_role_id")
+    if reviewer_role != V22_CONTENT_GATE_ROLES[gate_type]:
+        raise ContractValidationError(
+            "reviewer_role_id does not match gate_type"
+        )
+    reviewer_mode = _text(payload, "reviewer_mode")
+    if reviewer_mode not in V22_REVIEWER_MODES:
+        raise ContractValidationError("reviewer_mode is invalid")
+    input_source_version = _text(payload, "input_source_version")
+    input_reference = _contract_artifact_reference(
+        input_source_version, "input_source_version"
+    )
+    if input_reference.kind != "reading-deck-blueprint":
+        raise ContractValidationError(
+            "input_source_version must identify a ReadingDeckBlueprint"
+        )
+    input_hash = _text(payload, "input_hash")
+    if input_hash != input_reference.sha256:
+        raise ContractValidationError(
+            "input_hash must equal input_source_version hash"
+        )
+    context_pack_ref = _text(payload, "context_pack_ref")
+    context_reference = _contract_artifact_reference(
+        context_pack_ref, "context_pack_ref"
+    )
+    if context_reference.kind != "context-pack":
+        raise ContractValidationError(
+            "context_pack_ref must identify a ContextPack"
+        )
+    context_sha256 = _text(payload, "context_sha256")
+    if context_sha256 != context_reference.sha256:
+        raise ContractValidationError(
+            "context_sha256 must equal context_pack_ref hash"
+        )
+    if payload.get("reviewer_cannot_edit") is not True:
+        raise ContractValidationError("reviewer_cannot_edit must be true")
+    created_at = _text(payload, "created_at")
+    try:
+        parsed_created_at = datetime.fromisoformat(
+            created_at.replace("Z", "+00:00")
+        )
+    except ValueError as exc:
+        raise ContractValidationError("created_at must be an ISO timestamp") from exc
+    if (
+        "T" not in created_at
+        or parsed_created_at.tzinfo is None
+        or parsed_created_at.utcoffset() is None
+    ):
+        raise ContractValidationError(
+            "created_at must be a timezone-aware ISO timestamp"
+        )
+    normalized: dict[str, Any] = {
+        "gate_type": gate_type,
+        "input_source_version": input_source_version,
+        "input_hash": input_hash,
+        "reviewer_role_id": reviewer_role,
+        "reviewer_mode": reviewer_mode,
+        "context_pack_ref": context_pack_ref,
+        "context_sha256": context_sha256,
+        "reviewer_cannot_edit": True,
+        "created_at": created_at,
+    }
+    if gate_type == "presales-reading":
+        evidence_gate_ref = _text(payload, "evidence_gate_ref")
+        evidence_reference = _contract_artifact_reference(
+            evidence_gate_ref, "evidence_gate_ref"
+        )
+        if evidence_reference.kind != "content-hard-gate-record":
+            raise ContractValidationError(
+                "evidence_gate_ref must identify a ContentHardGateRecord"
+            )
+        normalized["evidence_gate_ref"] = evidence_gate_ref
+    if reviewer_mode == "independent-agent":
+        for field in ("independent_agent_instance_id", "review_output_ref"):
+            normalized[field] = _text(payload, field)
+        _contract_artifact_reference(
+            normalized["review_output_ref"], "review_output_ref"
+        )
+    elif any(
+        str(payload.get(field) or "").strip()
+        for field in (
+            "independent_agent_instance_id",
+            "review_output_ref",
+        )
+    ):
+        raise ContractValidationError(
+            "isolated-review-task cannot claim independent-agent evidence"
+        )
+    deterministic_checks = _v22_list(
+        payload, "deterministic_check_results", non_empty=True, objects=True
+    )
+    semantic_checks = _v22_list(
+        payload, "semantic_check_results", non_empty=True, objects=True
+    )
+    checks = [*deterministic_checks, *semantic_checks]
+    criterion_ids = [_text(check, "criterion_id") for check in checks]
+    expected_criteria = V22_CONTENT_GATE_CRITERIA[gate_type]
+    if (
+        len(criterion_ids) != len(expected_criteria)
+        or frozenset(criterion_ids) != expected_criteria
+    ):
+        raise ContractValidationError(
+            f"{gate_type} checks must contain the complete required criterion set"
+        )
+    normalized_checks: list[dict[str, Any]] = []
+    has_hard_failure = False
+    computed_repairs: list[str] = []
+    for check in checks:
+        applicability = _text(check, "applicability")
+        result = _text(check, "result")
+        if applicability not in {"applicable", "not-applicable"}:
+            raise ContractValidationError("check applicability is invalid")
+        allowed_results = (
+            {"passed", "failed"}
+            if applicability == "applicable"
+            else {"not-applicable"}
+        )
+        if result not in allowed_results:
+            raise ContractValidationError("check result is invalid")
+        evidence_refs = _v22_strings(check, "evidence_refs")
+        if applicability == "applicable" and not evidence_refs:
+            raise ContractValidationError(
+                "applicable hard check requires evidence_refs"
+            )
+        failure_reason = str(check.get("failure_reason") or "").strip()
+        repair_requirement = str(check.get("repair_requirement") or "").strip()
+        if result == "failed":
+            has_hard_failure = True
+            if not failure_reason or not repair_requirement:
+                raise ContractValidationError(
+                    "failed hard check requires failure_reason and repair_requirement"
+                )
+            computed_repairs.append(repair_requirement)
+        normalized_checks.append(
+            {
+                "criterion_id": _text(check, "criterion_id"),
+                "applicability": applicability,
+                "result": result,
+                "evidence_refs": evidence_refs,
+                "failure_reason": failure_reason,
+                "repair_requirement": repair_requirement,
+            }
+        )
+    computed_result = "failed" if has_hard_failure else "passed"
+    overall_result = _text(payload, "overall_result")
+    if overall_result not in {"passed", "failed"} or overall_result != computed_result:
+        raise ContractValidationError(
+            f"overall_result must be {computed_result}"
+        )
+    repair_requirements = _v22_strings(payload, "repair_requirements")
+    if repair_requirements != list(dict.fromkeys(computed_repairs)):
+        raise ContractValidationError(
+            "repair_requirements must equal failed hard-check requirements"
+        )
+    deterministic_count = len(deterministic_checks)
+    normalized["deterministic_check_results"] = normalized_checks[
+        :deterministic_count
+    ]
+    normalized["semantic_check_results"] = normalized_checks[
+        deterministic_count:
+    ]
+    normalized["repair_requirements"] = repair_requirements
+    normalized["overall_result"] = computed_result
     return normalized

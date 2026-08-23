@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 from ai_ppt_studio.domains.content.contracts import (
@@ -13,8 +15,10 @@ from ai_ppt_studio.domains.content.contracts import (
 from ai_ppt_studio.errors import (
     ArtifactReferenceError,
     ContractValidationError,
+    GateBlockedError,
     WorkbenchValidationError,
 )
+from ai_ppt_studio.kernel.artifacts import canonical_json
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 
@@ -216,6 +220,180 @@ class PresalesContentService:
             },
         )
         return state.artifact_heads[READING_BLUEPRINT_SLOT]
+
+    def repair_reading_blueprint(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        actor_role_id: str,
+        source_blueprint_ref: str,
+        failed_gate_refs: list[str],
+        payload: dict[str, Any],
+    ) -> str:
+        """Write a new source version from current failed hard-gate facts."""
+
+        fingerprint = hashlib.sha256(
+            canonical_json(
+                {
+                    "expected_revision": expected_revision,
+                    "actor_role_id": actor_role_id,
+                    "source_blueprint_ref": source_blueprint_ref,
+                    "failed_gate_refs": failed_gate_refs,
+                    "payload": payload,
+                }
+            )
+        ).hexdigest()
+        replayed = self._replay_repaired_blueprint(command_id, fingerprint)
+        if replayed:
+            return replayed
+        self._require_chief(actor_role_id)
+        current_ref = self._require_current_ref(
+            source_blueprint_ref,
+            slot=READING_BLUEPRINT_SLOT,
+            kind=READING_BLUEPRINT_KIND,
+        )
+        if not failed_gate_refs:
+            raise GateBlockedError("content-repair", ("missing-failed-gate",))
+        state = self.kernel.load()
+        current_gate_refs = {
+            value
+            for value in (
+                state.artifact_heads.get("content/gate/evidence", ""),
+                state.artifact_heads.get("content/gate/presales-reading", ""),
+            )
+            if value
+        }
+        blockers: list[str] = []
+        for value in failed_gate_refs:
+            if value not in current_gate_refs:
+                blockers.append(f"stale-gate:{value}")
+                continue
+            try:
+                reference = ArtifactReference.parse(value)
+                if reference.kind != "content-hard-gate-record":
+                    raise ArtifactReferenceError("gate kind is invalid")
+                record = self.kernel.artifacts.resolve(reference)["payload"]
+            except ArtifactReferenceError:
+                blockers.append(f"invalid-gate:{value}")
+                continue
+            if record.get("input_source_version") != current_ref:
+                blockers.append(f"stale-gate:{value}")
+            if record.get("overall_result") != "failed":
+                blockers.append(f"gate-not-failed:{value}")
+        if blockers:
+            raise GateBlockedError("content-repair", tuple(sorted(blockers)))
+        old_payload = self.kernel.artifacts.resolve(
+            ArtifactReference.parse(current_ref)
+        )["payload"]
+        if payload.get("hard_gate_refs") != failed_gate_refs:
+            raise ContractValidationError(
+                "repair hard_gate_refs must equal current failed_gate_refs"
+            )
+        history = payload.get("repair_history")
+        if not isinstance(history, list) or not history:
+            raise ContractValidationError("repair_history must record the repair")
+        old_history = old_payload.get("repair_history")
+        if not isinstance(old_history, list) or history[:-1] != old_history:
+            raise ContractValidationError(
+                "repair_history must be append-only"
+            )
+        latest = history[-1]
+        if (
+            not isinstance(latest, dict)
+            or latest.get("source_version") != current_ref
+            or latest.get("failed_gate_refs") != failed_gate_refs
+            or not str(latest.get("repair_summary") or "").strip()
+            or latest.get("new_source_version") != payload.get("source_version")
+        ):
+            raise ContractValidationError(
+                "repair_history must bind source and failed gates"
+            )
+        used_source_versions = {str(old_payload.get("source_version") or "")}
+        for entry in old_history:
+            if not isinstance(entry, dict):
+                raise ContractValidationError(
+                    "repair_history must be append-only"
+                )
+            previous_ref = str(entry.get("source_version") or "")
+            previous_payload = self.kernel.artifacts.resolve(
+                ArtifactReference.parse(previous_ref)
+            )["payload"]
+            used_source_versions.add(
+                str(previous_payload.get("source_version") or "")
+            )
+            used_source_versions.add(str(entry.get("new_source_version") or ""))
+        if str(payload.get("source_version") or "") in used_source_versions:
+            raise ContractValidationError(
+                "repair must create a unique source_version"
+            )
+        for field, slot in (
+            ("evidence_book_ref", EVIDENCE_BOOK_SLOT),
+            ("decision_context_ref", DECISION_CONTEXT_SLOT),
+            ("problem_solution_fit_ref", FIT_MAP_SLOT),
+        ):
+            if payload.get(field) != state.artifact_heads.get(slot):
+                raise ArtifactReferenceError(
+                    f"repair {field} must bind the current upstream head"
+                )
+        normalized = validate_reading_deck_blueprint(payload)
+        committed = self.kernel.commit(
+            command_id=command_id,
+            expected_revision=expected_revision,
+            event_type="content.reading-deck-blueprint-repaired",
+            artifact_updates={
+                READING_BLUEPRINT_SLOT: (READING_BLUEPRINT_KIND, normalized)
+            },
+            artifact_removals=(
+                "content/gate/evidence",
+                "content/gate/presales-reading",
+                "content/acceptance",
+            ),
+            command_fingerprint=fingerprint,
+        )
+        return committed.artifact_heads[READING_BLUEPRINT_SLOT]
+
+    def _replay_repaired_blueprint(
+        self, command_id: str, fingerprint: str
+    ) -> str:
+        state = self.kernel.load()
+        revision = state.processed_commands.get(command_id)
+        if revision is None:
+            return ""
+        events_root = getattr(self.kernel, "events_root", None)
+        if events_root is None:
+            raise ContractValidationError(
+                "Processed repair command receipt is unavailable"
+            )
+        try:
+            event = json.loads(
+                (events_root / f"r{revision:08d}.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            result_ref = str(
+                event.get("artifact_heads", {}).get(READING_BLUEPRINT_SLOT)
+                or ""
+            )
+            reference = ArtifactReference.parse(result_ref)
+            if (
+                event.get("command_id") != command_id
+                or event.get("command_fingerprint") != fingerprint
+                or reference.kind != READING_BLUEPRINT_KIND
+            ):
+                raise ValueError("receipt mismatch")
+            self.kernel.artifacts.resolve(reference)
+        except (
+            ArtifactReferenceError,
+            OSError,
+            json.JSONDecodeError,
+            TypeError,
+            ValueError,
+        ) as exc:
+            raise ContractValidationError(
+                "Processed repair command has different semantics"
+            ) from exc
+        return result_ref
 
 
 __all__ = ["PresalesContentService", "PRESALES_CHIEF_ROLE_ID"]
