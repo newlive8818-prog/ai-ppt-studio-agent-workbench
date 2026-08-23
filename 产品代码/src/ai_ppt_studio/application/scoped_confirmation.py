@@ -180,7 +180,11 @@ class HostConfirmationAssertionVerifier:
 
     @staticmethod
     def _decode_base64url(value: str) -> bytes:
-        return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+        decoded = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+        canonical = base64.urlsafe_b64encode(decoded).decode("ascii").rstrip("=")
+        if canonical != value:
+            raise ValueError("non-canonical base64url encoding")
+        return decoded
 
 
 class ScopedConfirmationPolicy:
