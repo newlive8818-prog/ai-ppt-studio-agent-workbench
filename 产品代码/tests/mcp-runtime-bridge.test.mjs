@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import {
+import * as pythonRuntime from "../mcp/runtime-bridge/python-runtime.mjs";
+import { createHostConfirmationAuthority } from "../mcp/host-confirmation-assertion.mjs";
+
+const {
   invokePythonBridge,
   resolvePythonExecutable,
-} from "../mcp/runtime-bridge/python-runtime.mjs";
-import { createHostConfirmationAuthority } from "../mcp/host-confirmation-assertion.mjs";
+} = pythonRuntime;
 
 test("host confirmation assertion is signed, version-bound, and carries one identity", () => {
   const authority = createHostConfirmationAuthority({
@@ -54,6 +56,72 @@ test("Python bridge returns a structured snapshot", async () => {
   assert.equal(Array.isArray(result.projects), true);
 });
 
+test("Python bridge prefers the Python bundled beside the active Codex Node runtime", async () => {
+  const runtime = await mkdtemp(path.join(os.tmpdir(), "ai-ppt-codex-runtime-"));
+  const nodeExecutable = path.join(runtime, "dependencies", "node", "bin", "node");
+  const pythonExecutable = path.join(runtime, "dependencies", "python", "bin", "python3");
+  await mkdir(path.dirname(nodeExecutable), { recursive: true });
+  await mkdir(path.dirname(pythonExecutable), { recursive: true });
+  await writeFile(nodeExecutable, "", "utf8");
+  await writeFile(pythonExecutable, "", "utf8");
+
+  const hostEnv = { ...process.env, PATH: "" };
+  delete hostEnv.AI_PPT_PYTHON;
+  assert.equal(
+    resolvePythonExecutable({ env: hostEnv, nodeExecutable }),
+    pythonExecutable,
+  );
+});
+
+test("bundled Python discovery rejects an unrelated Node directory layout", () => {
+  assert.equal(typeof pythonRuntime.resolveBundledPythonExecutable, "function");
+  assert.equal(
+    pythonRuntime.resolveBundledPythonExecutable("/opt/homebrew/bin/node", "darwin"),
+    undefined,
+  );
+  assert.equal(
+    pythonRuntime.resolveBundledPythonExecutable("C:\\Program Files\\nodejs\\node.exe", "win32"),
+    undefined,
+  );
+});
+
+test("AI_PPT_PYTHON overrides bundled and system Python candidates", () => {
+  const configured = "/managed/runtime/python";
+  assert.equal(
+    resolvePythonExecutable({
+      env: { ...process.env, AI_PPT_PYTHON: configured },
+      nodeExecutable: "/runtime/dependencies/node/bin/node",
+    }),
+    configured,
+  );
+});
+
+test("pythonExecutable option overrides every discovered candidate", () => {
+  const configured = "/request-scoped/runtime/python";
+  assert.equal(
+    resolvePythonExecutable({
+      pythonExecutable: configured,
+      env: { ...process.env, AI_PPT_PYTHON: "/managed/runtime/python" },
+      nodeExecutable: "/runtime/dependencies/node/bin/node",
+    }),
+    configured,
+  );
+});
+
+test("Python resolution falls back when the sibling bundled Python is absent", async () => {
+  const runtime = await mkdtemp(path.join(os.tmpdir(), "ai-ppt-codex-runtime-missing-python-"));
+  const nodeExecutable = path.join(runtime, "dependencies", "node", "bin", "node");
+  const missingPython = path.join(runtime, "dependencies", "python", "bin", "python3");
+  await mkdir(path.dirname(nodeExecutable), { recursive: true });
+  await writeFile(nodeExecutable, "", "utf8");
+
+  const hostEnv = { ...process.env, PATH: "" };
+  delete hostEnv.AI_PPT_PYTHON;
+  const executable = resolvePythonExecutable({ env: hostEnv, nodeExecutable });
+  assert.notEqual(executable, missingPython);
+  assert.equal(path.isAbsolute(executable), true);
+});
+
 test("Python bridge resolves an absolute interpreter when the Codex host PATH is empty", async () => {
   const hostEnv = { ...process.env, PATH: "" };
   delete hostEnv.AI_PPT_PYTHON;
@@ -97,6 +165,43 @@ test("Python bridge falls back when an existing interpreter cannot be spawned", 
   );
 
   assert.deepEqual(result, { ok: true, operation: "list-projects" });
+});
+
+test("Python bridge does not retry another interpreter after a business error", async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "ai-ppt-python-no-business-retry-"));
+  const bridge = path.join(temporary, "bridge.py");
+  const unavailableFallback = path.join(temporary, "must-not-run-python");
+  await writeFile(
+    unavailableFallback,
+    "#!/definitely/missing/python\n",
+    "utf8",
+  );
+  await chmod(unavailableFallback, 0o755);
+  await writeFile(
+    bridge,
+    [
+      "import json, sys",
+      "json.load(sys.stdin)",
+      "print(json.dumps({'ok': False, 'error': {'code': 'REVISION_CONFLICT', 'message': 'stale', 'details': {'actual_revision': 2}}}))",
+      "raise SystemExit(2)",
+    ].join("\n"),
+    "utf8",
+  );
+  const workingPython = resolvePythonExecutable({
+    env: { ...process.env, PATH: "" },
+    nodeExecutable: "/not-a-bundled-node/bin/node",
+  });
+
+  await assert.rejects(
+    invokePythonBridge(
+      { operation: "submit-human-decision" },
+      {
+        pythonCandidates: [workingPython, unavailableFallback],
+        bridgeArgs: [bridge],
+      },
+    ),
+    (error) => error.code === "REVISION_CONFLICT" && error.details.actual_revision === 2,
+  );
 });
 
 test("Python bridge surfaces stable revision conflicts", async () => {

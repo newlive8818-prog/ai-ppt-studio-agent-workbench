@@ -38,4 +38,8 @@ test("MCP config starts the local stdio server from the plugin root", () => {
   assert.equal(server.command, "node");
   assert.deepEqual(server.args, ["./scripts/start-mcp.mjs"]);
   assert.equal(server.cwd, ".");
+  assert.deepEqual(server.env_vars, [
+    "AI_PPT_PYTHON",
+    "AI_PPT_PYTHONPATH",
+  ]);
 });
