@@ -460,7 +460,10 @@ export type ContentSidebarReviewProjection =
 
 export interface HostBridge {
   connect(onData?: (data: SurfaceData) => void): Promise<void>;
-  callTool<T = DecisionResult>(name: string, args: Record<string, unknown>): Promise<T>;
+  callTool<K extends keyof import("./types/tool-contracts").ToolContractMap>(
+    name: K,
+    args: import("./types/tool-contracts").ToolContractMap[K]["input"],
+  ): Promise<import("./types/tool-contracts").ToolContractMap[K]["output"]>;
   switchReview?(reviewType: "content" | "visual"): Promise<void>;
   updateModelContext(context: Record<string, unknown>): Promise<void>;
   sendFollowUp(message: string): Promise<void>;
@@ -484,7 +487,7 @@ declare global {
     openai?: Record<string, unknown>;
     __AI_PPT_SIDEBAR_HOST__?: {
       connect(onData?: (data: SurfaceData) => void): Promise<void>;
-      callTool<T>(name: string, args: Record<string, unknown>): Promise<T>;
+      callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
       updateModelContext?(context: Record<string, unknown>): Promise<void>;
       sendFollowUp?(message: string): Promise<void>;
       confirmMission?<T = MissionConfirmationResult>(

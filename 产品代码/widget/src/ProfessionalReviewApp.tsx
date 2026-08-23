@@ -10,7 +10,6 @@ import {
   statusLabel,
 } from "./components/review/ReviewDocumentSections";
 import type {
-  DecisionResult,
   HostBridge,
   ReviewMark,
   ReviewProjection,
@@ -332,7 +331,10 @@ export function ProfessionalReviewApp({ initialData, bridge, managedConnection =
     setSaving(true);
     setNotice("正在保存标记…");
     try {
-      const result = await bridge.callTool<DecisionResult>("save_review_marks", {
+      if (data.review.review_type === "content-evidence") {
+        throw new Error("只读内容证据不能保存专业审核标记。");
+      }
+      const result = await bridge.callTool("save_review_marks", {
         projectRoot: data.selectedProjectRoot,
         expectedRevision: snapshotRevision,
         reviewType: data.review.review_type,

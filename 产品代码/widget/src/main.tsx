@@ -6,6 +6,7 @@ import { ProfessionalReviewApp } from "./ProfessionalReviewApp";
 import { createBrowserReviewClient } from "./lib/browser-review-client";
 import { createSidebarHostClient } from "./lib/sidebar-host-client";
 import type { HostBridge, SurfaceData } from "./types";
+import { parseToolOutput, type ToolContractMap } from "./types/tool-contracts";
 import "./styles.css";
 
 function createPreviewBridge(): HostBridge {
@@ -15,13 +16,17 @@ function createPreviewBridge(): HostBridge {
   }
   return {
     async connect() {},
-    async callTool<T>(name: string, args: Record<string, unknown>) {
+    async callTool<K extends keyof ToolContractMap>(
+      name: K,
+      args: ToolContractMap[K]["input"],
+    ) {
       count(name);
       if (name === "get_content_sidebar_review_projection") {
         const projection = window.__AI_PPT_CONTENT_REVIEW_PREVIEW__;
-        if (projection) return structuredClone(projection) as T;
+        if (projection) return parseToolOutput(name, structuredClone(projection));
       }
       if (name === "save_content_page_decision") {
+        const decisionArgs = args as ToolContractMap["save_content_page_decision"]["input"];
         const scenario = window.__AI_PPT_CONTENT_REVIEW_SCENARIO__;
         if (scenario === "save-failure" || scenario === "source-conflict") {
           const error = new Error(
@@ -36,12 +41,12 @@ function createPreviewBridge(): HostBridge {
         if (projection?.display_policy !== "content-sidebar-full-deck") {
           throw new Error("Content review is not ready in this preview.");
         }
-        const slide = projection.slides.find((item) => item.slide_id === String(args.slideId || ""));
+        const slide = projection.slides.find((item) => item.slide_id === decisionArgs.slideId);
         if (!slide) throw new Error("Preview slide not found.");
-        const selected = String(args.decision || "") as typeof slide.decision_state.selected;
+        const selected = decisionArgs.decision;
         slide.decision_state = {
           selected,
-          comment: String(args.comment || ""),
+          comment: decisionArgs.comment,
           completed: true,
           saved: true,
           frozen: false,
@@ -66,12 +71,12 @@ function createPreviewBridge(): HostBridge {
         if (!previewData || !("snapshot" in previewData)) throw new Error("Preview snapshot is unavailable.");
         const snapshot = structuredClone(previewData.snapshot);
         snapshot.revision = projection.revision;
-        return {
+        return parseToolOutput(name, {
           artifact_ref: `artifact://page-decision/preview-${slide.slide_id}-${projection.revision}`,
           page_completion: { slide_id: slide.slide_id, completed: true },
           review_progress: projection.review_progress,
           snapshot,
-        } as T;
+        });
       }
       if (name === "submit_content_review_batch") {
         const projection = window.__AI_PPT_CONTENT_REVIEW_PREVIEW__;
@@ -86,19 +91,20 @@ function createPreviewBridge(): HostBridge {
         if (!previewData || !("snapshot" in previewData)) throw new Error("Preview snapshot is unavailable.");
         const snapshot = structuredClone(previewData.snapshot);
         snapshot.revision = projection.revision;
-        return {
+        return parseToolOutput(name, {
           artifact_ref: "artifact://content-review-batch/deterministic-preview-submitted",
           follow_up_message: "请基于冻结审核批次形成整套修改方案。",
           snapshot,
-        } as T;
+        });
       }
       if (name === "open_content_evidence_browser") {
-        return { opened: true, reviewType: "content-evidence", ...args } as T;
+        return parseToolOutput(name, { opened: true, reviewType: "content-evidence", ...args });
       }
       if (name === "read_ai_ppt_project_asset") {
-        const assetRef = String(args.assetRef || "");
+        const assetArgs = args as ToolContractMap["read_ai_ppt_project_asset"]["input"];
+        const assetRef = assetArgs.assetRef;
         const asset = window.__AI_PPT_PREVIEW_ASSETS__?.[assetRef];
-        if (asset) return { asset } as T;
+        if (asset) return parseToolOutput(name, { asset });
       }
       throw new Error("Preview mode is read-only.");
     },

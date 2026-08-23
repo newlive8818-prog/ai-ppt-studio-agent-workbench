@@ -12,15 +12,6 @@ interface Props {
   className?: string;
 }
 
-interface AssetResult {
-  asset: {
-    assetRef: string;
-    mimeType: string;
-    bytes: number;
-    dataBase64: string;
-  };
-}
-
 export function ProjectAssetImage({ bridge, projectRoot, assetRef, alt, className = "" }: Props) {
   const frameRef = useRef<HTMLDivElement>(null);
   const [nearViewport, setNearViewport] = useState(false);
@@ -47,7 +38,7 @@ export function ProjectAssetImage({ bridge, projectRoot, assetRef, alt, classNam
     setSource("");
     setFailed(false);
     if (!assetRef || !nearViewport) return () => { active = false; };
-    bridge.callTool<AssetResult>("read_ai_ppt_project_asset", {
+    bridge.callTool("read_ai_ppt_project_asset", {
       projectRoot,
       assetRef,
     }).then((result) => {

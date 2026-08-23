@@ -7,6 +7,7 @@ import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 import { createAiPptMcpServer } from "../mcp/server.mjs";
 import { PythonBridgeError } from "../mcp/runtime-bridge/python-runtime.mjs";
+import { PUBLIC_TOOL_CATALOG } from "../mcp/tool-catalog.mjs";
 
 const snapshot = {
   schema_version: "3.0",
@@ -52,6 +53,40 @@ async function connectedClient(options = {}) {
     }
     if (request.operation === "get-delivery-status-projection") {
       return { ok: true, delivery: { status: "qa-passed", chat_delivery: {} }, snapshot_revision: 3 };
+    }
+    if (request.operation === "get-project-user-status") {
+      return {
+        ok: true,
+        status: { status: "成果已可查看", reason: "审核对象已准备" },
+        selected_project_root: "/managed/project",
+      };
+    }
+    if (request.operation === "open-or-resume-review-session") {
+      return {
+        ok: true,
+        session: {
+          review_session_id: "review-session-1",
+          review_type: request.review_type,
+          source_version: request.source_version,
+        },
+        snapshot_revision: request.expected_revision + 1,
+        selected_project_root: "/managed/project",
+      };
+    }
+    if ([
+      "record-review-host-open",
+      "record-review-host-notification",
+      "record-review-ai-receipt",
+    ].includes(request.operation)) {
+      return {
+        ok: true,
+        session: {
+          review_session_id: request.review_session_id,
+          receipt_ref: request.receipt_ref,
+        },
+        snapshot_revision: request.expected_revision + 1,
+        selected_project_root: "/managed/project",
+      };
     }
     if (request.operation === "get-gate-confirmation-context") {
       const gate = request.gate;
@@ -117,34 +152,7 @@ test("MCP exposes data contracts without rendering a Widget in chat", async () =
     const tools = await client.listTools();
     assert.deepEqual(
       tools.tools.map((tool) => tool.name).sort(),
-      [
-        "add_ai_ppt_material",
-        "commit_ai_ppt_artifact",
-        "confirm_ai_ppt_gate",
-        "confirm_ai_ppt_mission",
-        "confirm_content_batch_revision_plan",
-        "create_ai_ppt_project",
-        "create_content_batch_change_set",
-        "get_ai_ppt_project_snapshot",
-        "get_ai_ppt_sidebar_projection",
-        "get_content_sidebar_review_projection",
-        "get_delivery_status_projection",
-        "open_ai_ppt_browser_review",
-        "open_content_evidence_browser",
-        "read_ai_ppt_project_asset",
-        "record_chat_delivery",
-        "record_internal_gate",
-        "reopen_ai_ppt_scope",
-        "request_ai_ppt_agent_action",
-        "save_ai_ppt_mission_draft",
-        "save_content_batch_revision_plan",
-        "save_content_page_decision",
-        "save_review_marks",
-        "set_ai_ppt_release_target_policy",
-        "submit_ai_ppt_human_decision",
-        "submit_content_review_batch",
-        "withdraw_content_review_batch",
-      ],
+      PUBLIC_TOOL_CATALOG.map((tool) => tool.name).sort(),
     );
     const readTool = tools.tools.find((tool) => tool.name === "get_ai_ppt_project_snapshot");
     assert.equal(readTool._meta?.ui?.resourceUri, undefined);
@@ -255,6 +263,76 @@ test("MCP exposes data contracts without rendering a Widget in chat", async () =
     assert.equal(browserResult._meta?.["openai/outputTemplate"], undefined);
   } finally {
     await client.close();
+  }
+});
+
+test("authoritative ReviewSession tools map exact public fields to Python operations", async () => {
+  const { client, server, calls } = await connectedClient();
+  try {
+    const status = await client.callTool({
+      name: "get_ai_ppt_project_status",
+      arguments: { projectRoot: "/managed/project" },
+    });
+    assert.equal(status.structuredContent.status.status, "成果已可查看");
+
+    const opened = await client.callTool({
+      name: "open_or_resume_review_session",
+      arguments: {
+        projectRoot: "/managed/project",
+        expectedRevision: 3,
+        reviewType: "content-full-deck",
+        targetArtifactRef: "artifact://reading-deck-blueprint/abc",
+        sourceVersion: "content-v1",
+        targetRevision: 3,
+        openPolicy: "foreground-if-waiting",
+      },
+    });
+    assert.equal(opened.structuredContent.session.review_session_id, "review-session-1");
+
+    const receiptCases = [
+      ["record_review_host_open_receipt", "opened", "host-receipt://open/1"],
+      ["record_review_host_notification_receipt", "sent", "host-receipt://notification/1"],
+      ["record_review_ai_receipt", "received", "ai-receipt://1"],
+    ];
+    let expectedRevision = 4;
+    for (const [name, result, receiptRef] of receiptCases) {
+      const receipt = await client.callTool({
+        name,
+        arguments: {
+          projectRoot: "/managed/project",
+          expectedRevision,
+          reviewSessionId: "review-session-1",
+          result,
+          receiptRef,
+        },
+      });
+      assert.equal(receipt.structuredContent.session.receipt_ref, receiptRef);
+      expectedRevision += 1;
+    }
+
+    assert.deepEqual(
+      calls.slice(-5).map((request) => request.operation),
+      [
+        "get-project-user-status",
+        "open-or-resume-review-session",
+        "record-review-host-open",
+        "record-review-host-notification",
+        "record-review-ai-receipt",
+      ],
+    );
+    assert.deepEqual(calls.at(-4), {
+      operation: "open-or-resume-review-session",
+      project_root: "/managed/project",
+      expected_revision: 3,
+      review_type: "content-full-deck",
+      target_artifact_ref: "artifact://reading-deck-blueprint/abc",
+      source_version: "content-v1",
+      target_revision: 3,
+      open_policy: "foreground-if-waiting",
+    });
+  } finally {
+    await client.close();
+    await server.close();
   }
 });
 

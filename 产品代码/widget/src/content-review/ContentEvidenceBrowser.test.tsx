@@ -5,6 +5,7 @@ import fixture from "../__fixtures__/content-sidebar-review.json";
 import { ContentReviewDocument } from "../components/content-review/ContentReviewDocument";
 import { createContentReviewClient } from "../lib/content-review-client";
 import type { ContentFullDeckProjection, HostBridge } from "../types";
+import { parseToolOutput, type ToolContractMap } from "../types/tool-contracts";
 
 afterEach(cleanup);
 
@@ -12,10 +13,17 @@ function setup() {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
   const bridge: HostBridge = {
     connect: vi.fn(async () => {}),
-    callTool: vi.fn(async (name: string, args: Record<string, unknown>) => {
-      calls.push({ name, args });
+    callTool: vi.fn(async <K extends keyof ToolContractMap>(
+      name: K,
+      args: ToolContractMap[K]["input"],
+    ) => {
+      calls.push({ name, args: args as unknown as Record<string, unknown> });
       if (name === "open_content_evidence_browser") {
-        return { opened: true, reviewType: "content-evidence" } as never;
+        return parseToolOutput(name, {
+          opened: true,
+          reviewType: "content-evidence",
+          ...args,
+        });
       }
       if (name === "read_ai_ppt_project_asset") {
         throw new Error("asset preview is not needed for this interaction test");

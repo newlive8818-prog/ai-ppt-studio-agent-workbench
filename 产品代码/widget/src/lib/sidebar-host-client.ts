@@ -3,6 +3,7 @@ import type {
   MissionConfirmationResult,
   SurfaceData,
 } from "../types";
+import { parseToolOutput, type ToolContractMap } from "../types/tool-contracts";
 
 function sidebarError(code: string, message: string) {
   const error = new Error(message) as Error & { code?: string };
@@ -33,8 +34,15 @@ export function createSidebarHostClient(): HostBridge {
     async connect(onData?: (data: SurfaceData) => void) {
       await adapter.connect(onData);
     },
-    async callTool<T>(name: string, args: Record<string, unknown>) {
-      return adapter.callTool<T>(name, args);
+    async callTool<K extends keyof ToolContractMap>(
+      name: K,
+      args: ToolContractMap[K]["input"],
+    ) {
+      const value = await adapter.callTool(
+        name,
+        args as unknown as Record<string, unknown>,
+      );
+      return parseToolOutput(name, value);
     },
     async updateModelContext(context) {
       await adapter.updateModelContext?.(context);

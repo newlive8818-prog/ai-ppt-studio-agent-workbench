@@ -1,6 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
+import { PUBLIC_TOOL_CATALOG } from "../mcp/tool-catalog.mjs";
+
 const projectRoot = process.env.AI_PPT_PROBE_PROJECT?.trim() || undefined;
 
 const client = new Client({ name: "ai-ppt-studio-probe", version: "0.1.0" });
@@ -18,40 +20,13 @@ await client.connect(transport);
 try {
   const listed = await client.listTools();
   const toolNames = listed.tools.map((tool) => tool.name).sort();
-  const requiredTools = [
-    "add_ai_ppt_material",
-    "commit_ai_ppt_artifact",
-    "confirm_ai_ppt_gate",
-    "confirm_ai_ppt_mission",
-    "confirm_content_batch_revision_plan",
-    "create_ai_ppt_project",
-    "create_content_batch_change_set",
-    "get_ai_ppt_project_snapshot",
-    "get_ai_ppt_sidebar_projection",
-    "get_content_sidebar_review_projection",
-    "get_delivery_status_projection",
-    "open_ai_ppt_browser_review",
-    "open_content_evidence_browser",
-    "read_ai_ppt_project_asset",
-    "record_chat_delivery",
-    "record_internal_gate",
-    "reopen_ai_ppt_scope",
-    "request_ai_ppt_agent_action",
-    "save_ai_ppt_mission_draft",
-    "save_content_batch_revision_plan",
-    "save_content_page_decision",
-    "save_review_marks",
-    "set_ai_ppt_release_target_policy",
-    "submit_ai_ppt_human_decision",
-    "submit_content_review_batch",
-    "withdraw_content_review_batch",
-  ];
-  if (toolNames.length !== requiredTools.length) {
+  const catalogToolNames = PUBLIC_TOOL_CATALOG.map((tool) => tool.name).sort();
+  if (toolNames.length !== catalogToolNames.length) {
     throw new Error(
-      `Expected ${requiredTools.length} pure-data tools, found ${toolNames.length}.`,
+      `Expected ${catalogToolNames.length} pure-data tools, found ${toolNames.length}.`,
     );
   }
-  for (const name of requiredTools) {
+  for (const name of catalogToolNames) {
     if (!toolNames.includes(name)) {
       throw new Error(`${name} not found. Tools: ${toolNames.join(", ")}`);
     }

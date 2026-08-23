@@ -11,14 +11,6 @@ interface Props {
   managedConnection?: boolean;
 }
 
-interface BrowserReviewOpenResult {
-  status?: "opened" | "review-session-ready";
-  opened?: boolean;
-  openMode?: "host-adapter" | "agent-browser";
-  browserAction?: "open-scoped-url";
-  url?: string;
-}
-
 export function App({ initialData, bridge, managedConnection = false }: Props) {
   const [data, setData] = useState<WidgetData | undefined>(initialData);
   const [activeSpace, setActiveSpace] = useState<SpaceId>(
@@ -61,7 +53,7 @@ export function App({ initialData, bridge, managedConnection = false }: Props) {
       const sourceVersion = reviewType === "content"
         ? snapshot.workspace.blueprint.source_version
         : snapshot.workspace.visual.source_version;
-      const result = await bridge.callTool<BrowserReviewOpenResult>("open_ai_ppt_browser_review", {
+      const result = await bridge.callTool("open_ai_ppt_browser_review", {
         projectRoot: snapshot.project.project_root,
         reviewType,
         sourceVersion,

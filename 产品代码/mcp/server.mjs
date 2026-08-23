@@ -15,6 +15,7 @@ import {
   createHostConfirmationAuthority,
   HOST_CONFIRMATION_SECRET_ENV,
 } from "./host-confirmation-assertion.mjs";
+import { PUBLIC_TOOL_CATALOG } from "./tool-catalog.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifest = JSON.parse(
@@ -272,6 +273,19 @@ export function createAiPptMcpServer(options = {}) {
         "Use the revision-safe data tools for the managed AI PPT project. Chat is a text collaboration and delivery channel and must never render the workbench or professional review as an MCP App. A real Codex sidebar host adapter is required for the compact workbench. Browser review uses a dedicated loopback bridge: when open_ai_ppt_browser_review returns status=review-session-ready, immediately open its scoped URL with the Codex in-app Browser and do not claim it is open before that succeeds. The managed project directory is the business truth source; never edit state JSON directly. Codex Presentations is the only PPTX route.",
     },
   );
+  const catalogNames = new Set(PUBLIC_TOOL_CATALOG.map((tool) => tool.name));
+  const registeredNames = new Set();
+  const registerTool = server.registerTool.bind(server);
+  server.registerTool = (name, ...args) => {
+    if (!catalogNames.has(name)) {
+      throw new Error(`MCP tool ${name} is missing from PUBLIC_TOOL_CATALOG`);
+    }
+    if (registeredNames.has(name)) {
+      throw new Error(`MCP tool ${name} is registered more than once`);
+    }
+    registeredNames.add(name);
+    return registerTool(name, ...args);
+  };
 
   async function obtainScopedConfirmation(context, input, actionLabel) {
     const userMessageRef = String(input.userMessageRef || "").trim();
@@ -535,6 +549,131 @@ export function createAiPptMcpServer(options = {}) {
       );
     },
   );
+
+  server.registerTool(
+    "get_ai_ppt_project_status",
+    {
+      title: "Get AI PPT Project User Status",
+      description:
+        "Read the single authoritative user-facing project status without creating or modifying a review session.",
+      inputSchema: { projectRoot: z.string().trim().min(1) },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (input) => {
+      const outcome = await invokeForTool(
+        invokeBridge,
+        requestForProject("get-project-user-status", input),
+      );
+      if (!outcome.ok) return outcome.result;
+      return textResult(
+        `当前项目状态：${outcome.payload.status.status}。`,
+        outcome.payload,
+      );
+    },
+  );
+
+  server.registerTool(
+    "open_or_resume_review_session",
+    {
+      title: "Open or Resume AI PPT Review Session",
+      description:
+        "Create or resume the one authoritative content-full-deck or visual-professional ReviewSession for an exact artifact source and revision.",
+      inputSchema: {
+        projectRoot: z.string().trim().min(1),
+        expectedRevision: z.number().int().nonnegative(),
+        reviewType: z.enum(["content-full-deck", "visual-professional"]),
+        targetArtifactRef: z.string().trim().min(1),
+        sourceVersion: z.string().trim().min(1),
+        targetRevision: z.number().int().nonnegative(),
+        openPolicy: z.enum(["foreground-if-waiting", "notify-only"]),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (input) => {
+      const outcome = await invokeForTool(invokeBridge, {
+        ...requestForProject("open-or-resume-review-session", input),
+        expected_revision: input.expectedRevision,
+        review_type: input.reviewType,
+        target_artifact_ref: input.targetArtifactRef,
+        source_version: input.sourceVersion,
+        target_revision: input.targetRevision,
+        open_policy: input.openPolicy,
+      });
+      if (!outcome.ok) return outcome.result;
+      return textResult(
+        `审核会话 ${outcome.payload.session.review_session_id} 已创建或恢复。`,
+        outcome.payload,
+      );
+    },
+  );
+
+  const reviewReceiptTools = [
+    {
+      name: "record_review_host_open_receipt",
+      operation: "record-review-host-open",
+      title: "Record Review Host Open Receipt",
+      results: ["opened", "failed", "unavailable"],
+      message: "宿主打开回执已记录。",
+    },
+    {
+      name: "record_review_host_notification_receipt",
+      operation: "record-review-host-notification",
+      title: "Record Review Host Notification Receipt",
+      results: ["sent", "failed", "unavailable"],
+      message: "宿主通知回执已记录。",
+    },
+    {
+      name: "record_review_ai_receipt",
+      operation: "record-review-ai-receipt",
+      title: "Record Review AI Receipt",
+      results: ["received", "failed", "unavailable"],
+      message: "AI 接收回执已记录。",
+    },
+  ];
+  for (const receiptTool of reviewReceiptTools) {
+    server.registerTool(
+      receiptTool.name,
+      {
+        title: receiptTool.title,
+        description:
+          "Persist one real receipt against an existing authoritative ReviewSession. The client cannot infer or fabricate Runtime-owned status.",
+        inputSchema: {
+          projectRoot: z.string().trim().min(1),
+          expectedRevision: z.number().int().nonnegative(),
+          reviewSessionId: z.string().trim().min(1),
+          result: z.enum(receiptTool.results),
+          receiptRef: z.string().trim().min(1),
+        },
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+      },
+      async (input) => {
+        const outcome = await invokeForTool(invokeBridge, {
+          ...requestForProject(receiptTool.operation, input),
+          expected_revision: input.expectedRevision,
+          review_session_id: input.reviewSessionId,
+          result: input.result,
+          receipt_ref: input.receiptRef,
+        });
+        if (!outcome.ok) return outcome.result;
+        return textResult(receiptTool.message, outcome.payload);
+      },
+    );
+  }
 
   server.registerTool(
     "get_ai_ppt_sidebar_projection",
@@ -1786,6 +1925,14 @@ export function createAiPptMcpServer(options = {}) {
     },
   );
 
+  const missingRegistrations = PUBLIC_TOOL_CATALOG
+    .map((tool) => tool.name)
+    .filter((name) => !registeredNames.has(name));
+  if (missingRegistrations.length) {
+    throw new Error(
+      `PUBLIC_TOOL_CATALOG tools are not registered: ${missingRegistrations.join(", ")}`,
+    );
+  }
   return server;
 }
 

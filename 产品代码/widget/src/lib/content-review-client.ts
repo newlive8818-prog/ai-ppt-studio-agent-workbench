@@ -1,42 +1,22 @@
 import type {
   ContentFullDeckProjection,
   ContentPageDecision,
-  ContentReviewProgress,
   ContentSidebarReviewProjection,
   HostBridge,
-  ProjectSnapshot,
 } from "../types";
+import type {
+  OpenedContentEvidenceBrowser,
+  SavedContentPageDecision,
+  SubmittedContentReviewBatch,
+  WithdrawnContentReviewBatch,
+} from "../types/tool-contracts";
 
-export interface SavedContentPageDecision {
-  artifact_ref: string;
-  page_completion: {
-    slide_id: string;
-    completed: boolean;
-  };
-  review_progress: ContentReviewProgress;
-  snapshot: ProjectSnapshot;
-}
-
-export interface SubmittedContentReviewBatch {
-  artifact_ref: string;
-  follow_up_message: string;
-  snapshot: ProjectSnapshot;
-}
-
-export interface WithdrawnContentReviewBatch {
-  artifact_ref: string;
-  replacement_review_batch_id: string;
-  snapshot: ProjectSnapshot;
-}
-
-export interface OpenedContentEvidenceBrowser {
-  opened: true;
-  reviewType: "content-evidence";
-  sourceVersion: string;
-  slideId: string;
-  evidenceId: string;
-  materialRef: string;
-}
+export type {
+  OpenedContentEvidenceBrowser,
+  SavedContentPageDecision,
+  SubmittedContentReviewBatch,
+  WithdrawnContentReviewBatch,
+} from "../types/tool-contracts";
 
 export interface ContentReviewClient {
   load(projectRoot: string): Promise<ContentSidebarReviewProjection>;
@@ -77,7 +57,7 @@ export interface ContentReviewClient {
 export function createContentReviewClient(bridge: HostBridge): ContentReviewClient {
   return {
     load(projectRoot: string) {
-      return bridge.callTool<ContentSidebarReviewProjection>(
+      return bridge.callTool(
         "get_content_sidebar_review_projection",
         { projectRoot },
       );
@@ -92,7 +72,7 @@ export function createContentReviewClient(bridge: HostBridge): ContentReviewClie
       decision: ContentPageDecision;
       comment: string;
     }) {
-      return bridge.callTool<SavedContentPageDecision>(
+      return bridge.callTool(
         "save_content_page_decision",
         input,
       );
@@ -104,7 +84,7 @@ export function createContentReviewClient(bridge: HostBridge): ContentReviewClie
       sourceVersion: string;
       reviewBatchId: string;
     }) {
-      return bridge.callTool<SubmittedContentReviewBatch>(
+      return bridge.callTool(
         "submit_content_review_batch",
         input,
       );
@@ -117,7 +97,7 @@ export function createContentReviewClient(bridge: HostBridge): ContentReviewClie
       reviewBatchId: string;
       reason: string;
     }) {
-      return bridge.callTool<WithdrawnContentReviewBatch>(
+      return bridge.callTool(
         "withdraw_content_review_batch",
         input,
       );
@@ -130,7 +110,7 @@ export function createContentReviewClient(bridge: HostBridge): ContentReviewClie
       evidenceId: string;
       materialRef: string;
     }) {
-      return bridge.callTool<OpenedContentEvidenceBrowser>(
+      return bridge.callTool(
         "open_content_evidence_browser",
         input,
       );

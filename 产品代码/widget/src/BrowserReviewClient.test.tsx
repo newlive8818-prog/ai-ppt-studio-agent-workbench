@@ -78,7 +78,7 @@ describe("Browser Review loopback client", () => {
     const client = createBrowserReviewClient();
     await client.connect();
 
-    const result = await client.callTool<{ snapshot: { revision: number } }>(
+    const result = await client.callTool(
       "save_review_marks",
       {
         expectedRevision: 7,

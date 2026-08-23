@@ -1,9 +1,9 @@
 import type {
-  DecisionResult,
   HostBridge,
   ReviewWidgetData,
   SurfaceData,
 } from "../types";
+import { parseToolOutput, type ToolContractMap } from "../types/tool-contracts";
 
 interface ReviewSessionPayload {
   ok: boolean;
@@ -76,17 +76,21 @@ export function createBrowserReviewClient(
       onData?.(data);
       startHeartbeat();
     },
-    async callTool<T = DecisionResult>(name: string, args: Record<string, unknown>) {
+    async callTool<K extends keyof ToolContractMap>(
+      name: K,
+      args: ToolContractMap[K]["input"],
+    ) {
       if (name !== "save_review_marks" || !data) {
         throw new Error("Browser Review tool is unavailable");
       }
+      const saveArgs = args as ToolContractMap["save_review_marks"]["input"];
       const response = await authorizedFetch("/api/marks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          expectedRevision: args.expectedRevision,
-          sourceVersion: args.sourceVersion,
-          marks: args.marks,
+          expectedRevision: saveArgs.expectedRevision,
+          sourceVersion: saveArgs.sourceVersion,
+          marks: saveArgs.marks,
         }),
       });
       let payload: { snapshotRevision: number };
@@ -105,9 +109,9 @@ export function createBrowserReviewClient(
         throw cause;
       }
       data = { ...data, snapshotRevision: payload.snapshotRevision };
-      return {
+      return parseToolOutput(name, {
         snapshot: { revision: payload.snapshotRevision },
-      } as T;
+      });
     },
     async switchReview(reviewType) {
       if (!data) throw new Error("Browser Review session is not connected");
