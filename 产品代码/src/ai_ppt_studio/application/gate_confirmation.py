@@ -21,6 +21,14 @@ from ai_ppt_studio.domains.content.review_contracts import (
     validate_content_review_batch,
     validate_persisted_page_decision,
 )
+from ai_ppt_studio.domains.content.contracts import validate_reading_deck_blueprint
+from ai_ppt_studio.domains.content.revision_plans import (
+    validate_revision_plan,
+    validate_revision_plan_confirmation,
+)
+from ai_ppt_studio.domains.content.review_batches import (
+    validate_content_review_batch as validate_v22_content_review_batch,
+)
 from ai_ppt_studio.errors import (
     ArtifactReferenceError,
     ContractValidationError,
@@ -184,6 +192,8 @@ class GateConfirmationPolicy:
 
     def _g0_evidence(self) -> tuple[str, list[str], str]:
         state = self.kernel.load()
+        if state.artifact_heads.get("content/reading-deck-blueprint", ""):
+            return self._v22_g0_evidence(state)
         source_ref = state.artifact_heads.get("content/blueprint", "")
         acceptance_ref = state.artifact_heads.get("content/acceptance", "")
         batch_ref = state.artifact_heads.get("content/review-batch", "")
@@ -276,6 +286,82 @@ class GateConfirmationPolicy:
             source_ref,
             [acceptance_ref, source_ref, batch_ref, plan_ref, confirmation_ref],
             summary,
+        )
+
+    def _v22_g0_evidence(self, state: Any) -> tuple[str, list[str], str]:
+        """Resolve the one current v2.2 content-review lineage eligible for G0."""
+
+        source_ref = state.artifact_heads.get("content/reading-deck-blueprint", "")
+        acceptance_ref = state.artifact_heads.get("content/acceptance", "")
+        batch_ref = state.artifact_heads.get("content/review-batch", "")
+        plan_ref = state.artifact_heads.get("content/revision-plan", "")
+        confirmation_ref = state.artifact_heads.get(
+            "content/revision-plan-confirmation", ""
+        )
+        try:
+            blueprint = validate_reading_deck_blueprint(
+                self._resolve(source_ref, "reading-deck-blueprint", "G0")
+            )
+            acceptance = self._resolve(
+                acceptance_ref, "content-acceptance", "G0"
+            )
+            batch = validate_v22_content_review_batch(
+                self._resolve(batch_ref, "content-review-batch", "G0")
+            )
+            applied = validate_revision_plan(
+                self._resolve(plan_ref, "content-batch-revision-plan", "G0")
+            )
+            confirmation = validate_revision_plan_confirmation(
+                self._resolve(
+                    confirmation_ref, "content-batch-plan-confirmation", "G0"
+                )
+            )
+            confirmed_ref = str(applied.get("supersedes_ref") or "")
+            confirmed = validate_revision_plan(
+                self._resolve(
+                    confirmed_ref, "content-batch-revision-plan", "G0"
+                )
+            )
+        except (
+            ArtifactReferenceError,
+            ContractValidationError,
+            ContentWorkflowError,
+            GateBlockedError,
+            KeyError,
+            TypeError,
+            ValueError,
+        ) as error:
+            raise GateBlockedError(
+                "G0", ("content-review-batch-current-source-incomplete",)
+            ) from error
+        proposal_ref = str(confirmed.get("supersedes_ref") or "")
+        blockers: list[str] = []
+        if acceptance.get("overall_result") != "passed":
+            blockers.append("content-acceptance-failed")
+        if acceptance.get("source_version") != source_ref:
+            blockers.append("content-lineage-stale")
+        if (
+            batch.get("status") != "submitted"
+            or batch.get("source_version") != source_ref
+            or batch.get("expected_slide_count") != len(blueprint["slides"])
+            or any(value for key, value in batch["counts"].items() if key != "approved")
+            or applied.get("status") != "applied"
+            or confirmed.get("status") != "confirmed"
+            or applied.get("source_version") != source_ref
+            or confirmed.get("source_version") != source_ref
+            or applied.get("review_batch_ref") != batch_ref
+            or confirmed.get("review_batch_ref") != batch_ref
+            or confirmation.get("revision_plan_ref") != proposal_ref
+            or confirmation.get("review_batch_ref") != batch_ref
+            or confirmation.get("source_version") != source_ref
+        ):
+            blockers.append("content-review-batch-current-source-incomplete")
+        if blockers:
+            raise GateBlockedError("G0", tuple(sorted(set(blockers))))
+        return (
+            source_ref,
+            [acceptance_ref, source_ref, batch_ref, plan_ref, confirmation_ref],
+            f"完整阅读稿，共 {len(blueprint['slides'])} 页；当前版本全篇审核已完成。",
         )
 
     def _batch_descends_from(

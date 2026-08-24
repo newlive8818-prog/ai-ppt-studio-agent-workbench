@@ -56,7 +56,9 @@ def hard_gate_service_type() -> type[Any]:
     return candidate
 
 
-def build_blueprint(kernel: ProjectKernel, *, mode: str = "mixed-evidence") -> str:
+def build_blueprint(
+    kernel: ProjectKernel, *, mode: str = "mixed-evidence", slide_count: int = 1
+) -> str:
     service = PresalesContentService(kernel)
     book_ref = service.build_presales_evidence_book(
         command_id="book",
@@ -83,6 +85,22 @@ def build_blueprint(kernel: ProjectKernel, *, mode: str = "mixed-evidence") -> s
         payload=valid_fit_map(),
     )
     blueprint = valid_blueprint(mode)
+    if slide_count < 1:
+        raise ValueError("slide_count must be positive")
+    first_slide = blueprint["slides"][0]
+    blueprint["slides"] = []
+    for order in range(1, slide_count + 1):
+        slide = copy.deepcopy(first_slide)
+        slide["slide_id"] = f"slide-{order}"
+        slide["order"] = order
+        slide["neutral_title"] = f"经营审批协同的一期讨论范围（第 {order} 页）"
+        slide["previous_relation"] = "开篇" if order == 1 else "承接上一页讨论"
+        slide["next_relation"] = (
+            "下一页展开当前问题和证据缺口"
+            if order < slide_count
+            else "本稿结束"
+        )
+        blueprint["slides"].append(slide)
     blueprint.update(
         {
             "project_id": kernel.project_id,
@@ -379,7 +397,7 @@ class ContentHardGateServiceTests(unittest.TestCase):
                     acceptance_ref, blueprint_ref
                 )
             self.assertIn(
-                "v22-content-hard-gates-required", raised.exception.missing_evidence
+                "content-acceptance-not-current", raised.exception.missing_evidence
             )
 
     def test_project_command_round_trip_persists_real_gate_record(self) -> None:

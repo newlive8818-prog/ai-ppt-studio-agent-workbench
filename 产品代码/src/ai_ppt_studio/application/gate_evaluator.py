@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ai_ppt_studio.domains.content.contracts import validate_reading_deck_blueprint
 from ai_ppt_studio.errors import GateBlockedError
 from ai_ppt_studio.application.gate_confirmation import GateConfirmationPolicy
 from ai_ppt_studio.application.release_policy_service import (
@@ -25,11 +26,10 @@ class GateEvaluator:
     def content_user_reviewable(
         self, acceptance_ref: str, blueprint_ref: str
     ) -> GateMutation:
-        if self.kernel.load().artifact_heads.get(
-            "content/reading-deck-blueprint", ""
-        ):
-            raise GateBlockedError(
-                "G0", ("v22-content-hard-gates-required",)
+        state = self.kernel.load()
+        if state.artifact_heads.get("content/reading-deck-blueprint", ""):
+            return self._v22_content_user_reviewable(
+                state, acceptance_ref, blueprint_ref
             )
         acceptance = self._resolve(acceptance_ref, "content-acceptance")
         blueprint = self._resolve(blueprint_ref, "content-blueprint")
@@ -51,6 +51,42 @@ class GateEvaluator:
             (acceptance_ref, blueprint_ref),
         )
 
+    def _v22_content_user_reviewable(
+        self, state: object, acceptance_ref: str, blueprint_ref: str
+    ) -> GateMutation:
+        """Open content review only for the current internally-passed v2.2 deck."""
+
+        if state.artifact_heads.get("content/acceptance", "") != acceptance_ref:
+            raise GateBlockedError("G0", ("content-acceptance-not-current",))
+        if (
+            state.artifact_heads.get("content/reading-deck-blueprint", "")
+            != blueprint_ref
+        ):
+            raise GateBlockedError("G0", ("reading-deck-blueprint-not-current",))
+        acceptance = self._resolve(acceptance_ref, "content-acceptance")["payload"]
+        blueprint = validate_reading_deck_blueprint(
+            self._resolve(blueprint_ref, "reading-deck-blueprint")["payload"]
+        )
+        blockers: list[str] = []
+        if acceptance.get("overall_result") != "passed":
+            blockers.append("content-acceptance-failed")
+        if acceptance.get("source_version") != blueprint_ref:
+            blockers.append("content-lineage-stale")
+        if blueprint.get("project_id") != state.project_id:
+            blockers.append("content-project-mismatch")
+        if blockers:
+            raise GateBlockedError("G0", tuple(sorted(set(blockers))))
+        return issue_gate_mutation(
+            {
+                "G0": "user-reviewable",
+                "G1": "locked",
+                "G2": "locked",
+                "G3": "locked",
+                "G4": "locked",
+            },
+            (acceptance_ref, blueprint_ref),
+        )
+
     def confirm_g0(
         self,
         *,
@@ -61,19 +97,30 @@ class GateEvaluator:
         if state.gate_status.get("G0") != "user-reviewable":
             blockers.append("content-not-user-reviewable")
         acceptance_ref = state.artifact_heads.get("content/acceptance", "")
-        blueprint_ref = state.artifact_heads.get("content/blueprint", "")
+        blueprint_slot = (
+            "content/reading-deck-blueprint"
+            if state.artifact_heads.get("content/reading-deck-blueprint", "")
+            else "content/blueprint"
+        )
+        blueprint_ref = state.artifact_heads.get(blueprint_slot, "")
         if not acceptance_ref or not blueprint_ref:
             blockers.append("content-evidence-missing")
         else:
             self.content_user_reviewable(acceptance_ref, blueprint_ref)
         confirmation = self._resolve(confirmation_ref, "g0-confirmation")
         confirmation_payload = confirmation["payload"]
+        expected_evidence = (
+            GateConfirmationPolicy(self.kernel).context("G0")["evidence_refs"]
+            if not blockers
+            else []
+        )
         if (
             confirmation_payload.get("gate") != "G0"
             or confirmation_payload.get("project_id") != state.project_id
             or confirmation_payload.get("content_acceptance_ref") != acceptance_ref
             or confirmation_payload.get("content_blueprint_ref") != blueprint_ref
             or confirmation_payload.get("source_version") != blueprint_ref
+            or confirmation_payload.get("evidence_refs") != expected_evidence
             or not self._trusted_confirmation_identity(confirmation_payload)
         ):
             blockers.append("confirmation-evidence-mismatch")
@@ -164,6 +211,48 @@ class GateEvaluator:
                 "G4": "locked",
             },
             evidence,
+        )
+
+    def content_source_republished(
+        self,
+        *,
+        old_blueprint_ref: str,
+        new_blueprint_ref: str,
+    ) -> GateMutation:
+        """Invalidate every downstream Gate after publishing a new content source.
+
+        This deliberately differs from :meth:`reopen_g0`: the new source has
+        not passed its content hard gates or a new full-deck review yet, so G0
+        must remain ``open`` rather than becoming ``user-reviewable``.
+        """
+
+        state = self.kernel.load()
+        if (
+            state.artifact_heads.get("content/reading-deck-blueprint", "")
+            != old_blueprint_ref
+        ):
+            raise GateBlockedError("G0", ("reading-deck-blueprint-not-current",))
+        old_reference = ArtifactReference.parse(old_blueprint_ref)
+        new_reference = ArtifactReference.parse(new_blueprint_ref)
+        if (
+            old_reference.kind != "reading-deck-blueprint"
+            or new_reference.kind != "reading-deck-blueprint"
+        ):
+            raise GateBlockedError("G0", ("reading-deck-blueprint-kind-mismatch",))
+        old_blueprint = validate_reading_deck_blueprint(
+            self._resolve(old_blueprint_ref, "reading-deck-blueprint")["payload"]
+        )
+        if old_blueprint.get("project_id") != state.project_id:
+            raise GateBlockedError("G0", ("content-project-mismatch",))
+        return issue_gate_mutation(
+            {
+                "G0": "open",
+                "G1": "locked",
+                "G2": "locked",
+                "G3": "locked",
+                "G4": "locked",
+            },
+            (old_blueprint_ref, new_blueprint_ref),
         )
 
     def pass_g1(self) -> GateMutation:

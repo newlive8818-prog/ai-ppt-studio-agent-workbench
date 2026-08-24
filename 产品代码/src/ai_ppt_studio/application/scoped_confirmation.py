@@ -234,6 +234,21 @@ class ScopedConfirmationPolicy:
         challenge_revision: int,
         host_confirmation_assertion: str,
     ) -> tuple[dict[str, Any], tuple[ConfirmationConsumption, ...]]:
+        if (
+            isinstance(challenge_revision, bool)
+            or not isinstance(challenge_revision, int)
+            or challenge_revision < 0
+        ):
+            raise ContentWorkflowError(
+                "CONTENT_REVIEW_CONFLICT",
+                "Confirmation challenge revision is invalid",
+                {
+                    "expected_challenge_revision": current[
+                        "challenge_revision"
+                    ],
+                    "actual_challenge_revision": challenge_revision,
+                },
+            )
         mismatches: dict[str, object] = {}
         if source_version != current["source_version"]:
             mismatches["source_version"] = source_version
