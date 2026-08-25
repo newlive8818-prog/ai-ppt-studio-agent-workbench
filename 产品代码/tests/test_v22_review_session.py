@@ -11,7 +11,11 @@ sys.path.insert(0, str(ROOT / "src"))
 from ai_ppt_studio.application.review_session_service import ReviewSessionService
 from ai_ppt_studio.application.v16_bridge import dispatch_v16
 from ai_ppt_studio.domains.review.contracts import validate_review_session
-from ai_ppt_studio.errors import ContractValidationError, ReviewSourceStaleError
+from ai_ppt_studio.errors import (
+    ContractValidationError,
+    ReviewSessionAlreadyCurrentError,
+    ReviewSourceStaleError,
+)
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 
@@ -233,12 +237,12 @@ class ReviewSessionServiceTests(unittest.TestCase):
             source_version="content-v3",
         )
         self.source_ref = state.artifact_heads["content/reading-blueprint"]
-        self.service = ReviewSessionService(self.kernel)
+        self.service = ReviewSessionService(self.kernel, clock=lambda: NOW)
 
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def open(self, command_id: str = "open-v3"):
+    def open_with_policy(self, open_policy: str, command_id: str = "open-v3"):
         state = self.kernel.load()
         return self.service.open_or_resume(
             command_id=command_id,
@@ -247,7 +251,79 @@ class ReviewSessionServiceTests(unittest.TestCase):
             target_artifact_ref=self.source_ref,
             source_version="content-v3",
             source_revision=1,
+            open_policy=open_policy,
+        )
+
+    def open(self, command_id: str = "open-v3"):
+        return self.open_with_policy("notify-only", command_id)
+
+    def test_open_policy_initializes_independent_pending_facts(self) -> None:
+        _, foreground, _ = self.open_with_policy("foreground-if-waiting")
+        self.assertEqual(foreground["host_open_status"], "pending")
+        self.assertEqual(
+            foreground["host_notification_status"], "not-requested"
+        )
+
+        published = publish_source(
+            self.kernel,
+            command_id="source-next",
+            slot="content/reading-blueprint",
+            kind="reading-deck-blueprint",
+            source_version="content-v4",
+        )
+        next_ref = published.artifact_heads["content/reading-blueprint"]
+        _, background, _ = self.service.open_or_resume(
+            command_id="open-v4-background",
+            expected_revision=published.revision,
+            review_type="content-full-deck",
+            target_artifact_ref=next_ref,
+            source_version="content-v4",
+            source_revision=published.revision,
             open_policy="notify-only",
+        )
+        self.assertEqual(background["host_open_status"], "not-requested")
+        self.assertEqual(background["host_notification_status"], "pending")
+
+    def test_incompatible_open_policy_does_not_create_a_second_current(self) -> None:
+        first_ref, first, state = self.open_with_policy("notify-only")
+        with self.assertRaises(ReviewSessionAlreadyCurrentError) as caught:
+            self.service.open_or_resume(
+                command_id="same-identity-different-policy",
+                expected_revision=state.revision,
+                review_type="content-full-deck",
+                target_artifact_ref=self.source_ref,
+                source_version="content-v3",
+                source_revision=1,
+                open_policy="foreground-if-waiting",
+            )
+        self.assertEqual(caught.exception.code, "REVIEW_SESSION_ALREADY_CURRENT")
+        self.assertEqual(self.kernel.load(), state)
+        self.assertEqual(
+            self.kernel.load().artifact_heads["review/session/content-full-deck"],
+            first_ref,
+        )
+        self.assertEqual(first["open_policy"], "notify-only")
+
+    def test_expire_current_detaches_current_and_preserves_history(self) -> None:
+        first_ref, first, opened = self.open_with_policy("notify-only")
+        expired_ref, expired, committed = self.service.expire_current(
+            command_id="expire-session",
+            expected_revision=opened.revision,
+            review_type="content-full-deck",
+        )
+        self.assertEqual(expired["status"], "expired")
+        self.assertEqual(expired["expired_at"], NOW)
+        self.assertEqual(expired["review_session_id"], first["review_session_id"])
+        self.assertNotIn(
+            "review/session/content-full-deck",
+            committed.artifact_heads,
+        )
+        self.assertNotEqual(expired_ref, first_ref)
+        self.assertEqual(
+            self.kernel.artifacts.resolve(
+                ArtifactReference.parse(expired_ref)
+            )["payload"]["status"],
+            "expired",
         )
 
     def test_reopen_is_unique_and_new_source_atomically_supersedes(self) -> None:

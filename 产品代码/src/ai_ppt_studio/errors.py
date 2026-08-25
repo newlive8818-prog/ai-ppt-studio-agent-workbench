@@ -129,6 +129,33 @@ class ReviewSourceStaleError(AiPptError):
         )
 
 
+class ReviewSessionStaleError(AiPptError):
+    """Raised when a ReviewSession source or identity is stale."""
+
+    def __init__(self, expected: str, actual: str) -> None:
+        self.code = "REVIEW_SESSION_STALE"
+        self.expected = expected
+        self.actual = actual
+        super().__init__(
+            f"ReviewSession source {expected} is stale; current source is {actual}"
+        )
+
+
+class ReviewSessionAlreadyCurrentError(AiPptError):
+    """Raised when the current session identity already exists with another policy."""
+
+    code = "REVIEW_SESSION_ALREADY_CURRENT"
+
+    def __init__(self, review_type: str, review_session_id: str) -> None:
+        self.review_type = review_type
+        self.review_session_id = review_session_id
+        self.details = {
+            "review_type": review_type,
+            "review_session_id": review_session_id,
+        }
+        super().__init__("A compatible current ReviewSession already exists")
+
+
 class ReviewMarkSaveError(AiPptError):
     """Raised when a valid review-mark write fails at the persistence boundary."""
 

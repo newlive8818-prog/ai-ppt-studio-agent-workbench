@@ -44,6 +44,17 @@ def record_bridge_host_open(
     )
 
 
+def expire_review_session(ctx: BridgeContext, request: dict[str, Any]) -> dict[str, Any]:
+    return _session_result(
+        ctx,
+        ReviewSessionService(ctx.kernel).expire_current(
+            command_id=ctx.command_id,
+            expected_revision=int(request["expected_revision"]),
+            review_type=str(request.get("review_type") or ""),
+        ),
+    )
+
+
 def _receipt(
     ctx: BridgeContext,
     request: dict[str, Any],
@@ -91,6 +102,7 @@ def record_ai_receipt(ctx: BridgeContext, request: dict[str, Any]) -> dict[str, 
 
 HANDLERS = {
     "open-or-resume-review-session": open_or_resume,
+    "expire-review-session": expire_review_session,
     "record-review-bridge-host-open": record_bridge_host_open,
     "record-review-host-open": record_host_open,
     "record-review-host-notification": record_host_notification,

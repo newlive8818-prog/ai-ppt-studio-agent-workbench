@@ -6,7 +6,7 @@ import copy
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from ai_ppt_studio.application.review_commands import (
     fingerprint,
@@ -19,6 +19,8 @@ from ai_ppt_studio.domains.review.contracts import (
 )
 from ai_ppt_studio.errors import (
     ContractValidationError,
+    ReviewSessionAlreadyCurrentError,
+    ReviewSessionStaleError,
     ReviewSourceStaleError,
     RevisionConflictError,
 )
@@ -48,11 +50,21 @@ BOUND_SAVED_SLOTS = {
 }
 
 
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 class ReviewSessionService:
     """Own all current-session state; adapters may only supply immutable receipts."""
 
-    def __init__(self, kernel: ProjectKernel) -> None:
+    def __init__(
+        self,
+        kernel: ProjectKernel,
+        *,
+        clock: Callable[[], str] = _utc_now,
+    ) -> None:
         self.kernel = kernel
+        self.clock = clock
 
     def open_or_resume(
         self,
@@ -94,9 +106,19 @@ class ReviewSessionService:
             current["source_version"],
             current["revision"],
         ) == identity:
+            if current["open_policy"] != open_policy:
+                raise ReviewSessionAlreadyCurrentError(
+                    review_type, current["review_session_id"]
+                )
             return current_ref, current, state
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = self.clock()
+        host_open_status = (
+            "pending" if open_policy == "foreground-if-waiting" else "not-requested"
+        )
+        host_notification_status = (
+            "pending" if open_policy == "notify-only" else "not-requested"
+        )
         session = validate_review_session(
             {
                 "review_session_id": self._session_id(
@@ -109,14 +131,15 @@ class ReviewSessionService:
                 "revision": source_revision,
                 "status": "ready",
                 "open_policy": open_policy,
-                "host_open_status": "not-requested",
+                "host_open_status": host_open_status,
                 "persistence_status": "saved",
-                "host_notification_status": "not-requested",
+                "host_notification_status": host_notification_status,
                 "ai_receipt_status": "pending",
                 "created_at": now,
                 "last_opened_at": None,
                 "submitted_at": None,
-            }
+            },
+            trusted_receipts=True,
         )
         detached = ()
         if current:
@@ -130,13 +153,39 @@ class ReviewSessionService:
                 ),
             )
         committed = self.kernel.commit(
-            command_id=self._text(command_id, "command_id"),
+                command_id=self._text(command_id, "command_id"),
             expected_revision=expected_revision,
             event_type="review.session-opened",
             artifact_updates={self._slot(review_type): (REVIEW_SESSION_KIND, session)},
             detached_artifacts=detached,
         )
         return self._current_result(committed, review_type)
+
+    def expire_current(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        review_type: str,
+    ) -> tuple[str, dict[str, Any], KernelState]:
+        state = self._state(expected_revision)
+        _, current = self._require_current(state, review_type)
+        expired = validate_review_session(
+            {**current, "status": "expired", "expired_at": self.clock()},
+            trusted_receipts=True,
+        )
+        detached_ref = str(
+            self.kernel.artifacts.reference_for(REVIEW_SESSION_KIND, expired)
+        )
+        committed = self.kernel.commit(
+            command_id=self._text(command_id, "command_id"),
+            expected_revision=expected_revision,
+            event_type="review.session-expired",
+            artifact_updates={},
+            detached_artifacts=((REVIEW_SESSION_KIND, expired),),
+            artifact_removals=(self._slot(review_type),),
+        )
+        return detached_ref, expired, committed
 
     def record_host_open_receipt(self, **kwargs: Any):
         return self._record_receipt("host-open", **kwargs)
@@ -256,7 +305,7 @@ class ReviewSessionService:
             {
                 **current,
                 "status": "superseded",
-                "superseded_at": datetime.now(timezone.utc).isoformat(),
+                "superseded_at": self.clock(),
             },
             trusted_receipts=True,
         )
