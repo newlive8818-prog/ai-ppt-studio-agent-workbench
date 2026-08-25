@@ -61,6 +61,81 @@ def receipt(
 
 
 class ReviewSessionContractTests(unittest.TestCase):
+    def valid_session_payload(self, **overrides: object) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "review_session_id": "session-01",
+            "review_type": "content-full-deck",
+            "project_id": "project-01",
+            "target_artifact_ref": "artifact://reading-deck-blueprint/" + "a" * 64,
+            "source_version": "content-v3",
+            "revision": 17,
+            "status": "ready",
+            "open_policy": "notify-only",
+            "host_open_status": "not-requested",
+            "persistence_status": "saved",
+            "host_notification_status": "not-requested",
+            "ai_receipt_status": "pending",
+            "created_at": NOW,
+            "last_opened_at": None,
+            "submitted_at": None,
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_authoritative_statuses_and_expired_timestamp_are_valid(self) -> None:
+        base = self.valid_session_payload()
+        for status in (
+            "preparing",
+            "ready",
+            "opened",
+            "submitted",
+            "superseded",
+            "expired",
+        ):
+            payload = {**base, "status": status}
+            if status == "opened":
+                payload.update(
+                    {
+                        "host_open_status": "opened",
+                        "last_opened_at": NOW,
+                        "host_open_receipt_ref": "artifact://review-host-open-receipt/"
+                        + "b" * 64,
+                    }
+                )
+            if status == "submitted":
+                payload["submitted_at"] = NOW
+            if status == "superseded":
+                payload["superseded_at"] = NOW
+            if status == "expired":
+                payload["expired_at"] = NOW
+            with self.subTest(status=status):
+                validate_review_session(payload, trusted_receipts=True)
+
+    def test_expired_session_requires_expired_at(self) -> None:
+        with self.assertRaises(ContractValidationError):
+            validate_review_session(
+                self.valid_session_payload(status="expired"), trusted_receipts=True
+            )
+
+    def test_contract_accepts_unavailable_and_unverified_facts_only_in_trusted_context(
+        self,
+    ) -> None:
+        payload = self.valid_session_payload(
+            host_open_status="unavailable",
+            host_notification_status="pending",
+            ai_receipt_status="unverified",
+        )
+        with self.assertRaises(ContractValidationError):
+            validate_review_session(payload)
+        validate_review_session(payload, trusted_receipts=True)
+
+    def test_review_session_persistence_is_always_saved(self) -> None:
+        with self.assertRaises(ContractValidationError):
+            validate_review_session(
+                self.valid_session_payload(persistence_status="failed"),
+                trusted_receipts=True,
+            )
+
     def test_minimum_contract_rejects_forged_or_invalid_state(self) -> None:
         payload = {
             "review_session_id": "content-session-01",

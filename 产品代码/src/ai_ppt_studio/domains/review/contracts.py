@@ -10,10 +10,16 @@ from ai_ppt_studio.kernel.references import ArtifactReference
 
 REVIEW_TYPES = frozenset({"content-full-deck", "visual-professional"})
 OPEN_POLICIES = frozenset({"foreground-if-waiting", "notify-only"})
-SESSION_STATUSES = frozenset({"ready", "opened", "submitted", "superseded"})
-HOST_OPEN_STATUSES = frozenset({"not-requested", "opened", "failed"})
-HOST_NOTIFICATION_STATUSES = frozenset({"not-requested", "sent", "failed"})
-AI_RECEIPT_STATUSES = frozenset({"pending", "received", "failed"})
+SESSION_STATUSES = frozenset(
+    {"preparing", "ready", "opened", "submitted", "superseded", "expired"}
+)
+HOST_OPEN_STATUSES = frozenset(
+    {"not-requested", "pending", "opened", "failed", "unavailable"}
+)
+HOST_NOTIFICATION_STATUSES = frozenset(
+    {"not-requested", "pending", "sent", "failed", "unavailable"}
+)
+AI_RECEIPT_STATUSES = frozenset({"pending", "received", "rejected", "unverified"})
 REQUIRED_FIELDS = frozenset(
     {
         "review_session_id",
@@ -41,6 +47,7 @@ OPTIONAL_FIELDS = frozenset(
         "ai_receipt_ref",
         "ai_receipts",
         "superseded_at",
+        "expired_at",
     }
 )
 RECEIPT_REQUIREMENTS = {
@@ -176,7 +183,7 @@ def validate_review_session(
             continue
         normalized[field] = (
             _timestamp(payload[field], field, optional=True)
-            if field == "superseded_at"
+            if field in {"superseded_at", "expired_at"}
             else _text(payload, field)
         )
         if field in RECEIPT_REQUIREMENTS:
@@ -202,4 +209,6 @@ def validate_review_session(
         raise ContractValidationError("submitted session requires submitted_at")
     if normalized["status"] == "superseded" and not normalized.get("superseded_at"):
         raise ContractValidationError("superseded session requires superseded_at")
+    if normalized["status"] == "expired" and not normalized.get("expired_at"):
+        raise ContractValidationError("expired session requires expired_at")
     return normalized
