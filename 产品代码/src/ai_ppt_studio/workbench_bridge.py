@@ -116,6 +116,15 @@ def _error_payload(exc: Exception) -> tuple[int, dict[str, object]]:
                 },
             },
         }
+    if isinstance(exc, ReviewSessionStaleError):
+        return 2, {
+            "ok": False,
+            "error": {
+                "code": exc.code,
+                "message": str(exc),
+                "details": {"expected": exc.expected, "actual": exc.actual},
+            },
+        }
     if isinstance(exc, ReviewSourceStaleError):
         return 2, {
             "ok": False,
@@ -126,15 +135,6 @@ def _error_payload(exc: Exception) -> tuple[int, dict[str, object]]:
                     "expected_source": exc.expected_source,
                     "actual_source": exc.actual_source,
                 },
-            },
-        }
-    if isinstance(exc, ReviewSessionStaleError):
-        return 2, {
-            "ok": False,
-            "error": {
-                "code": exc.code,
-                "message": str(exc),
-                "details": {"expected": exc.expected, "actual": exc.actual},
             },
         }
     if isinstance(exc, ReviewSessionAlreadyCurrentError):
