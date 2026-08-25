@@ -11,6 +11,15 @@ from ai_ppt_studio.application.content_batch_planning_service import (
     ContentBatchPlanningService,
 )
 from ai_ppt_studio.application.content_review_service import ContentReviewService
+from ai_ppt_studio.application.content_review.projection_service import (
+    ContentReviewProjectionService,
+)
+from ai_ppt_studio.application.content_review.decision_service import (
+    ContentPageDecisionService,
+)
+from ai_ppt_studio.application.content_review.batch_service import (
+    ContentReviewBatchService,
+)
 from ai_ppt_studio.application.content_service import ContentService
 from ai_ppt_studio.application.content_action_policy import (
     CONTENT_ACTION_CONTRACTS,
@@ -126,6 +135,9 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
     review_service = ReviewService(kernel)
     project_commands = ProjectCommandService(kernel)
     content_review = ContentReviewService(kernel)
+    content_full_deck_projection = ContentReviewProjectionService(kernel)
+    content_full_deck_decisions = ContentPageDecisionService(kernel)
+    content_full_deck_batches = ContentReviewBatchService(kernel)
     batch_planning = ContentBatchPlanningService(kernel)
     review_sessions = ReviewSessionService(kernel)
     status_projection = ProjectStatusProjectionService(kernel)
@@ -283,6 +295,31 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
             "review": content_review.content_sidebar_projection(),
             "snapshot_revision": state.revision,
         }
+    if operation == "get-content-full-deck-review-projection":
+        state = kernel.load()
+        review = content_full_deck_projection.project(
+            review_session_id=str(request.get("review_session_id") or "")
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "review": review,
+            "snapshot_revision": state.revision,
+        }
+    if operation == "get-content-full-deck-review-batch-submission-context":
+        state = kernel.load()
+        context = content_full_deck_batches.submission_context(
+            review_session_id=str(request.get("review_session_id") or ""),
+            review_batch_id=str(request.get("review_batch_id") or ""),
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "context": context,
+            "snapshot_revision": state.revision,
+        }
     if operation == "get-content-review-batch-submission-context":
         state = kernel.load()
         context = content_review.submission_context(
@@ -365,6 +402,26 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
                 "snapshot": _snapshot(state, project_root),
             },
         }
+    if operation == "save-content-full-deck-page-decision":
+        page_completion, review_progress, state = content_full_deck_decisions.save(
+            command_id=_command_id(operation, request),
+            expected_revision=int(request["expected_revision"]),
+            review_session_id=str(request.get("review_session_id") or ""),
+            review_batch_id=str(request.get("review_batch_id") or ""),
+            slide_id=str(request.get("slide_id") or ""),
+            decision=str(request.get("decision") or ""),
+            comment=str(request.get("comment") or ""),
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "result": {
+                "page_completion": page_completion,
+                "review_progress": review_progress,
+                "revision": state.revision,
+            },
+        }
     if operation == "submit-content-review-batch":
         artifact_ref, follow_up, state = content_review.submit_review_batch(
             command_id=_command_id(operation, request),
@@ -385,6 +442,32 @@ def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
                 "artifact_ref": artifact_ref,
                 "follow_up_message": follow_up,
                 "snapshot": _snapshot(state, project_root),
+            },
+        }
+    if operation == "submit-content-full-deck-review-batch":
+        artifact_ref, follow_up, state = (
+            content_full_deck_batches.submit_review_batch(
+                command_id=_command_id(operation, request),
+                expected_revision=int(request["expected_revision"]),
+                review_session_id=str(
+                    request.get("review_session_id") or ""
+                ),
+                review_batch_id=str(request.get("review_batch_id") or ""),
+                challenge_id=str(request.get("challenge_id") or ""),
+                challenge_revision=int(request.get("challenge_revision", -1)),
+                host_confirmation_assertion=str(
+                    request.get("host_confirmation_assertion") or ""
+                ),
+            )
+        )
+        return {
+            "ok": True,
+            "operation": operation,
+            "selected_project_root": str(project_root),
+            "result": {
+                "artifact_ref": artifact_ref,
+                "follow_up_message": follow_up,
+                "revision": state.revision,
             },
         }
     if operation == "withdraw-content-review-batch":

@@ -11,6 +11,10 @@ const implementedReviewSessionTools = [
   "record_review_host_open_receipt",
   "record_review_host_notification_receipt",
   "record_review_ai_receipt",
+  "get_content_full_deck_review_projection",
+  "save_content_full_deck_page_decision",
+  "submit_content_full_deck_review_batch",
+  "open_content_full_deck_evidence_browser",
 ];
 
 test("public MCP tool catalog is the single unique registration source", () => {

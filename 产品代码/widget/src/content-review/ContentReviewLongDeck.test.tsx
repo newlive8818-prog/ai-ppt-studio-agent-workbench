@@ -5,19 +5,23 @@ import fixture from "../__fixtures__/content-sidebar-review.json";
 import { ContentReviewDocument } from "../components/content-review/ContentReviewDocument";
 import type { ContentReviewClient } from "../lib/content-review-client";
 import { compactWidgetData, hostBridge } from "../test-fixtures";
-import type { ContentFullDeckProjection, ContentReviewSlide } from "../types";
+import type { ContentFullDeckReviewProjection, ContentReviewSlide } from "../types/content-review";
 
 afterEach(cleanup);
 
-function longProjection(count: number): ContentFullDeckProjection {
-  const base = structuredClone(fixture) as ContentFullDeckProjection;
+function longProjection(count: number): ContentFullDeckReviewProjection {
+  const base = structuredClone(fixture) as ContentFullDeckReviewProjection;
   const template = base.slides[0];
   base.slides = Array.from({ length: count }, (_, index): ContentReviewSlide => ({
     ...structuredClone(template),
     slide_id: `LONG-${index + 1}`,
     order: index + 1,
     neutral_title: `第 ${index + 1} 页完整中立标题`,
-    visible_copy: template.visible_copy.map((block) => ({ ...block, copy_id: `${block.copy_id}-${index}`, text: `${block.text}·第 ${index + 1} 页` })),
+    visible_copy_blocks: template.visible_copy_blocks.map((block) => ({
+      ...block,
+      block_id: `${block.block_id}-${index}`,
+      text: `${block.text}·第 ${index + 1} 页`,
+    })),
     decision_state: { selected: "", comment: "", completed: false, saved: false, frozen: false },
   }));
   base.review_progress = {
@@ -25,20 +29,17 @@ function longProjection(count: number): ContentFullDeckProjection {
     completed: 0,
     remaining: count,
     saved_comment_count: 0,
-    next_incomplete_slide_id: "LONG-1",
     counts: { approved: 0, modify: 0, evidence: 0, merge_or_delete: 0 },
   };
   return base;
 }
 
-function client(projection: ContentFullDeckProjection): ContentReviewClient {
+function client(projection: ContentFullDeckReviewProjection): ContentReviewClient {
   return {
     load: vi.fn(async () => projection),
     saveDecision: vi.fn(),
     submitBatch: vi.fn(),
-    withdrawBatch: vi.fn(),
     openEvidenceBrowser: vi.fn(),
-    isReviewReady: (value): value is ContentFullDeckProjection => value.display_policy === "content-sidebar-full-deck",
   };
 }
 
@@ -54,7 +55,6 @@ describe("content review long-deck contract", () => {
         bridge={host.bridge}
         client={client(data)}
         onProjectionChange={vi.fn()}
-        onSnapshotChange={vi.fn()}
       />,
     );
     const elapsed = performance.now() - started;

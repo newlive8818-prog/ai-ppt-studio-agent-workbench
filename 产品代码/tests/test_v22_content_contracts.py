@@ -229,6 +229,52 @@ class V22ContentContractTests(unittest.TestCase):
         self.assertEqual(result["slides"][0]["neutral_title"], payload["slides"][0]["neutral_title"])
         self.assertEqual(result["slides"][0]["visible_copy_blocks"], payload["slides"][0]["visible_copy_blocks"])
 
+    def test_blueprint_preserves_only_an_explicit_typed_material_reference(self) -> None:
+        payload = valid_blueprint()
+        binding = payload["slides"][0]["evidence_bindings"][0]
+        binding["material_ref"] = "artifact://material/material-a"
+
+        result = validator("validate_reading_deck_blueprint")(payload)
+
+        self.assertEqual(
+            result["slides"][0]["evidence_bindings"][0]["material_ref"],
+            "artifact://material/material-a",
+        )
+        without_material = valid_blueprint()
+        without_result = validator("validate_reading_deck_blueprint")(
+            without_material
+        )
+        self.assertNotIn(
+            "material_ref",
+            without_result["slides"][0]["evidence_bindings"][0],
+        )
+
+    def test_blueprint_preserves_explicit_evidence_image_metadata(self) -> None:
+        payload = valid_blueprint()
+        binding = payload["slides"][0]["evidence_bindings"][0]
+        binding.update(
+            {
+                "asset_ref": "review-assets/content-evidence-page.jpg",
+                "caption": "真实成稿 P02",
+                "material_kind": "image",
+            }
+        )
+
+        result = validator("validate_reading_deck_blueprint")(payload)
+
+        self.assertEqual(
+            result["slides"][0]["evidence_bindings"][0]["asset_ref"],
+            "review-assets/content-evidence-page.jpg",
+        )
+        self.assertEqual(
+            result["slides"][0]["evidence_bindings"][0]["caption"],
+            "真实成稿 P02",
+        )
+        self.assertEqual(
+            result["slides"][0]["evidence_bindings"][0]["material_kind"],
+            "image",
+        )
+
     def test_blueprint_rejects_legacy_persuasion_fields_anywhere(self) -> None:
         validate = validator("validate_reading_deck_blueprint")
         for field in (

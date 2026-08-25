@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -22,9 +23,79 @@ from tests.test_v16_project_service import runtime_config
 from tests.test_v16_review_marks import accepted_content
 from tests.host_confirmation_fixtures import signed_gate_assertion
 from tests.v16_visual_fixtures import apply_all_approved_content_review
+from ai_ppt_studio.application.scoped_confirmation import (
+    HOST_CONFIRMATION_SECRET_ENV,
+)
+from tests.test_v16_framework_discussion import TEST_SECRET, signed_assertion
+from tests.test_v22_content_review_projection import review_ready_kernel
 
 
 class V16BridgeTests(unittest.TestCase):
+    def test_bridge_exposes_v22_full_deck_projection_decision_and_submission(self) -> None:
+        kernel, _blueprint_ref, session = review_ready_kernel(slide_count=1)
+        self.addCleanup(lambda: __import__("shutil").rmtree(kernel.project_root))
+        review_session_id = str(session["review_session_id"])
+        review_batch_id = "bridge-v22-review-batch"
+
+        projection = dispatch_v16(
+            {
+                "operation": "get-content-full-deck-review-projection",
+                "project_root": str(kernel.project_root),
+                "review_session_id": review_session_id,
+            }
+        )
+        self.assertEqual(projection["review"]["surface"], "content-full-deck")
+        self.assertEqual(
+            projection["review"]["review_session"]["review_session_id"],
+            review_session_id,
+        )
+
+        slide_id = str(projection["review"]["slides"][0]["slide_id"])
+        saved = dispatch_v16(
+            {
+                "operation": "save-content-full-deck-page-decision",
+                "project_root": str(kernel.project_root),
+                "command_id": "bridge-save-v22-page-decision",
+                "expected_revision": projection["snapshot_revision"],
+                "review_session_id": review_session_id,
+                "review_batch_id": review_batch_id,
+                "slide_id": slide_id,
+                "decision": "approved",
+                "comment": "",
+            }
+        )
+        self.assertEqual(saved["result"]["review_progress"]["remaining"], 0)
+
+        context_result = dispatch_v16(
+            {
+                "operation": "get-content-full-deck-review-batch-submission-context",
+                "project_root": str(kernel.project_root),
+                "review_session_id": review_session_id,
+                "review_batch_id": review_batch_id,
+            }
+        )
+        context = context_result["context"]
+        with patch.dict(
+            __import__("os").environ,
+            {HOST_CONFIRMATION_SECRET_ENV: TEST_SECRET},
+            clear=False,
+        ):
+            submitted = dispatch_v16(
+                {
+                    "operation": "submit-content-full-deck-review-batch",
+                    "project_root": str(kernel.project_root),
+                    "command_id": "bridge-submit-v22-review-batch",
+                    "expected_revision": saved["result"]["revision"],
+                    "review_session_id": review_session_id,
+                    "review_batch_id": review_batch_id,
+                    "challenge_id": context["challenge_id"],
+                    "challenge_revision": context["challenge_revision"],
+                    "host_confirmation_assertion": signed_assertion(context),
+                }
+            )
+        self.assertTrue(submitted["result"]["artifact_ref"].startswith("artifact://content-review-batch/"))
+        self.assertEqual(submitted["result"]["follow_up_message"], "已提交，等待整套修改方案")
+
     def test_bridge_exposes_authoritative_review_session_and_receipts(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)

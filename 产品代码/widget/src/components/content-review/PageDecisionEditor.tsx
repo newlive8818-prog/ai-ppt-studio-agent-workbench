@@ -5,7 +5,7 @@ import type {
   ContentDecisionSaveStatus,
   ContentDecisionState,
   ContentPageDecision,
-} from "../../types";
+} from "../../types/content-review";
 
 export interface PageDecisionEditorMeta {
   dirty: boolean;
@@ -121,7 +121,7 @@ function PageDecisionEditorComponent({ slideId, savedState, onSave, onMetaChange
 
   const showSavedSummary = savedState.frozen || (!editing && completed && Boolean(selected));
   return (
-    <section className={`page-decision-editor ${savedState.frozen ? "frozen" : ""}`} aria-label={`页面 ${slideId} 审核判断`}>
+    <section className={`page-decision-editor decision-question ${savedState.frozen ? "frozen" : ""}`} aria-label={`页面 ${slideId} 审核判断`}>
       <header>
         <div>
           <span>本页判断</span>
@@ -132,7 +132,7 @@ function PageDecisionEditorComponent({ slideId, savedState, onSave, onMetaChange
       </header>
 
       {showSavedSummary ? (
-        <div className="decision-saved-summary">
+        <div className="decision-saved-summary saved-feedback">
           <div><Check size={17} /><strong>{selected ? LABEL_BY_VALUE.get(selected) : "已判断"}</strong></div>
           {comment ? <p>{comment}</p> : <p>本页已认可，没有额外意见。</p>}
           {!savedState.frozen ? (
@@ -141,7 +141,7 @@ function PageDecisionEditorComponent({ slideId, savedState, onSave, onMetaChange
         </div>
       ) : (
         <>
-          <fieldset disabled={savedState.frozen || saveStatus === "pending"}>
+          <fieldset className="page-decision-options actions" disabled={savedState.frozen || saveStatus === "pending"}>
             <legend className="sr-only">选择本页判断</legend>
             {OPTIONS.map((option) => (
               <label key={option.value} className={selected === option.value ? "selected" : ""}>
@@ -160,7 +160,7 @@ function PageDecisionEditorComponent({ slideId, savedState, onSave, onMetaChange
           </fieldset>
 
           {selected && selected !== "approved" ? (
-            <label className="decision-comment-field">
+            <label className="decision-comment-field feedback-editor">
               <span>审核意见 <b>必填</b></span>
               <textarea
                 aria-label="审核意见"

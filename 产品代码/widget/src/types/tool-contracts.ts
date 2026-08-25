@@ -5,6 +5,17 @@ import type {
   ProjectSnapshot,
   ReviewMark,
 } from "../types";
+import type {
+  ContentFullDeckReviewProjection,
+  ContentPageDecision as V22ContentPageDecision,
+  ContentReviewProgress as V22ContentReviewProgress,
+} from "./content-review";
+import type {
+  AnchorFeedbackBatch,
+  AnchorRegionFeedback,
+  VisualContractReviewMark,
+  VisualContractReviewMarkSet,
+} from "./visual-review";
 
 export interface BrowserReviewOpenResult {
   status?: "opened" | "review-session-ready";
@@ -33,13 +44,22 @@ export interface WithdrawnContentReviewBatch {
   snapshot: ProjectSnapshot;
 }
 
-export interface OpenedContentEvidenceBrowser {
-  opened: true;
+interface OpenedContentEvidenceBrowserBase {
+  status: "opened" | "review-session-ready";
+  opened: boolean;
   reviewType: "content-evidence";
   sourceVersion: string;
   slideId: string;
   evidenceId: string;
   materialRef: string;
+  url?: string;
+}
+
+export type OpenedLegacyContentEvidenceBrowser = OpenedContentEvidenceBrowserBase;
+
+export interface OpenedContentFullDeckEvidenceBrowser
+  extends OpenedContentEvidenceBrowserBase {
+  reviewSessionId: string;
 }
 
 export interface ReviewSessionResult {
@@ -56,6 +76,39 @@ export interface ToolContractMap {
   get_content_sidebar_review_projection: {
     input: { projectRoot: string };
     output: ContentSidebarReviewProjection;
+  };
+  get_content_full_deck_review_projection: {
+    input: { projectRoot: string; reviewSessionId: string };
+    output: ContentFullDeckReviewProjection;
+  };
+  save_content_full_deck_page_decision: {
+    input: {
+      projectRoot: string;
+      expectedRevision: number;
+      reviewSessionId: string;
+      reviewBatchId: string;
+      slideId: string;
+      decision: V22ContentPageDecision;
+      comment: string;
+    };
+    output: {
+      page_completion: { slide_id: string; completed: boolean };
+      review_progress: V22ContentReviewProgress;
+      revision: number;
+    };
+  };
+  submit_content_full_deck_review_batch: {
+    input: {
+      projectRoot: string;
+      expectedRevision: number;
+      reviewSessionId: string;
+      reviewBatchId: string;
+    };
+    output: {
+      artifact_ref: string;
+      follow_up_message: string;
+      revision: number;
+    };
   };
   save_content_page_decision: {
     input: {
@@ -91,7 +144,18 @@ export interface ToolContractMap {
       evidenceId: string;
       materialRef: string;
     };
-    output: OpenedContentEvidenceBrowser;
+    output: OpenedLegacyContentEvidenceBrowser;
+  };
+  open_content_full_deck_evidence_browser: {
+    input: {
+      projectRoot: string;
+      reviewSessionId: string;
+      sourceVersion: string;
+      slideId: string;
+      evidenceId: string;
+      materialRef: string;
+    };
+    output: OpenedContentFullDeckEvidenceBrowser;
   };
   save_review_marks: {
     input: {
@@ -102,6 +166,34 @@ export interface ToolContractMap {
       marks: ReviewMark[];
     };
     output: { snapshot: { revision: number } };
+  };
+  submit_visual_anchor_feedback_batch: {
+    input: {
+      projectRoot: string;
+      expectedRevision: number;
+      sourceVersion: string;
+      reviewSessionId: string;
+      feedback: AnchorRegionFeedback[];
+    };
+    output: {
+      batch_ref: string;
+      batch: AnchorFeedbackBatch;
+      snapshot: { revision: number };
+    };
+  };
+  save_visual_contract_review_marks: {
+    input: {
+      projectRoot: string;
+      expectedRevision: number;
+      sourceVersion: string;
+      reviewSessionId: string;
+      marks: VisualContractReviewMark[];
+    };
+    output: {
+      mark_set_ref: string;
+      mark_set: VisualContractReviewMarkSet;
+      snapshot: { revision: number };
+    };
   };
   read_ai_ppt_project_asset: {
     input: { projectRoot: string; assetRef: string };

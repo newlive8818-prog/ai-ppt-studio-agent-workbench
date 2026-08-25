@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-import { App } from "./App";
-import { ProfessionalReviewApp } from "./ProfessionalReviewApp";
+import { ReviewSurfaceRouter } from "./ReviewSurfaceRouter";
 import { createBrowserReviewClient } from "./lib/browser-review-client";
 import { createSidebarHostClient } from "./lib/sidebar-host-client";
 import type { HostBridge, SurfaceData } from "./types";
 import { parseToolOutput, type ToolContractMap } from "./types/tool-contracts";
 import "./styles.css";
+
+function currentPreview(): SurfaceData | undefined {
+  return window.__AI_PPT_CONTENT_REVIEW_PREVIEW__ || window.__AI_PPT_PREVIEW__;
+}
 
 function createPreviewBridge(): HostBridge {
   function count(name: string) {
@@ -21,32 +24,25 @@ function createPreviewBridge(): HostBridge {
       args: ToolContractMap[K]["input"],
     ) {
       count(name);
-      if (name === "get_content_sidebar_review_projection") {
-        const projection = window.__AI_PPT_CONTENT_REVIEW_PREVIEW__;
-        if (projection) return parseToolOutput(name, structuredClone(projection));
+      const projection = window.__AI_PPT_CONTENT_REVIEW_PREVIEW__;
+      if (name === "get_content_full_deck_review_projection" && projection) {
+        return parseToolOutput(name, structuredClone(projection));
       }
-      if (name === "save_content_page_decision") {
-        const decisionArgs = args as ToolContractMap["save_content_page_decision"]["input"];
+      if (name === "save_content_full_deck_page_decision" && projection) {
+        const input = args as ToolContractMap["save_content_full_deck_page_decision"]["input"];
         const scenario = window.__AI_PPT_CONTENT_REVIEW_SCENARIO__;
         if (scenario === "save-failure" || scenario === "source-conflict") {
           const error = new Error(
             scenario === "source-conflict" ? "Preview source changed." : "Preview save failed.",
           ) as Error & { code?: string };
-          error.code = scenario === "source-conflict"
-            ? "CONTENT_REVIEW_CONFLICT"
-            : "CONTENT_REVIEW_SAVE_FAILED";
+          error.code = scenario === "source-conflict" ? "CONTENT_REVIEW_CONFLICT" : "CONTENT_REVIEW_SAVE_FAILED";
           throw error;
         }
-        const projection = window.__AI_PPT_CONTENT_REVIEW_PREVIEW__;
-        if (projection?.display_policy !== "content-sidebar-full-deck") {
-          throw new Error("Content review is not ready in this preview.");
-        }
-        const slide = projection.slides.find((item) => item.slide_id === decisionArgs.slideId);
+        const slide = projection.slides.find((item) => item.slide_id === input.slideId);
         if (!slide) throw new Error("Preview slide not found.");
-        const selected = decisionArgs.decision;
         slide.decision_state = {
-          selected,
-          comment: decisionArgs.comment,
+          selected: input.decision,
+          comment: input.comment,
           completed: true,
           saved: true,
           frozen: false,
@@ -55,76 +51,56 @@ function createPreviewBridge(): HostBridge {
         const completed = projection.slides.filter((item) => item.decision_state.completed).length;
         projection.review_progress.completed = completed;
         projection.review_progress.remaining = projection.slides.length - completed;
-        projection.review_progress.next_incomplete_slide_id = projection.slides.find(
-          (item) => !item.decision_state.completed,
-        )?.slide_id || "";
-        projection.review_progress.saved_comment_count = projection.slides.filter(
-          (item) => item.decision_state.comment,
-        ).length;
+        projection.review_progress.saved_comment_count = projection.slides.filter((item) => item.decision_state.comment).length;
         projection.review_progress.counts = {
           approved: projection.slides.filter((item) => item.decision_state.selected === "approved").length,
           modify: projection.slides.filter((item) => item.decision_state.selected === "modify").length,
           evidence: projection.slides.filter((item) => item.decision_state.selected === "evidence").length,
           merge_or_delete: projection.slides.filter((item) => item.decision_state.selected === "merge-or-delete").length,
         };
-        const previewData = window.__AI_PPT_PREVIEW__;
-        if (!previewData || !("snapshot" in previewData)) throw new Error("Preview snapshot is unavailable.");
-        const snapshot = structuredClone(previewData.snapshot);
-        snapshot.revision = projection.revision;
         return parseToolOutput(name, {
-          artifact_ref: `artifact://page-decision/preview-${slide.slide_id}-${projection.revision}`,
           page_completion: { slide_id: slide.slide_id, completed: true },
           review_progress: projection.review_progress,
-          snapshot,
+          revision: projection.revision,
         });
       }
-      if (name === "submit_content_review_batch") {
-        const projection = window.__AI_PPT_CONTENT_REVIEW_PREVIEW__;
-        if (projection?.display_policy !== "content-sidebar-full-deck") {
-          throw new Error("Content review is not ready in this preview.");
-        }
-        projection.phase = "review-batch-submitted";
-        projection.current_batch.status = "submitted";
-        projection.slides.forEach((slide) => { slide.decision_state.frozen = true; });
-        projection.revision += 1;
-        const previewData = window.__AI_PPT_PREVIEW__;
-        if (!previewData || !("snapshot" in previewData)) throw new Error("Preview snapshot is unavailable.");
-        const snapshot = structuredClone(previewData.snapshot);
-        snapshot.revision = projection.revision;
+      if (name === "submit_content_full_deck_review_batch") {
+        const error = new Error("Preview mode cannot issue a trusted host confirmation.") as Error & { code?: string };
+        error.code = "HOST_CONFIRMATION_UNAVAILABLE";
+        throw error;
+      }
+      if (name === "open_content_full_deck_evidence_browser" && projection) {
+        const input = args as ToolContractMap["open_content_full_deck_evidence_browser"]["input"];
         return parseToolOutput(name, {
-          artifact_ref: "artifact://content-review-batch/deterministic-preview-submitted",
-          follow_up_message: "请基于冻结审核批次形成整套修改方案。",
-          snapshot,
+          status: "review-session-ready",
+          opened: false,
+          reviewType: "content-evidence",
+          reviewSessionId: input.reviewSessionId,
+          sourceVersion: input.sourceVersion,
+          slideId: input.slideId,
+          evidenceId: input.evidenceId,
+          materialRef: input.materialRef,
+          url: "http://127.0.0.1/preview-evidence-not-opened",
         });
-      }
-      if (name === "open_content_evidence_browser") {
-        return parseToolOutput(name, { opened: true, reviewType: "content-evidence", ...args });
       }
       if (name === "read_ai_ppt_project_asset") {
         const assetArgs = args as ToolContractMap["read_ai_ppt_project_asset"]["input"];
-        const assetRef = assetArgs.assetRef;
-        const asset = window.__AI_PPT_PREVIEW_ASSETS__?.[assetRef];
+        const asset = window.__AI_PPT_PREVIEW_ASSETS__?.[assetArgs.assetRef];
         if (asset) return parseToolOutput(name, { asset });
       }
-      throw new Error("Preview mode is read-only.");
+      throw new Error("Preview mode does not provide this authoritative operation.");
     },
     async updateModelContext() {},
     async sendFollowUp() { count("sendFollowUp"); },
-    async confirmMission() {
-      throw new Error("Preview mode cannot confirm a mission.");
-    },
+    async confirmMission() { throw new Error("Preview mode cannot confirm a mission."); },
     getHostEnvironment() {
-      return {
-        containerWidth: window.innerWidth,
-        canSendMessage: false,
-        canUpdateModelContext: false,
-      };
+      return { containerWidth: window.innerWidth, canSendMessage: false, canUpdateModelContext: false };
     },
     notifySize() {},
   };
 }
 
-const preview = window.__AI_PPT_PREVIEW__;
+const preview = currentPreview();
 const browserReview = !preview && window.location.hash.startsWith("#token=");
 const bridge = preview
   ? createPreviewBridge()
@@ -132,15 +108,28 @@ const bridge = preview
     ? createBrowserReviewClient()
     : createSidebarHostClient();
 
+function projectRootFor(data: SurfaceData | undefined): string {
+  if (!data) return "";
+  if (data.surface === "content-full-deck") {
+    return window.__AI_PPT_CONTENT_REVIEW_PROJECT_ROOT__ || "";
+  }
+  return data.surface === "review"
+    ? data.selectedProjectRoot
+    : data.selectedProjectRoot || data.snapshot.project.project_root;
+}
+
 function SurfaceRouter() {
   const [data, setData] = useState<SurfaceData | undefined>(preview);
+  const [projectRoot, setProjectRoot] = useState(() => projectRootFor(preview));
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (preview) return;
     let mounted = true;
     bridge.connect((incoming) => {
-      if (mounted) setData(incoming);
+      if (!mounted) return;
+      setData(incoming);
+      setProjectRoot((current) => projectRootFor(incoming) || current);
     }).catch(() => {
       if (mounted) setError("无法连接 Codex 宿主，项目数据未被修改。");
     });
@@ -150,10 +139,7 @@ function SurfaceRouter() {
   if (!data) {
     return <main className="loading-shell"><div className="loading-mark">PPT</div><h1>正在读取 AI PPT 项目</h1><p>{error || "正在同步同一 project revision…"}</p></main>;
   }
-  if (data.surface === "review") {
-    return <ProfessionalReviewApp initialData={data} bridge={bridge} managedConnection />;
-  }
-  return <App initialData={data} bridge={bridge} managedConnection />;
+  return <ReviewSurfaceRouter initialData={data} projectRoot={projectRoot} bridge={bridge} managedConnection />;
 }
 
 createRoot(document.getElementById("root")!).render(<SurfaceRouter />);

@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+const contentReviewCommentSchema = z.string().refine(
+  (value) => Array.from(value).length <= 1200,
+  { message: "comment must not exceed 1200 Unicode code points" },
+);
+
 export function registerContentTools(toolContext) {
   const {
     server, projectSchema, invokeBridge, invokeForTool, requestForProject,
@@ -33,6 +38,112 @@ server.registerTool(
   );
 
 server.registerTool(
+    "get_content_full_deck_review_projection",
+    {
+      title: "Get Content Full-Deck Review Projection",
+      description:
+        "Read the authoritative v2.2 content-full-deck projection for one exact current ReviewSession.",
+      inputSchema: {
+        projectRoot: z.string().trim().min(1),
+        reviewSessionId: z.string().trim().min(1),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (input) => {
+      const outcome = await invokeForTool(invokeBridge, {
+        ...requestForProject("get-content-full-deck-review-projection", input),
+        review_session_id: input.reviewSessionId,
+      });
+      if (!outcome.ok) return outcome.result;
+      return textResult(
+        `已读取当前内容全稿审核会话，revision ${outcome.payload.snapshot_revision}。`,
+        outcome.payload.review,
+      );
+    },
+  );
+
+server.registerTool(
+    "save_content_full_deck_page_decision",
+    {
+      title: "Save Content Full-Deck Page Decision",
+      description:
+        "Save one v2.2 PageDecision for the exact current ReviewSession without changing content, starting AI work, or affecting G0.",
+      inputSchema: {
+        projectRoot: z.string().trim().min(1),
+        expectedRevision: z.number().int().nonnegative(),
+        reviewSessionId: z.string().trim().min(1),
+        reviewBatchId: z.string().trim().min(1),
+        slideId: z.string().trim().min(1),
+        decision: z.enum(["approved", "modify", "evidence", "merge-or-delete"]),
+        comment: contentReviewCommentSchema,
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (input) => {
+      const outcome = await invokeForTool(invokeBridge, {
+        ...requestForProject("save-content-full-deck-page-decision", input),
+        expected_revision: input.expectedRevision,
+        review_session_id: input.reviewSessionId,
+        review_batch_id: input.reviewBatchId,
+        slide_id: input.slideId,
+        decision: input.decision,
+        comment: input.comment,
+      });
+      if (!outcome.ok) return outcome.result;
+      return textResult("本页判断已持久化；内容、AI 和 G0 均未改变。", outcome.payload.result);
+    },
+  );
+
+server.registerTool(
+    "submit_content_full_deck_review_batch",
+    {
+      title: "Submit Content Full-Deck Review Batch",
+      description:
+        "Obtain trusted host confirmation, freeze every saved v2.2 PageDecision, and persist one immutable ContentReviewBatch.",
+      inputSchema: {
+        projectRoot: z.string().trim().min(1),
+        expectedRevision: z.number().int().nonnegative(),
+        reviewSessionId: z.string().trim().min(1),
+        reviewBatchId: z.string().trim().min(1),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (input) => {
+      const outcome = await invokeScopedContentWrite({
+        input,
+        contextOperation: "get-content-full-deck-review-batch-submission-context",
+        contextFields: {
+          review_session_id: input.reviewSessionId,
+          review_batch_id: input.reviewBatchId,
+        },
+        writeOperation: "submit-content-full-deck-review-batch",
+        writeFields: {
+          review_session_id: input.reviewSessionId,
+          review_batch_id: input.reviewBatchId,
+        },
+        actionLabel: "冻结并提交当前内容全稿审核批次",
+      });
+      if (!outcome.ok) return outcome.result;
+      return textResult("整套审核判断已冻结并持久化。", outcome.payload.result);
+    },
+  );
+
+server.registerTool(
     "save_content_page_decision",
     {
       title: "Save Content Page Decision",
@@ -50,7 +161,7 @@ server.registerTool(
           "evidence",
           "merge-or-delete",
         ]),
-        comment: z.string().max(1200),
+        comment: contentReviewCommentSchema,
       },
       annotations: {
         readOnlyHint: false,

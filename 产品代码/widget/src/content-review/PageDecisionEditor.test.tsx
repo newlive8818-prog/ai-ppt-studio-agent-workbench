@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PageDecisionEditor } from "../components/content-review/PageDecisionEditor";
-import type { ContentDecisionState } from "../types";
+import type { ContentDecisionState } from "../types/content-review";
 
 afterEach(cleanup);
 

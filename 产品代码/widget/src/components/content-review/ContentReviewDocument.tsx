@@ -1,12 +1,13 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { ArrowDownToLine, ListTree } from "lucide-react";
 
-import type {
-  ContentFullDeckProjection,
-  ContentPageDecision,
-  HostBridge,
-  ProjectSnapshot,
-} from "../../types";
+import type { HostBridge } from "../../types";
+import {
+  contentReviewBatchId,
+  nextIncompleteSlideId,
+  type ContentFullDeckReviewProjection,
+  type ContentPageDecision,
+} from "../../types/content-review";
 import type { ContentReviewClient } from "../../lib/content-review-client";
 import { ContentReviewDirectory } from "./ContentReviewDirectory";
 import { ContentSlideSection } from "./ContentSlideSection";
@@ -14,15 +15,14 @@ import type { PageDecisionEditorMeta } from "./PageDecisionEditor";
 import { ReviewBatchFooter } from "./ReviewBatchFooter";
 
 interface Props {
-  projection: ContentFullDeckProjection;
+  projection: ContentFullDeckReviewProjection;
   projectRoot: string;
   bridge: HostBridge;
   client: ContentReviewClient;
-  onProjectionChange: (projection: ContentFullDeckProjection) => void;
-  onSnapshotChange: (snapshot: ProjectSnapshot) => void;
+  onProjectionChange: (projection: ContentFullDeckReviewProjection) => void;
 }
 
-function initialEditorMeta(projection: ContentFullDeckProjection) {
+function initialEditorMeta(projection: ContentFullDeckReviewProjection) {
   const result = new Map<string, PageDecisionEditorMeta>();
   for (const slide of projection.slides) {
     result.set(slide.slide_id, {
@@ -41,7 +41,6 @@ export function ContentReviewDocument({
   bridge,
   client,
   onProjectionChange,
-  onSnapshotChange,
 }: Props) {
   const [directoryOpen, setDirectoryOpen] = useState(false);
   const [editorMetaBySlide, setEditorMetaBySlide] = useState(() => initialEditorMeta(projection));
@@ -49,7 +48,10 @@ export function ContentReviewDocument({
   const [submitError, setSubmitError] = useState("");
   const [followUpState, setFollowUpState] = useState<"idle" | "sending" | "failed" | "sent">("idle");
   const [followUpMessage, setFollowUpMessage] = useState("");
+  const [batchReceipt, setBatchReceipt] = useState("");
   const submittedBatchRef = useRef("");
+  const reviewSessionId = projection.review_session.review_session_id;
+  const reviewBatchId = contentReviewBatchId(reviewSessionId);
 
   const slidesById = useMemo(
     () => new Map(projection.slides.map((slide) => [slide.slide_id, slide])),
@@ -75,38 +77,33 @@ export function ContentReviewDocument({
     decision: ContentPageDecision,
     comment: string,
   ) => {
-    const result = await client.saveDecision({
+    await client.saveDecision({
       projectRoot,
       expectedRevision: projection.revision,
-      sourceVersion: projection.source_version,
-      reviewBatchId: projection.decision_set.review_batch_id,
+      reviewSessionId,
+      reviewBatchId,
       slideId,
       decision,
       comment,
     });
-    onSnapshotChange(result.snapshot);
-    const refreshed = await client.load(projectRoot);
-    if (!client.isReviewReady(refreshed)) {
-      const error = new Error("内容审核投影已转为不可审核状态") as Error & { code?: string };
-      error.code = "CONTENT_REVIEW_CONFLICT";
-      throw error;
-    }
+    const refreshed = await client.load(projectRoot, reviewSessionId);
     onProjectionChange(refreshed);
-  }, [client, onProjectionChange, onSnapshotChange, projectRoot, projection.decision_set.review_batch_id, projection.revision, projection.source_version]);
+  }, [client, onProjectionChange, projectRoot, projection.revision, reviewBatchId, reviewSessionId]);
 
   const openEvidenceBrowser = useCallback(async (
     slideId: string,
     evidenceId: string,
     materialRef: string,
   ) => {
-    await client.openEvidenceBrowser({
+    return client.openEvidenceBrowser({
       projectRoot,
+      reviewSessionId,
       sourceVersion: projection.source_version,
       slideId,
       evidenceId,
       materialRef,
     });
-  }, [client, projectRoot, projection.source_version]);
+  }, [client, projectRoot, projection.source_version, reviewSessionId]);
 
   const allEditorMeta = projection.slides.map((slide) => editorMetaBySlide.get(slide.slide_id));
   const countMatches = projection.review_progress.total === projection.slides.length
@@ -116,8 +113,7 @@ export function ContentReviewDocument({
   const hasFailure = allEditorMeta.some((meta) => meta?.saveStatus === "failed");
   const hasConflict = allEditorMeta.some((meta) => meta?.conflict);
   const allCompleted = allEditorMeta.every((meta) => meta?.completed);
-  const currentBatchDraft = projection.current_batch.status === "draft"
-    && projection.phase === "full-deck-review-ready";
+  const sessionEditable = ["ready", "opened"].includes(projection.review_session.status);
   const canSubmit = countMatches
     && allCompleted
     && projection.review_progress.remaining === 0
@@ -125,7 +121,7 @@ export function ContentReviewDocument({
     && !hasPending
     && !hasFailure
     && !hasConflict
-    && currentBatchDraft;
+    && sessionEditable;
 
   let blockedReason = "";
   if (!countMatches) blockedReason = "页面数量与权威审核进度不一致，请刷新后再提交。";
@@ -134,6 +130,7 @@ export function ContentReviewDocument({
   else if (hasFailure) blockedReason = "仍有保存失败的页面，意见未丢失，请重试。";
   else if (hasDirty) blockedReason = "仍有未保存的选择或意见。";
   else if (!allCompleted || projection.review_progress.remaining > 0) blockedReason = `仍有 ${Math.max(projection.review_progress.remaining, 0)} 页未完成判断。`;
+  else if (!sessionEditable) blockedReason = "当前审核会话已冻结或失效，不能再次提交。";
 
   const navigateTo = useCallback((slideId: string) => {
     if (!slidesById.has(slideId)) return;
@@ -165,15 +162,14 @@ export function ContentReviewDocument({
       const result = await client.submitBatch({
         projectRoot,
         expectedRevision: projection.revision,
-        sourceVersion: projection.source_version,
-        reviewBatchId: projection.decision_set.review_batch_id,
+        reviewSessionId,
+        reviewBatchId,
       });
       submittedBatchRef.current = result.artifact_ref;
-      onSnapshotChange(result.snapshot);
-      const refreshed = await client.load(projectRoot);
-      if (!client.isReviewReady(refreshed)) throw new Error("提交后无法刷新完整审核投影");
-      onProjectionChange(refreshed);
+      setBatchReceipt(result.artifact_ref);
       setFollowUpMessage(result.follow_up_message);
+      const refreshed = await client.load(projectRoot, reviewSessionId);
+      onProjectionChange(refreshed);
       await sendFollowUp(result.follow_up_message);
     } catch (caught) {
       if (submittedBatchRef.current) {
@@ -189,46 +185,59 @@ export function ContentReviewDocument({
     }
   }
 
+  const nextIncomplete = nextIncompleteSlideId(projection);
   return (
     <article className="content-review-document" data-slide-count={projection.slides.length}>
-      <header className="content-review-document-header">
+      <header className="content-review-document-header content-review-header">
         <div className="content-review-title-row">
           <div>
-            <p>阅读优先·完整全稿</p>
+            <p>CONTENT REVIEW</p>
             <h1>完整内容审核</h1>
-            <span>{projection.mission_summary.topic}</span>
+            <span>按最终顺序连续阅读整套内容，并逐页作出判断</span>
           </div>
           <div className="content-review-header-actions">
             <button type="button" aria-label="目录定位" aria-expanded={directoryOpen} onClick={() => setDirectoryOpen(true)}><ListTree size={16} />目录</button>
-            <button type="button" aria-label="定位下一页未判断" disabled={!projection.review_progress.next_incomplete_slide_id} onClick={() => navigateTo(projection.review_progress.next_incomplete_slide_id)}><ArrowDownToLine size={16} />下一页未判断</button>
+            <button type="button" aria-label="定位下一页未判断" disabled={!nextIncomplete} onClick={() => navigateTo(nextIncomplete)}><ArrowDownToLine size={16} />下一页未判断</button>
           </div>
-        </div>
-        <div className="content-review-mission">
-          <div><span>汇报对象</span><strong>{projection.mission_summary.primary_audience}</strong></div>
-          <div><span>本稿要支持的决策事项</span><strong>{projection.mission_summary.decision_question_or_next_action}</strong></div>
-          <div><span>内容模式</span><strong>{projection.material_mode}</strong></div>
         </div>
         <div className="content-review-summary">
           <strong>{projection.review_progress.completed} / {projection.review_progress.total} 页已判断</strong>
           <span>{projection.review_progress.remaining} 页待处理</span>
-          <code>revision {projection.revision}</code>
+          <span className="content-review-session-state">{projection.review_session.status}</span>
+        </div>
+        <div className="content-review-progress-track" aria-label="审核进度">
+          <i style={{ width: `${projection.review_progress.total ? (projection.review_progress.completed / projection.review_progress.total) * 100 : 0}%` }} />
         </div>
       </header>
 
-      <ContentReviewDirectory open={directoryOpen} chapters={projection.chapters} slides={projection.slides} onClose={() => setDirectoryOpen(false)} onNavigate={navigateTo} />
+      <nav className="content-review-chapter-nav" aria-label="章节导航">
+        <button type="button" onClick={() => navigateTo(projection.slides[0]?.slide_id || "")}>01 · 全稿内容</button>
+        <span>{projection.slides.length} 页</span>
+      </nav>
+
+      <section className="content-review-deck-intro">
+        <p>本次审核</p>
+        <h2>先完整阅读页面目标、实际文字与材料，再在页内给出判断</h2>
+        <span>没有图片的页面不强制提供图片；存在多条材料时按登记顺序连续展示。保存本页判断不等于 G0 通过。</span>
+      </section>
+
+      <ContentReviewDirectory open={directoryOpen} slides={projection.slides} onClose={() => setDirectoryOpen(false)} onNavigate={navigateTo} />
 
       <main className="content-review-slide-list">
-        {projection.slides.map((slide) => (
-          <ContentSlideSection
-            key={slide.slide_id}
-            slide={slide}
-            projectRoot={projectRoot}
-            bridge={bridge}
-            onSaveDecision={saveDecision}
-            onEditorMetaChange={updateEditorMeta}
-            onOpenEvidenceBrowser={openEvidenceBrowser}
-          />
-        ))}
+        <section className="content-review-chapter" data-content-chapter="full-deck">
+          <header className="content-review-chapter-heading"><span>01</span><div><p>完整内容</p><h2>按最终顺序逐页阅读与判断</h2></div></header>
+          {projection.slides.map((slide) => (
+            <ContentSlideSection
+              key={slide.slide_id}
+              slide={slide}
+              bridge={bridge}
+              projectRoot={projectRoot}
+              onSaveDecision={saveDecision}
+              onEditorMetaChange={updateEditorMeta}
+              onOpenEvidenceBrowser={openEvidenceBrowser}
+            />
+          ))}
+        </section>
       </main>
 
       <ReviewBatchFooter
@@ -237,6 +246,7 @@ export function ContentReviewDocument({
         blockedReason={blockedReason}
         submitting={submitting}
         submitError={submitError}
+        batchReceipt={batchReceipt}
         followUpState={followUpState}
         onSubmit={submitBatch}
         onRetryFollowUp={() => sendFollowUp(followUpMessage)}

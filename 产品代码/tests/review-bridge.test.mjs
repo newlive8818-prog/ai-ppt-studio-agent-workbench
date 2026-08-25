@@ -61,6 +61,48 @@ const contentSidebarReview = {
   ],
 };
 
+const formalContentReview = {
+  surface: "content-full-deck",
+  project_id: "p1",
+  source_version: review.source_version,
+  revision: 7,
+  gate_status: "content-review-ready",
+  review_session: {
+    review_session_id: "review-session-current-v22",
+    review_type: "content-full-deck",
+  },
+  slides: [
+    {
+      slide_id: "S01",
+      order: 1,
+      neutral_title: "业务范围与系统现状",
+      page_task: "说明业务范围",
+      reading_question: "当前范围是什么？",
+      visible_copy_blocks: [{ block_id: "copy-1", role: "body", text: "当前页完整文字" }],
+      previous_relation: "当前为第一页",
+      next_relation: "进入问题页",
+      evidence_bindings: [{
+        binding_id: "EV-S01-01",
+        identity: "来源事实",
+        source_refs: ["artifact://source/s1#page=3"],
+        supports_block_refs: ["copy-1"],
+        material_ref: "artifact://material/m1",
+      }],
+    },
+    {
+      slide_id: "S02",
+      order: 2,
+      neutral_title: "跨系统协同事项",
+      page_task: "说明协同问题",
+      reading_question: "哪些事项需要联动？",
+      visible_copy_blocks: [{ block_id: "copy-2", role: "body", text: "下一页完整文字" }],
+      previous_relation: "承接范围",
+      next_relation: "进入方案",
+      evidence_bindings: [],
+    },
+  ],
+};
+
 async function startedBridge(options = {}) {
   const calls = [];
   const bridge = createReviewBridge({
@@ -126,6 +168,40 @@ async function startedEvidenceBridge(options = {}) {
         };
       }
       throw new Error(`unexpected evidence operation ${request.operation}`);
+    },
+    ...options,
+  });
+  const session = await bridge.start();
+  return { bridge, session, calls };
+}
+
+async function startedFormalEvidenceBridge(options = {}) {
+  const calls = [];
+  const bridge = createReviewBridge({
+    projectRoot: "/managed/project",
+    reviewType: "content-evidence",
+    sourceVersion: review.source_version,
+    expectedRevision: 7,
+    evidenceScope: {
+      parentReviewSessionId: "review-session-current-v22",
+      slideId: "S01",
+      evidenceId: "EV-S01-01",
+      materialRef: "artifact://material/m1",
+    },
+    ttlMs: 10_000,
+    leaseMs: 500,
+    readReviewHtml: async () => "<!doctype html><html><body><div id=\"root\"></div></body></html>",
+    invokeBridge: async (request) => {
+      calls.push(request);
+      if (request.operation === "get-content-full-deck-review-projection") {
+        return {
+          ok: true,
+          selected_project_root: "/managed/project",
+          review: formalContentReview,
+          snapshot_revision: 7,
+        };
+      }
+      throw new Error(`unexpected formal evidence operation ${request.operation}`);
     },
     ...options,
   });
@@ -450,6 +526,29 @@ test("content evidence session exposes only one exact slide/material and adjacen
       canCompareAdjacentSlides: true,
     });
     assert.equal(calls.at(-1).operation, "get-content-sidebar-review-projection");
+  } finally {
+    await bridge.stop();
+  }
+});
+
+test("v2.2 evidence session binds the parent ReviewSession and typed material without requiring an image", async () => {
+  const { bridge, session, calls } = await startedFormalEvidenceBridge();
+  try {
+    const origin = `http://${session.host}:${session.port}`;
+    const response = await fetch(`${origin}/api/review`, { headers: bearer(session) });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.review.review_type, "content-evidence");
+    assert.equal(payload.review.evidence_view.slide.slide_id, "S01");
+    assert.equal(payload.review.evidence_view.evidence.evidence_id, "EV-S01-01");
+    assert.equal(payload.review.evidence_view.evidence.material_ref, "artifact://material/m1");
+    assert.deepEqual(payload.review.source_refs, ["artifact://source/s1#page=3"]);
+    assert.deepEqual(payload.review.gate_status, {});
+    assert.equal(payload.review.evidence_view.asset, null);
+    assert.equal(payload.review.capabilities.canSavePageDecision, false);
+    assert.equal(payload.review.capabilities.canSaveReviewMarks, false);
+    assert.equal(calls.at(-1).operation, "get-content-full-deck-review-projection");
+    assert.equal(calls.at(-1).review_session_id, "review-session-current-v22");
   } finally {
     await bridge.stop();
   }

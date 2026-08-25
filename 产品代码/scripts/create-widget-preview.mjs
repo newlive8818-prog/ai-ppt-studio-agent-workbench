@@ -47,7 +47,11 @@ function collectAssetRefs(value) {
     collectAssetRefs(child);
   }
 }
+const contentFixture = JSON.parse(
+  await readFile(path.join(root, "widget", "src", "__fixtures__", "content-sidebar-review.json"), "utf8"),
+);
 collectAssetRefs(payload.snapshot.workspace);
+collectAssetRefs(contentFixture);
 const previewAssets = {};
 for (const assetRef of assetRefs) {
   try {
@@ -55,19 +59,6 @@ for (const assetRef of assetRefs) {
   } catch (_error) {
     // A missing optional preview must not prevent the state-only workbench from opening.
   }
-}
-const contentFixture = JSON.parse(
-  await readFile(path.join(root, "widget", "src", "__fixtures__", "content-sidebar-review.json"), "utf8"),
-);
-const fixtureAssetRef = contentFixture.slides[0]?.evidence_items[0]?.asset_ref;
-if (fixtureAssetRef && !previewAssets[fixtureAssetRef]) {
-  const bytes = await readFile(path.join(root, "prototypes", "03-content-blueprint.png"));
-  previewAssets[fixtureAssetRef] = {
-    assetRef: fixtureAssetRef,
-    mimeType: "image/png",
-    bytes: bytes.length,
-    dataBase64: bytes.toString("base64"),
-  };
 }
 const serializedAssets = JSON.stringify(previewAssets).replaceAll("<", "\\u003c");
 const html = await readFile(path.join(root, "widget", "dist", "index.html"), "utf8");
@@ -93,7 +84,7 @@ function injectPreview(contentReviewProjection, scenario, fixtureMode = false) {
   const dataSerialized = JSON.stringify(data).replaceAll("<", "\\u003c");
   return html.replace(
     /<script\b[^>]*>/i,
-    (openingTag) => `<script>window.__AI_PPT_ACCEPTANCE_START__=performance.now();window.__AI_PPT_PREVIEW__=${dataSerialized};window.__AI_PPT_PREVIEW_ASSETS__=${serializedAssets};window.__AI_PPT_CONTENT_REVIEW_PREVIEW__=${contentSerialized};window.__AI_PPT_CONTENT_REVIEW_SCENARIO__=${scenarioSerialized};window.__AI_PPT_PREVIEW_CALLS__={};</script>${openingTag}`,
+    (openingTag) => `<script>window.__AI_PPT_ACCEPTANCE_START__=performance.now();window.__AI_PPT_PREVIEW__=${dataSerialized};window.__AI_PPT_PREVIEW_ASSETS__=${serializedAssets};window.__AI_PPT_CONTENT_REVIEW_PREVIEW__=${contentSerialized};window.__AI_PPT_CONTENT_REVIEW_PROJECT_ROOT__=${JSON.stringify(projectRoot).replaceAll("<", "\\u003c")};window.__AI_PPT_CONTENT_REVIEW_SCENARIO__=${scenarioSerialized};window.__AI_PPT_PREVIEW_CALLS__={};</script>${openingTag}`,
   );
 }
 
@@ -130,15 +121,18 @@ function deck(count, mode = "empty") {
     slide.order = index + 1;
     slide.section_id = `C${String(Math.floor(index / 6) + 1).padStart(2, "0")}`;
     slide.neutral_title = `${slide.neutral_title} · 第 ${index + 1} 页`;
-    slide.visible_copy = slide.visible_copy.map((block, blockIndex) => ({
+    const copyBlockIds = new Map(
+      slide.visible_copy_blocks.map((block, blockIndex) => [block.block_id, `${slide.slide_id}-C${blockIndex + 1}`]),
+    );
+    slide.visible_copy_blocks = slide.visible_copy_blocks.map((block, blockIndex) => ({
       ...block,
-      copy_id: `${slide.slide_id}-C${blockIndex + 1}`,
+      block_id: `${slide.slide_id}-C${blockIndex + 1}`,
       text: `${block.text} 本段属于第 ${index + 1} 页的完整可见内容，不因长文档验收而截断。`,
     }));
-    slide.evidence_items = slide.evidence_items.map((item, evidenceIndex) => ({
-      ...item,
-      evidence_id: `EV-${slide.slide_id}-${evidenceIndex + 1}`,
-      source_page_or_region: `${item.source_page_or_region} · 验收页 ${index + 1}`,
+    slide.evidence_bindings = slide.evidence_bindings.map((binding, bindingIndex) => ({
+      ...binding,
+      binding_id: `EV-${slide.slide_id}-${bindingIndex + 1}`,
+      supports_block_refs: binding.supports_block_refs.map((blockId) => copyBlockIds.get(blockId) || blockId),
     }));
     slide.speaker_notes = `${slide.speaker_notes} 第 ${index + 1} 页逐字稿完整保留。`;
     slide.previous_relation = index === 0 ? "从封面与任务进入当前业务事项。" : `承接第 ${index} 页并继续当前论证。`;
@@ -190,7 +184,11 @@ if (process.env.AI_PPT_CONTENT_REVIEW_PREVIEWS === "1") {
   });
   const submitted = deck(24, "complete");
   submitted.phase = "review-batch-submitted";
-  submitted.current_batch.status = "submitted";
+  submitted.review_session = {
+    ...submitted.review_session,
+    status: "submitted",
+    submitted_at: "2026-08-24T10:02:00Z",
+  };
   submitted.slides.forEach((slide) => { slide.decision_state.frozen = true; });
   const planned = structuredClone(submitted);
   planned.phase = "batch-plan-proposed";

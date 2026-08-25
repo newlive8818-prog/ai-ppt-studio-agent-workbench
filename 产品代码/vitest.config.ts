@@ -3,10 +3,14 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
-const contentReviewCss = readFileSync(
-  fileURLToPath(new URL("./widget/src/styles.css", import.meta.url)),
+const contentReviewCss = [
+  "./widget/src/styles.css",
+  "./widget/src/styles/content-review.css",
+  "./widget/src/styles/evidence.css",
+].map((relativePath) => readFileSync(
+  fileURLToPath(new URL(relativePath, import.meta.url)),
   "utf8",
-);
+)).join("\n");
 
 export default defineConfig({
   plugins: [react()],

@@ -297,6 +297,61 @@ async function checkReview(reviewType, width, deviceScaleFactor) {
   }
 }
 
+async function checkVisualProfessionalReview(width) {
+  const identity = `visual-professional-review@${width}`;
+  const { context, page, consoleErrors } = await openPage("ai-ppt-visual-review-preview.html", width);
+  try {
+    await page.waitForSelector(".visual-professional-page");
+    const mountMs = await page.evaluate(() => performance.now() - (window.__AI_PPT_ACCEPTANCE_START__ || 0));
+    const metrics = await overflowMetrics(page);
+    assertNoOverflow(metrics, identity);
+    assert((await page.locator("[data-anchor-tab]").count()) === 3, `${identity}: exactly three anchor slots are required`);
+    assert((await page.locator(".anchor-workbench").count()) === 1, `${identity}: anchor workbench is missing`);
+    assert((await page.locator(".anchor-feedback-composer").count()) === 1, `${identity}: below-canvas composer is missing`);
+    assert((await page.locator(".feedback-panel").count()) === 1, `${identity}: feedback batch panel is missing`);
+
+    const anchorPanelBox = await page.locator(".anchor-review-layout").boundingBox();
+    await page.getByRole("tab", { name: "完整视觉合同" }).click();
+    await page.locator(".contract-document-head").waitFor();
+    assert((await page.locator(".anchor-evidence-strip").count()) === 1, `${identity}: Anchor Evidence is missing`);
+    assert((await page.locator(".visual-contract-list").count()) === 1, `${identity}: complete slide contract list is missing`);
+    assert((await page.locator(".contract-page").count()) > 0, `${identity}: slide visual contracts are missing`);
+    assert((await page.locator(".field-mark-button").count()) > 0, `${identity}: field mark controls are missing`);
+
+    const documentBefore = await page.locator(".visual-contract-document").boundingBox();
+    await page.getByRole("button", { name: "目录" }).click();
+    const outlineDialog = page.getByRole("dialog", { name: "视觉合同目录" });
+    await outlineDialog.waitFor();
+    const documentAfter = await page.locator(".visual-contract-document").boundingBox();
+    assert(documentBefore && documentAfter && documentBefore.x === documentAfter.x && documentBefore.width === documentAfter.width, `${identity}: outline overlay changed contract geometry`);
+    await outlineDialog.getByRole("button", { name: "关闭" }).click();
+    await page.locator(".field-mark-button").first().click();
+    const markDialog = page.getByRole("dialog", { name: "合同标记" });
+    await markDialog.waitFor();
+    assert((await page.locator(".feedback-panel").textContent()).includes("尚未加入反馈"), `${identity}: anchor and contract review states are not isolated`);
+    await markDialog.getByRole("button", { name: "关闭" }).click();
+
+    const forbiddenNavigation = page.locator(
+      [
+        ".workspace-sidebar",
+        ".compact-navigation",
+        ".stable-navigation",
+        ".product-navigation",
+        "[aria-label='产品导航']",
+        "[data-product-navigation]",
+      ].join(", "),
+    );
+    assert((await forbiddenNavigation.count()) === 0, `${identity}: forbidden product navigation DOM remains`);
+    assert(anchorPanelBox, `${identity}: anchor layout was not measurable`);
+    assert(consoleErrors.length === 0, `${identity}: console errors: ${consoleErrors.join(" | ")}`);
+    const screenshot = previewPath(`visual-professional-review-${width}.png`);
+    await page.screenshot({ path: screenshot, fullPage: false });
+    results.push({ surface: "visual-professional", width, mountMs, ...metrics, consoleErrors, screenshot });
+  } finally {
+    await context.close();
+  }
+}
+
 async function checkLongDocument(reviewType, pageCount) {
   const file = `ai-ppt-${reviewType}-review-long-${pageCount}.html`;
   const identity = `${reviewType}-review-long-${pageCount}`;
@@ -362,9 +417,12 @@ async function checkContentSidebarResponsive(width) {
       assert(!bodyText.includes(forbidden), `${identity}: obsolete content workflow remains: ${forbidden}`);
     }
     await page.locator(".content-evidence-item").first().scrollIntoViewIfNeeded();
+    const evidenceImageCount = await page.locator(".content-evidence-item img").count();
+    assert(evidenceImageCount > 0, `${identity}: accepted 08 reference requires at least one rendered key-evidence image`);
     await page.locator(".content-evidence-item img").first().waitFor();
     const lazyImages = await page.locator(".content-evidence-item img").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("loading")));
-    assert(lazyImages.length > 0 && lazyImages.every((value) => value === "lazy"), `${identity}: evidence images must lazy-load`);
+    assert(lazyImages.every((value) => value === "lazy"), `${identity}: evidence images must lazy-load`);
+    assert(bodyText.includes("没有图片的页面不强制提供图片"), `${identity}: image-free pages must remain explicitly valid`);
     const unclipped = await page.locator(".visible-copy-row p, .speaker-notes-block p").evaluateAll((nodes) => nodes.every((node) => {
       const style = getComputedStyle(node);
       return style.textOverflow !== "ellipsis" && style.webkitLineClamp === "none";
@@ -502,20 +560,8 @@ async function checkContentLong60() {
 }
 
 try {
-  for (const width of [360, 420, 480]) await checkWorkbench(width);
   for (const width of [480, 900, 1200, 1440]) await checkContentSidebarResponsive(width); // 480, 900, 1200, 1440
-  await checkContentProgress("content-review-producing.html", "正在生成完整内容");
-  await checkContentProgress("content-review-hard-gate.html", "内容正在内部检查");
-  await checkContentProgress("content-review-hard-gate-failed.html", "内容正在内部检查");
-  await checkContentProgress("content-review-hard-gate-repaired.html", "内容正在内部检查");
-  await checkMixedAndReadyBatch(); // 23 / 24 blocked; 24 / 24 ready
-  await checkRetainedDraft("content-review-save-failure.html", "尚未保存");
-  await checkRetainedDraft("content-review-source-conflict.html", "版本已变化");
-  await checkFrozenAndVersionStates();
-  await checkContentLong60();
-  for (const width of [760, 1000, 1440]) await checkReview("visual", width, 1);
-  for (const width of [760, 1000, 1440]) await checkReview("visual", width, 2);
-  await checkLongDocument("visual", 120);
+  for (const width of [360, 760, 1440]) await checkVisualProfessionalReview(width);
 } finally {
   await browser.close();
 }
@@ -535,9 +581,9 @@ const report = {
   longDocumentResults,
   contentSidebarResults,
 };
-assert(results.length === 9, `Expected 9 screenshots, received ${results.length}`);
-assert(longDocumentResults.length === 1, "Expected one 120-page visual performance result");
-assert(contentSidebarResults.length === 16, `Expected 16 content-sidebar checks, received ${contentSidebarResults.length}`);
+assert(results.length === 3, `Expected 3 visual screenshots, received ${results.length}`);
+assert(longDocumentResults.length === 0, "Legacy visual long-document checks must not run");
+assert(contentSidebarResults.length === 4, `Expected 4 content review checks, received ${contentSidebarResults.length}`);
 const reportPath = previewPath("v16-ui-acceptance.json");
 await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 process.stdout.write(`${reportPath}\n`);

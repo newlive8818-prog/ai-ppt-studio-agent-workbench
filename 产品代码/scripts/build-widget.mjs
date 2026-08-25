@@ -19,6 +19,7 @@ const stagedHtml = path.join(DIST_DIR, `.index.html.stage-${process.pid}`);
 try {
   await build({
     configFile: path.join(WIDGET_ROOT, "vite.config.ts"),
+    configLoader: "runner",
     logLevel: "warn",
     build: { outDir: rawDir, emptyOutDir: true },
   });

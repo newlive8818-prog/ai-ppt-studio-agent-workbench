@@ -900,16 +900,30 @@ def validate_reading_deck_blueprint(payload: dict[str, Any]) -> dict[str, Any]:
         )
         normalized_bindings: list[dict[str, Any]] = []
         for binding in bindings:
-            normalized_bindings.append(
-                {
-                    "binding_id": _text(binding, "binding_id"),
-                    "identity": _v22_identity(binding),
-                    "source_refs": _v22_strings(binding, "source_refs"),
-                    "supports_block_refs": _v22_strings(
-                        binding, "supports_block_refs", non_empty=True
-                    ),
-                }
-            )
+            normalized_binding = {
+                "binding_id": _text(binding, "binding_id"),
+                "identity": _v22_identity(binding),
+                "source_refs": _v22_strings(binding, "source_refs"),
+                "supports_block_refs": _v22_strings(
+                    binding, "supports_block_refs", non_empty=True
+                ),
+            }
+            if "material_ref" in binding:
+                normalized_binding["material_ref"] = _text(
+                    binding, "material_ref"
+                )
+            if "asset_ref" in binding:
+                normalized_binding["asset_ref"] = _text(binding, "asset_ref")
+            if "caption" in binding:
+                normalized_binding["caption"] = _text(binding, "caption")
+            if "material_kind" in binding:
+                material_kind = _text(binding, "material_kind")
+                if material_kind not in {"image", "document", "text", "link"}:
+                    raise ContractValidationError(
+                        "material_kind must be image, document, text, or link"
+                    )
+                normalized_binding["material_kind"] = material_kind
+            normalized_bindings.append(normalized_binding)
         normalized_slides.append(
             {
                 "slide_id": _text(slide, "slide_id"),

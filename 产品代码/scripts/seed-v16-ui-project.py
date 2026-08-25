@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -28,6 +30,32 @@ def main() -> int:
     config.save(workspace_config)
     project_root = base / "projects" / "schema3-ui-project"
     delivery, revision, refs = prepared_delivery_ready(project_root, slide_count=2)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "schema3-ui-project",
+                "project_root": str(project_root),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    review_assets = project_root / "review-assets"
+    review_assets.mkdir(parents=True, exist_ok=True)
+    accepted_prototype = (
+        ROOT / "prototypes" / "08-content-full-deck-review-v7-inline-feedback.html"
+    ).read_text(encoding="utf-8")
+    embedded_slide = re.search(
+        r"image:'data:image/jpeg;base64,([^']+)'",
+        accepted_prototype,
+    )
+    if embedded_slide is None:
+        raise RuntimeError("accepted content-review prototype has no embedded slide image")
+    (review_assets / "content-evidence-page.jpg").write_bytes(
+        base64.b64decode(embedded_slide.group(1))
+    )
     state = delivery.kernel.load()
     print(
         json.dumps(

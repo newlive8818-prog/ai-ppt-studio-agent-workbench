@@ -1,3 +1,5 @@
+import type { ContentFullDeckReviewProjection } from "./types/content-review";
+
 export type SpaceId = "overview" | "materials" | "blueprint" | "visual" | "delivery";
 
 export type GateStatus = "locked" | "open" | "user-reviewable" | "passed" | "failed";
@@ -249,6 +251,7 @@ export interface ReviewProjection {
       used_region: string;
       supports_claim: string;
       treatment: string;
+      fact_identity?: string;
       evidence_gap?: string;
     };
     asset: {
@@ -272,7 +275,7 @@ export interface ReviewWidgetData {
   review: ReviewProjection;
 }
 
-export type SurfaceData = WidgetData | ReviewWidgetData;
+export type SurfaceData = WidgetData | ReviewWidgetData | ContentFullDeckReviewProjection;
 
 export interface HostEnvironment {
   containerWidth: number | null;
@@ -463,6 +466,7 @@ export interface HostBridge {
   callTool<K extends keyof import("./types/tool-contracts").ToolContractMap>(
     name: K,
     args: import("./types/tool-contracts").ToolContractMap[K]["input"],
+    options?: { signal?: AbortSignal },
   ): Promise<import("./types/tool-contracts").ToolContractMap[K]["output"]>;
   switchReview?(reviewType: "content" | "visual"): Promise<void>;
   updateModelContext(context: Record<string, unknown>): Promise<void>;
@@ -481,7 +485,8 @@ declare global {
       bytes: number;
       dataBase64: string;
     }>;
-    __AI_PPT_CONTENT_REVIEW_PREVIEW__?: ContentSidebarReviewProjection;
+    __AI_PPT_CONTENT_REVIEW_PREVIEW__?: ContentFullDeckReviewProjection;
+    __AI_PPT_CONTENT_REVIEW_PROJECT_ROOT__?: string;
     __AI_PPT_CONTENT_REVIEW_SCENARIO__?: string;
     __AI_PPT_PREVIEW_CALLS__?: Record<string, number>;
     openai?: Record<string, unknown>;

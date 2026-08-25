@@ -83,6 +83,7 @@ function ContentEvidenceSurface({ review }: { review: ReviewProjection }) {
             <dl>
               <div><dt>来源文件</dt><dd>{evidence.source_file}</dd></div>
               <div><dt>材料身份</dt><dd>{evidence.material_ref}</dd></div>
+              <div><dt>证据身份</dt><dd>{evidence.fact_identity}</dd></div>
               <div><dt>裁切 / 使用区域</dt><dd>{evidence.used_region}</dd></div>
               <div><dt>处理方式</dt><dd>{evidence.treatment}</dd></div>
             </dl>

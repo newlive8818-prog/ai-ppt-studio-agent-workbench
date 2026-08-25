@@ -90,12 +90,16 @@ function statusForBridgeError(error) {
 function normalizedEvidenceScope(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const scope = {
+    parentReviewSessionId: String(value.parentReviewSessionId || "").trim(),
     slideId: String(value.slideId || "").trim(),
     evidenceId: String(value.evidenceId || "").trim(),
     materialRef: String(value.materialRef || "").trim(),
     assetRef: String(value.assetRef || "").trim(),
   };
-  return Object.values(scope).every(Boolean) ? scope : null;
+  const common = scope.slideId && scope.evidenceId && scope.materialRef;
+  const legacy = scope.assetRef && !scope.parentReviewSessionId;
+  const formal = scope.parentReviewSessionId && !scope.assetRef;
+  return common && (legacy || formal) ? scope : null;
 }
 
 function adjacentSlideSummary(slide) {
@@ -112,13 +116,51 @@ function buildContentEvidenceProjection(review, scope, evidenceAsset) {
   const slides = Array.isArray(review?.slides) ? review.slides : [];
   const index = slides.findIndex((slide) => String(slide?.slide_id || "") === scope.slideId);
   const slide = index >= 0 ? slides[index] : null;
-  const evidenceItems = Array.isArray(slide?.evidence_items) ? slide.evidence_items : [];
-  const evidence = evidenceItems.find((item) =>
-    String(item?.evidence_id || "") === scope.evidenceId
-    && String(item?.material_ref || "") === scope.materialRef
-    && String(item?.asset_ref || "") === scope.assetRef
+  const formal = Boolean(scope.parentReviewSessionId);
+  const evidenceItems = formal
+    ? (Array.isArray(slide?.evidence_bindings) ? slide.evidence_bindings : [])
+    : (Array.isArray(slide?.evidence_items) ? slide.evidence_items : []);
+  const matched = evidenceItems.find((item) => formal
+    ? String(item?.binding_id || "") === scope.evidenceId
+      && String(item?.material_ref || "") === scope.materialRef
+    : String(item?.evidence_id || "") === scope.evidenceId
+      && String(item?.material_ref || "") === scope.materialRef
+      && String(item?.asset_ref || "") === scope.assetRef
   );
+  if (
+    formal
+    && String(review?.review_session?.review_session_id || "") !== scope.parentReviewSessionId
+  ) {
+    return null;
+  }
+  const formalSourceRefs = formal && Array.isArray(matched?.source_refs)
+    ? matched.source_refs.map((ref) => String(ref || "").trim()).filter(Boolean)
+    : [];
+  const evidence = formal && matched ? {
+    evidence_id: String(matched.binding_id || ""),
+    material_ref: String(matched.material_ref || ""),
+    asset_ref: "",
+    source_file: formalSourceRefs.join("\n"),
+    source_page_or_region: formalSourceRefs.join("\n"),
+    used_region: Array.isArray(matched.supports_block_refs) ? matched.supports_block_refs.join("、") : "",
+    supports_claim: Array.isArray(matched.supports_block_refs) ? matched.supports_block_refs.join("、") : "",
+    treatment: "只读引用",
+    fact_identity: String(matched.identity || ""),
+    evidence_gap: formalSourceRefs.length
+      ? ""
+      : "当前绑定没有可定位来源引用。",
+  } : matched;
   if (!slide || !evidence) return null;
+  const projectedSlide = formal ? {
+    ...slide,
+    visible_copy: Array.isArray(slide.visible_copy_blocks)
+      ? slide.visible_copy_blocks.map((block) => ({
+          copy_id: String(block.block_id || ""),
+          role: String(block.role || ""),
+          text: String(block.text || ""),
+        }))
+      : [],
+  } : slide;
   return {
     review_type: "content-evidence",
     display_policy: "content-evidence-read-only",
@@ -127,9 +169,9 @@ function buildContentEvidenceProjection(review, scope, evidenceAsset) {
     title: `${String(slide.neutral_title || slide.slide_id)} · 材料证据`,
     revision: Number(review.revision || 0),
     status: "read-only",
-    gate_status: review.gate_status || {},
+    gate_status: formal ? {} : (review.gate_status || {}),
     source_version: String(review.source_version || ""),
-    source_refs: [scope.materialRef, scope.assetRef],
+    source_refs: formal ? formalSourceRefs : [scope.materialRef, scope.assetRef],
     sections: [],
     outline: [],
     mark_set: { status: "read-only", marks: [] },
@@ -140,7 +182,7 @@ function buildContentEvidenceProjection(review, scope, evidenceAsset) {
       canCompareAdjacentSlides: true,
     },
     evidence_view: {
-      slide,
+      slide: projectedSlide,
       evidence,
       asset: evidenceAsset || null,
       adjacent: {
@@ -324,10 +366,16 @@ export function createReviewBridge(options) {
       if (url.pathname === "/api/review") {
         const payload = await invokeBridge({
           operation: evidenceReadOnly
-            ? "get-content-sidebar-review-projection"
+            ? evidenceScope.parentReviewSessionId
+              ? "get-content-full-deck-review-projection"
+              : "get-content-sidebar-review-projection"
             : "get-review-projection",
           project_root: projectRoot,
-          ...(evidenceReadOnly ? {} : { review_type: reviewType }),
+          ...(evidenceReadOnly && evidenceScope.parentReviewSessionId
+            ? { review_session_id: evidenceScope.parentReviewSessionId }
+            : evidenceReadOnly
+              ? {}
+              : { review_type: reviewType }),
         });
         if (
           payload?.review?.source_version !== sourceVersion ||
