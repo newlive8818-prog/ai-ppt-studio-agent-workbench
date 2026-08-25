@@ -162,6 +162,31 @@ def test_review_session_persistence_is_always_saved(self) -> None:
 
 The test helper `valid_session_payload` should return a complete independent dictionary so each test can mutate it without sharing state.
 
+Define the helper before the tests:
+
+```python
+def valid_session_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "review_session_id": "session-01",
+        "review_type": "content-full-deck",
+        "project_id": "project-01",
+        "target_artifact_ref": "artifact://reading-deck-blueprint/" + "a" * 64,
+        "source_version": "content-v3",
+        "revision": 17,
+        "status": "ready",
+        "open_policy": "notify-only",
+        "host_open_status": "not-requested",
+        "persistence_status": "saved",
+        "host_notification_status": "not-requested",
+        "ai_receipt_status": "pending",
+        "created_at": NOW,
+        "last_opened_at": None,
+        "submitted_at": None,
+    }
+    payload.update(overrides)
+    return payload
+```
+
 - [ ] **Step 2: Run only the new contract tests and verify RED**
 
 Run:
@@ -294,6 +319,22 @@ def test_incompatible_open_policy_does_not_create_a_second_current(self) -> None
 
 Add an `open_with_policy` test helper that passes the requested policy to the existing `open_or_resume` call.
 
+Use this exact helper in `ReviewSessionServiceTests`:
+
+```python
+def open_with_policy(self, open_policy: str, command_id: str = "open-v3"):
+    state = self.kernel.load()
+    return self.service.open_or_resume(
+        command_id=command_id,
+        expected_revision=state.revision,
+        review_type="content-full-deck",
+        target_artifact_ref=self.source_ref,
+        source_version="content-v3",
+        source_revision=1,
+        open_policy=open_policy,
+    )
+```
+
 - [ ] **Step 2: Run the lifecycle RED tests**
 
 Run:
@@ -389,7 +430,23 @@ def test_expire_current_detaches_current_and_preserves_history(self) -> None:
     )
 ```
 
-Inject a clock into `ReviewSessionService` only if the current implementation pattern can do so without changing unrelated callers; otherwise use a timezone-aware assertion that checks presence and parseability rather than the exact string.
+Add a backward-compatible clock parameter so the new expiry test is deterministic without changing existing callers:
+
+```python
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+def __init__(
+    self,
+    kernel: ProjectKernel,
+    *,
+    clock: Callable[[], str] = _utc_now,
+) -> None:
+    self.kernel = kernel
+    self.clock = clock
+```
+
+Use `self.clock()` for `created_at`, `superseded_at`, and `expired_at`. Existing callers that only pass `kernel` remain source-compatible.
 
 - [ ] **Step 6: Implement `expire_current` as one atomic commit**
 
@@ -668,7 +725,15 @@ The service returns the persisted outcome tuple. The bridge handler raises the c
 
 - [ ] **Step 7: Expose the outcome methods through the Python bridge**
 
-Add bridge handlers that accept `outcome`, `recorded_at`, and optional `receipt_ref`. The bridge must:
+Add bridge handlers with these exact operation names; each accepts `outcome`, `recorded_at`, and optional `receipt_ref`:
+
+```text
+record-review-host-open-outcome
+record-review-host-notification-outcome
+record-review-ai-outcome
+```
+
+The bridge must:
 
 - call the matching service method;
 - raise `ReviewHostOpenUnavailableError` for host-open `unavailable`;
@@ -764,24 +829,35 @@ Expected: FAIL because the current projection only checks `failed` and treats no
 
 - [ ] **Step 3: Implement the explicit projection table**
 
-In `ProjectStatusProjectionService._review_candidate` and `select_user_status`, apply this order:
+In `ProjectStatusProjectionService._review_candidate` and `select_user_status`, apply this order using the existing projection dictionary shape:
 
 ```python
+def projection(status: str, reason: str, next_action: str) -> dict[str, Any]:
+    return {
+        "status": status,
+        "object_type": object_type,
+        "object_ref": ref,
+        "reason": reason,
+        "next_action": next_action,
+        "open_policy": session["open_policy"],
+        "host_notification_status": session["host_notification_status"],
+    }
+
 if session["host_open_status"] in {"failed", "unavailable"}:
-    return blocked("专业审核宿主打开失败或不可用", "检查宿主能力并重试")
+    return projection("任务受阻", "专业审核宿主打开失败或不可用", "检查宿主能力并重试")
 if session["host_notification_status"] in {"failed", "unavailable"}:
-    return blocked("专业审核宿主通知失败或不可用", "检查通知能力并重试")
+    return projection("任务受阻", "专业审核宿主通知失败或不可用", "检查通知能力并重试")
 if session["ai_receipt_status"] in {"rejected", "unverified"}:
-    return blocked("AI 回执被拒绝或未验证", "检查回执并重试")
+    return projection("任务受阻", "AI 回执被拒绝或未验证", "检查回执并重试")
 if session["status"] == "submitted" and session["ai_receipt_status"] == "pending":
-    return processing("审核已提交，等待 AI 接收回执", "等待 AI 接收回执")
+    return projection("AI 正在处理", "审核已提交，等待 AI 接收回执", "等待 AI 接收回执")
 if session["open_policy"] == "notify-only":
     if session["host_notification_status"] == "sent":
-        return result("审核成果已保存并已通知", "打开审核成果")
-    return processing("审核成果已保存，等待宿主通知", "发送成果可查看通知")
+        return projection("成果已可查看", "审核成果已保存并已通知", "打开审核成果")
+    return projection("AI 正在处理", "审核成果已保存，等待宿主通知", "发送成果可查看通知")
 if session["host_open_status"] == "pending":
-    return needs_user("审核已准备，等待当前用户打开", "打开或继续审核")
-return needs_user("专业审核成果已保存", "完成专业审核")
+    return projection("需要你处理", "审核已准备，等待当前用户打开", "打开或继续审核")
+return projection("需要你处理", "专业审核成果已保存", "完成专业审核")
 ```
 
 Keep the existing global priority order and current revision binding. Do not add new user-facing status names.
