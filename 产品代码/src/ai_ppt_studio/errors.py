@@ -129,14 +129,17 @@ class ReviewSourceStaleError(AiPptError):
         )
 
 
-class ReviewSessionStaleError(AiPptError):
+class ReviewSessionStaleError(ReviewSourceStaleError):
     """Raised when a ReviewSession source or identity is stale."""
 
     def __init__(self, expected: str, actual: str) -> None:
         self.code = "REVIEW_SESSION_STALE"
         self.expected = expected
         self.actual = actual
-        super().__init__(
+        self.expected_source = expected
+        self.actual_source = actual
+        AiPptError.__init__(
+            self,
             f"ReviewSession source {expected} is stale; current source is {actual}"
         )
 
