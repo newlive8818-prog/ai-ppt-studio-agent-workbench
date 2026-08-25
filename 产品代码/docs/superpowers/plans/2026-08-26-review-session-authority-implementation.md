@@ -27,6 +27,19 @@ Use `superpowers:using-git-worktrees` at execution time. Do not create the imple
 
 - [ ] **Step 2: Create the feature branch and linked worktree from the exact recovery HEAD**
 
+The current recovery integration tip includes the approved design and plan documents:
+
+```text
+codex/v22-recovery-integration-20260825
+72974554fcf766ce5984703162e90d4b0e317858
+```
+
+The implementation rollback boundary remains the pre-design code commit:
+
+```text
+6c458f7b0c2f81a1f85db3afea9a917a161b1124
+```
+
 Run:
 
 ```bash
@@ -39,7 +52,7 @@ Expected:
 
 - the new worktree is at the exact requested path;
 - its branch is `codex/slice-review-session-authority-20260826`;
-- its HEAD is `6c458f7b0c2f81a1f85db3afea9a917a161b1124`;
+- its HEAD is `72974554fcf766ce5984703162e90d4b0e317858`;
 - the recovery integration worktree remains unchanged;
 - the quarantine worktree remains unchanged.
 
