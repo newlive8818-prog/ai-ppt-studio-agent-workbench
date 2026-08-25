@@ -60,6 +60,37 @@ class ProjectStatusProjectionTests(unittest.TestCase):
         self.assertTrue(projected["reason"])
         self.assertTrue(projected["next_action"])
 
+    def test_failed_or_unavailable_host_open_is_blocked(self) -> None:
+        row = {
+            **candidate("需要你处理", "content-review"),
+            "open_policy": "foreground-if-waiting",
+            "host_open_status": "unavailable",
+            "host_notification_status": "not-requested",
+        }
+        self.assertEqual(select_user_status([row], revision=7)["status"], "任务受阻")
+        row["host_open_status"] = "failed"
+        self.assertEqual(select_user_status([row], revision=8)["status"], "任务受阻")
+
+    def test_unverified_or_rejected_ai_receipt_is_blocked(self) -> None:
+        row = {
+            **candidate("AI 正在处理", "content-review"),
+            "open_policy": "notify-only",
+            "host_notification_status": "sent",
+            "ai_receipt_status": "unverified",
+        }
+        self.assertEqual(select_user_status([row], revision=7)["status"], "任务受阻")
+        row["ai_receipt_status"] = "rejected"
+        self.assertEqual(select_user_status([row], revision=8)["status"], "任务受阻")
+
+    def test_pending_policy_facts_do_not_claim_a_completed_result(self) -> None:
+        row = {
+            **candidate("需要你处理", "content-review"),
+            "open_policy": "notify-only",
+            "host_notification_status": "pending",
+            "ai_receipt_status": "pending",
+        }
+        self.assertEqual(select_user_status([row], revision=7)["status"], "AI 正在处理")
+
 
 if __name__ == "__main__":
     unittest.main()

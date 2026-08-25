@@ -11,14 +11,43 @@ sys.path.insert(0, str(ROOT / "src"))
 from ai_ppt_studio.application.v16_bridge import dispatch_v16
 from ai_ppt_studio.application.presales_content_service import PresalesContentService
 from ai_ppt_studio.config import RuntimeConfig
-from ai_ppt_studio.errors import GateBlockedError
+from ai_ppt_studio.errors import (
+    GateBlockedError,
+    ReviewHostOpenUnavailableError,
+    ReviewSessionStaleError,
+)
 from ai_ppt_studio.kernel.transactions import ProjectKernel
-from ai_ppt_studio.workbench_bridge import dispatch
+from ai_ppt_studio.workbench_bridge import _error_payload, dispatch
 from tests.host_confirmation_fixtures import gate_confirmation_kwargs
 from tests.test_v22_content_review_projection import accepted_review
 
 
 class V16BridgeTests(unittest.TestCase):
+    def test_review_session_errors_have_stable_public_envelopes(self) -> None:
+        status, stale = _error_payload(ReviewSessionStaleError("v1", "v2"))
+        self.assertEqual(status, 2)
+        self.assertFalse(stale["ok"])
+        self.assertEqual(stale["error"]["code"], "REVIEW_SESSION_STALE")
+        self.assertIn("details", stale["error"])
+        self.assertEqual(stale["error"]["details"], {"expected": "v1", "actual": "v2"})
+
+        status, unavailable = _error_payload(
+            ReviewHostOpenUnavailableError(
+                "artifact://review-session/" + "a" * 64,
+                {"review_session_id": "session-01", "host_open_status": "unavailable"},
+                7,
+            )
+        )
+        self.assertEqual(status, 2)
+        self.assertFalse(unavailable["ok"])
+        self.assertEqual(
+            unavailable["error"]["code"], "REVIEW_HOST_OPEN_UNAVAILABLE"
+        )
+        self.assertEqual(
+            set(unavailable["error"]["details"]),
+            {"session_ref", "session", "revision"},
+        )
+
     def test_bridge_exposes_content_review_and_trusted_g0(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)

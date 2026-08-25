@@ -27,7 +27,12 @@ from ai_ppt_studio.errors import (
     ProjectIdentityError,
     ProjectNotFoundError,
     ProtectedPathError,
+    ReviewAiReceiptUnverifiedError,
+    ReviewHostOpenFailedError,
+    ReviewHostOpenUnavailableError,
     ReviewMarkSaveError,
+    ReviewSessionAlreadyCurrentError,
+    ReviewSessionStaleError,
     ReviewSourceStaleError,
     RevisionConflictError,
     WorkbenchValidationError,
@@ -121,6 +126,40 @@ def _error_payload(exc: Exception) -> tuple[int, dict[str, object]]:
                     "expected_source": exc.expected_source,
                     "actual_source": exc.actual_source,
                 },
+            },
+        }
+    if isinstance(exc, ReviewSessionStaleError):
+        return 2, {
+            "ok": False,
+            "error": {
+                "code": exc.code,
+                "message": str(exc),
+                "details": {"expected": exc.expected, "actual": exc.actual},
+            },
+        }
+    if isinstance(exc, ReviewSessionAlreadyCurrentError):
+        return 2, {
+            "ok": False,
+            "error": {
+                "code": exc.code,
+                "message": str(exc),
+                "details": exc.details,
+            },
+        }
+    if isinstance(
+        exc,
+        (
+            ReviewHostOpenUnavailableError,
+            ReviewHostOpenFailedError,
+            ReviewAiReceiptUnverifiedError,
+        ),
+    ):
+        return 2, {
+            "ok": False,
+            "error": {
+                "code": exc.code,
+                "message": str(exc),
+                "details": exc.details,
             },
         }
     if isinstance(exc, MissionNotConfirmedError):

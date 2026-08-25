@@ -22,7 +22,31 @@ def select_user_status(
         item = dict(candidate)
         if item.get("status") not in PRIORITY:
             raise ValueError("Unknown project user status")
-        if item.get("open_policy") == "notify-only" and item["status"] == "需要你处理":
+        if item.get("host_open_status") in {"failed", "unavailable"}:
+            item.update(
+                {
+                    "status": "任务受阻",
+                    "reason": "专业审核宿主打开失败或不可用",
+                    "next_action": "检查宿主能力并重试",
+                }
+            )
+        elif item.get("host_notification_status") in {"failed", "unavailable"}:
+            item.update(
+                {
+                    "status": "任务受阻",
+                    "reason": "专业审核宿主通知失败或不可用",
+                    "next_action": "检查通知能力并重试",
+                }
+            )
+        elif item.get("ai_receipt_status") in {"rejected", "unverified"}:
+            item.update(
+                {
+                    "status": "任务受阻",
+                    "reason": "AI 回执被拒绝或未验证",
+                    "next_action": "检查回执并重试",
+                }
+            )
+        elif item.get("open_policy") == "notify-only" and item["status"] == "需要你处理":
             if item.get("host_notification_status") == "sent":
                 item["status"] = "成果已可查看"
                 item["next_action"] = "打开审核成果"
@@ -84,19 +108,48 @@ class ProjectStatusProjectionService:
             if session["review_type"] == "content-full-deck"
             else "visual-review"
         )
-        failed = any(
-            session[field] == "failed"
-            for field in (
-                "host_open_status",
-                "host_notification_status",
-                "ai_receipt_status",
-            )
-        )
-        if failed:
+        if session["host_open_status"] in {"failed", "unavailable"}:
             status, reason, next_action = (
                 "任务受阻",
-                "专业审核的宿主或 AI 回执失败",
-                "检查失败回执并重试",
+                "专业审核宿主打开失败或不可用",
+                "检查宿主能力并重试",
+            )
+        elif session["host_notification_status"] in {"failed", "unavailable"}:
+            status, reason, next_action = (
+                "任务受阻",
+                "专业审核宿主通知失败或不可用",
+                "检查通知能力并重试",
+            )
+        elif session["ai_receipt_status"] in {"rejected", "unverified"}:
+            status, reason, next_action = (
+                "任务受阻",
+                "AI 回执被拒绝或未验证",
+                "检查回执并重试",
+            )
+        elif session["status"] == "submitted" and session["ai_receipt_status"] == "pending":
+            status, reason, next_action = (
+                "AI 正在处理",
+                "审核已提交，等待 AI 接收回执",
+                "等待 AI 接收回执",
+            )
+        elif session["open_policy"] == "notify-only":
+            if session["host_notification_status"] == "sent":
+                status, reason, next_action = (
+                    "成果已可查看",
+                    "审核成果已保存并已通知",
+                    "打开审核成果",
+                )
+            else:
+                status, reason, next_action = (
+                    "AI 正在处理",
+                    "审核成果已保存，等待宿主通知",
+                    "发送成果可查看通知",
+                )
+        elif session["host_open_status"] == "pending":
+            status, reason, next_action = (
+                "需要你处理",
+                "审核已准备，等待当前用户打开",
+                "打开或继续审核",
             )
         elif session["status"] == "submitted":
             status, reason, next_action = (
