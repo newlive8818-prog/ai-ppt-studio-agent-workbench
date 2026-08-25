@@ -21,7 +21,28 @@ function pythonModuleRoot(env = process.env) {
   return env.AI_PPT_PYTHONPATH || (existsSync(sourceRoot) ? sourceRoot : installedRuntime);
 }
 
-function defaultPythonCandidates(env = process.env, platform = process.platform) {
+export function resolveBundledPythonExecutable(
+  nodeExecutable = process.execPath,
+  platform = process.platform,
+) {
+  if (platform === "win32" || !nodeExecutable || !path.isAbsolute(nodeExecutable))
+    return undefined;
+  const nodeBin = path.dirname(nodeExecutable);
+  const nodeRoot = path.dirname(nodeBin);
+  const dependenciesRoot = path.dirname(nodeRoot);
+  if (
+    path.basename(nodeBin) !== "bin"
+    || path.basename(nodeRoot) !== "node"
+    || path.basename(dependenciesRoot) !== "dependencies"
+  ) return undefined;
+  return path.join(dependenciesRoot, "python", "bin", "python3");
+}
+
+function defaultPythonCandidates(
+  env = process.env,
+  platform = process.platform,
+  nodeExecutable = process.execPath,
+) {
   if (platform === "win32") {
     return [
       env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, "Programs", "Python", "Python314", "python.exe"),
@@ -33,11 +54,12 @@ function defaultPythonCandidates(env = process.env, platform = process.platform)
     ].filter(Boolean);
   }
   return [
+    resolveBundledPythonExecutable(nodeExecutable, platform),
     "/usr/local/bin/python3",
     "/opt/homebrew/bin/python3",
     "/Library/Frameworks/Python.framework/Versions/Current/bin/python3",
     "/usr/bin/python3",
-  ];
+  ].filter(Boolean);
 }
 
 export function resolvePythonExecutable(options = {}) {
@@ -48,8 +70,12 @@ function resolvePythonExecutables(options = {}) {
   if (options.pythonExecutable) return [options.pythonExecutable];
   const env = options.env || process.env;
   if (env.AI_PPT_PYTHON) return [env.AI_PPT_PYTHON];
-  const candidates = options.pythonCandidates || defaultPythonCandidates(env, options.platform);
-  const resolved = candidates.filter(
+  const candidates = options.pythonCandidates || defaultPythonCandidates(
+    env,
+    options.platform,
+    options.nodeExecutable || process.execPath,
+  );
+  const resolved = [...new Set(candidates)].filter(
     (candidate) => path.isAbsolute(candidate) && existsSync(candidate),
   );
   return resolved.length > 0
