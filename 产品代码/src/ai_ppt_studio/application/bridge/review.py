@@ -6,6 +6,11 @@ from typing import Any, Callable
 
 from ai_ppt_studio.application.bridge import BridgeContext, result
 from ai_ppt_studio.application.review_session_service import ReviewSessionService
+from ai_ppt_studio.errors import (
+    ReviewAiReceiptUnverifiedError,
+    ReviewHostOpenFailedError,
+    ReviewHostOpenUnavailableError,
+)
 
 
 def _session_result(ctx: BridgeContext, outcome: tuple[str, dict[str, Any], Any]):
@@ -52,6 +57,62 @@ def expire_review_session(ctx: BridgeContext, request: dict[str, Any]) -> dict[s
             expected_revision=int(request["expected_revision"]),
             review_type=str(request.get("review_type") or ""),
         ),
+    )
+
+
+def _outcome(
+    ctx: BridgeContext,
+    request: dict[str, Any],
+    method: Callable[..., tuple[str, dict[str, Any], Any]],
+    *,
+    failure_errors: dict[str, type[Exception]] | None = None,
+) -> dict[str, Any]:
+    outcome = str(request.get("outcome") or "")
+    session_ref, session, state = method(
+        command_id=ctx.command_id,
+        expected_revision=int(request["expected_revision"]),
+        review_type=str(request.get("review_type") or ""),
+        review_session_id=str(request.get("review_session_id") or ""),
+        outcome=outcome,
+        recorded_at=str(request.get("recorded_at") or ""),
+        receipt_ref=str(request.get("receipt_ref") or ""),
+    )
+    error_type = (failure_errors or {}).get(outcome)
+    if error_type is not None:
+        raise error_type(session_ref, session, state.revision)
+    return result(ctx, state, session_ref=session_ref, session=session)
+
+
+def record_host_open_outcome(
+    ctx: BridgeContext, request: dict[str, Any]
+) -> dict[str, Any]:
+    return _outcome(
+        ctx,
+        request,
+        ReviewSessionService(ctx.kernel).record_host_open_outcome,
+        failure_errors={
+            "unavailable": ReviewHostOpenUnavailableError,
+            "failed": ReviewHostOpenFailedError,
+        },
+    )
+
+
+def record_host_notification_outcome(
+    ctx: BridgeContext, request: dict[str, Any]
+) -> dict[str, Any]:
+    return _outcome(
+        ctx,
+        request,
+        ReviewSessionService(ctx.kernel).record_host_notification_outcome,
+    )
+
+
+def record_ai_outcome(ctx: BridgeContext, request: dict[str, Any]) -> dict[str, Any]:
+    return _outcome(
+        ctx,
+        request,
+        ReviewSessionService(ctx.kernel).record_ai_outcome,
+        failure_errors={"unverified": ReviewAiReceiptUnverifiedError},
     )
 
 
@@ -103,6 +164,9 @@ def record_ai_receipt(ctx: BridgeContext, request: dict[str, Any]) -> dict[str, 
 HANDLERS = {
     "open-or-resume-review-session": open_or_resume,
     "expire-review-session": expire_review_session,
+    "record-review-host-open-outcome": record_host_open_outcome,
+    "record-review-host-notification-outcome": record_host_notification_outcome,
+    "record-review-ai-outcome": record_ai_outcome,
     "record-review-bridge-host-open": record_bridge_host_open,
     "record-review-host-open": record_host_open,
     "record-review-host-notification": record_host_notification,

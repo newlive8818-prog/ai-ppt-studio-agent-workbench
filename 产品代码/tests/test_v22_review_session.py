@@ -326,6 +326,80 @@ class ReviewSessionServiceTests(unittest.TestCase):
             "expired",
         )
 
+    def test_host_open_unavailable_is_persisted_without_success_receipt(self) -> None:
+        _, session, state = self.open_with_policy("foreground-if-waiting")
+        ref, updated, committed = self.service.record_host_open_outcome(
+            command_id="host-open-unavailable",
+            expected_revision=state.revision,
+            review_type="content-full-deck",
+            review_session_id=session["review_session_id"],
+            outcome="unavailable",
+            recorded_at=NOW,
+        )
+        self.assertEqual(updated["host_open_status"], "unavailable")
+        self.assertNotIn("host_open_receipt_ref", updated)
+        self.assertGreater(committed.revision, state.revision)
+        self.assertEqual(
+            self.kernel.artifacts.resolve(ArtifactReference.parse(ref))["payload"],
+            updated,
+        )
+
+    def test_host_open_failed_is_persisted_and_not_projected_as_opened(self) -> None:
+        _, session, state = self.open_with_policy("foreground-if-waiting")
+        _, updated, _ = self.service.record_host_open_outcome(
+            command_id="host-open-failed",
+            expected_revision=state.revision,
+            review_type="content-full-deck",
+            review_session_id=session["review_session_id"],
+            outcome="failed",
+            recorded_at=NOW,
+        )
+        self.assertEqual(updated["host_open_status"], "failed")
+        self.assertNotEqual(updated["status"], "opened")
+
+    def test_notification_pending_can_be_sent_failed_or_unavailable(self) -> None:
+        _, session, state = self.open_with_policy("notify-only")
+        self.assertEqual(session["host_notification_status"], "pending")
+        _, failed, failed_state = self.service.record_host_notification_outcome(
+            command_id="notification-failed",
+            expected_revision=state.revision,
+            review_type="content-full-deck",
+            review_session_id=session["review_session_id"],
+            outcome="failed",
+            recorded_at=NOW,
+        )
+        self.assertEqual(failed["host_notification_status"], "failed")
+        _, unavailable, _ = self.service.record_host_notification_outcome(
+            command_id="notification-unavailable",
+            expected_revision=failed_state.revision,
+            review_type="content-full-deck",
+            review_session_id=failed["review_session_id"],
+            outcome="unavailable",
+            recorded_at=NOW,
+        )
+        self.assertEqual(unavailable["host_notification_status"], "unavailable")
+
+    def test_ai_unverified_and_rejected_never_become_received(self) -> None:
+        _, session, state = self.open_with_policy("notify-only")
+        _, unverified, unverified_state = self.service.record_ai_outcome(
+            command_id="ai-unverified",
+            expected_revision=state.revision,
+            review_type="content-full-deck",
+            review_session_id=session["review_session_id"],
+            outcome="unverified",
+            recorded_at=NOW,
+        )
+        self.assertEqual(unverified["ai_receipt_status"], "unverified")
+        _, rejected, _ = self.service.record_ai_outcome(
+            command_id="ai-rejected",
+            expected_revision=unverified_state.revision,
+            review_type="content-full-deck",
+            review_session_id=session["review_session_id"],
+            outcome="rejected",
+            recorded_at=NOW,
+        )
+        self.assertEqual(rejected["ai_receipt_status"], "rejected")
+
     def test_reopen_is_unique_and_new_source_atomically_supersedes(self) -> None:
         first_ref, first, first_state = self.open()
         repeated_ref, repeated, repeated_state = self.open("open-v3-again")

@@ -156,6 +156,42 @@ class ReviewSessionAlreadyCurrentError(AiPptError):
         super().__init__("A compatible current ReviewSession already exists")
 
 
+class ReviewHostOpenUnavailableError(AiPptError):
+    code = "REVIEW_HOST_OPEN_UNAVAILABLE"
+
+    def __init__(self, session_ref: str, session: dict[str, object], revision: int) -> None:
+        self.details = {
+            "session_ref": session_ref,
+            "session": session,
+            "revision": revision,
+        }
+        super().__init__("Review host open capability is unavailable")
+
+
+class ReviewHostOpenFailedError(AiPptError):
+    code = "REVIEW_HOST_OPEN_FAILED"
+
+    def __init__(self, session_ref: str, session: dict[str, object], revision: int) -> None:
+        self.details = {
+            "session_ref": session_ref,
+            "session": session,
+            "revision": revision,
+        }
+        super().__init__("Review host open failed")
+
+
+class ReviewAiReceiptUnverifiedError(AiPptError):
+    code = "REVIEW_AI_RECEIPT_UNVERIFIED"
+
+    def __init__(self, session_ref: str, session: dict[str, object], revision: int) -> None:
+        self.details = {
+            "session_ref": session_ref,
+            "session": session,
+            "revision": revision,
+        }
+        super().__init__("Review AI receipt could not be verified")
+
+
 class ReviewMarkSaveError(AiPptError):
     """Raised when a valid review-mark write fails at the persistence boundary."""
 

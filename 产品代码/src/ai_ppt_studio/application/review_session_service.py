@@ -268,6 +268,189 @@ class ReviewSessionService:
     def record_ai_receipt(self, **kwargs: Any):
         return self._record_receipt("ai", **kwargs)
 
+    def record_host_open_outcome(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        review_type: str,
+        review_session_id: str,
+        outcome: str,
+        recorded_at: str,
+        receipt_ref: str = "",
+    ) -> tuple[str, dict[str, Any], KernelState]:
+        outcome = self._text(outcome, "outcome")
+        if outcome == "opened":
+            if not receipt_ref:
+                raise ContractValidationError("opened host outcome requires receipt_ref")
+            return self._record_receipt(
+                "host-open",
+                command_id=command_id,
+                expected_revision=expected_revision,
+                review_type=review_type,
+                receipt_ref=receipt_ref,
+                review_session_id=review_session_id,
+            )
+        if outcome not in {"failed", "unavailable"}:
+            raise ContractValidationError("Invalid host-open outcome")
+        return self._record_outcome_fact(
+            command_id=command_id,
+            expected_revision=expected_revision,
+            review_type=review_type,
+            review_session_id=review_session_id,
+            outcome=outcome,
+            recorded_at=recorded_at,
+            field="host_open_status",
+            event_type="review.host-open-outcome-recorded",
+        )
+
+    def record_host_notification_outcome(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        review_type: str,
+        review_session_id: str,
+        outcome: str,
+        recorded_at: str,
+        receipt_ref: str = "",
+    ) -> tuple[str, dict[str, Any], KernelState]:
+        outcome = self._text(outcome, "outcome")
+        if outcome == "sent":
+            if not receipt_ref:
+                raise ContractValidationError(
+                    "sent notification outcome requires receipt_ref"
+                )
+            return self._record_receipt(
+                "host-notification",
+                command_id=command_id,
+                expected_revision=expected_revision,
+                review_type=review_type,
+                receipt_ref=receipt_ref,
+                review_session_id=review_session_id,
+            )
+        if outcome not in {"failed", "unavailable"}:
+            raise ContractValidationError("Invalid host-notification outcome")
+        return self._record_outcome_fact(
+            command_id=command_id,
+            expected_revision=expected_revision,
+            review_type=review_type,
+            review_session_id=review_session_id,
+            outcome=outcome,
+            recorded_at=recorded_at,
+            field="host_notification_status",
+            event_type="review.host-notification-outcome-recorded",
+        )
+
+    def record_ai_outcome(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        review_type: str,
+        review_session_id: str,
+        outcome: str,
+        recorded_at: str,
+        receipt_ref: str = "",
+    ) -> tuple[str, dict[str, Any], KernelState]:
+        outcome = self._text(outcome, "outcome")
+        if outcome == "received":
+            if not receipt_ref:
+                raise ContractValidationError("received AI outcome requires receipt_ref")
+            return self._record_receipt(
+                "ai",
+                command_id=command_id,
+                expected_revision=expected_revision,
+                review_type=review_type,
+                receipt_ref=receipt_ref,
+                review_session_id=review_session_id,
+            )
+        if outcome not in {"rejected", "unverified"}:
+            raise ContractValidationError("Invalid AI outcome")
+        return self._record_outcome_fact(
+            command_id=command_id,
+            expected_revision=expected_revision,
+            review_type=review_type,
+            review_session_id=review_session_id,
+            outcome=outcome,
+            recorded_at=recorded_at,
+            field="ai_receipt_status",
+            event_type="review.ai-outcome-recorded",
+        )
+
+    def _record_outcome_fact(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        review_type: str,
+        review_session_id: str,
+        outcome: str,
+        recorded_at: str,
+        field: str,
+        event_type: str,
+    ) -> tuple[str, dict[str, Any], KernelState]:
+        review_type = self._review_type(review_type)
+        review_session_id = self._text(review_session_id, "review_session_id")
+        recorded_at = self._timestamp(recorded_at)
+        values = {
+            "review_type": review_type,
+            "review_session_id": review_session_id,
+            "outcome": outcome,
+            "recorded_at": recorded_at,
+        }
+        command_fingerprint = fingerprint("record-review-outcome", values)
+        slot = self._slot(review_type)
+        replay = replay_ref(self.kernel, command_id, command_fingerprint, slot)
+        if replay:
+            session_ref, replay_state = replay
+            payload = self.kernel.artifacts.resolve(
+                ArtifactReference.parse(session_ref)
+            )["payload"]
+            return session_ref, validate_review_session(
+                payload, trusted_receipts=True
+            ), replay_state
+        state = self._state(expected_revision)
+        current_ref, current = self._require_current(state, review_type)
+        if current["review_session_id"] != review_session_id:
+            raise ContractValidationError(
+                "review_session_id does not match the current session"
+            )
+        updated = validate_review_session(
+            {**current, field: outcome}, trusted_receipts=True
+        )
+        return self._commit_session_update(
+            command_id=command_id,
+            expected_revision=expected_revision,
+            review_type=review_type,
+            updated=updated,
+            event_type=event_type,
+            command_fingerprint=command_fingerprint,
+        )
+
+    def _commit_session_update(
+        self,
+        *,
+        command_id: str,
+        expected_revision: int,
+        review_type: str,
+        updated: dict[str, Any],
+        event_type: str,
+        command_fingerprint: str,
+        detached_artifacts: tuple[tuple[str, dict[str, Any]], ...] = (),
+    ) -> tuple[str, dict[str, Any], KernelState]:
+        self._state(expected_revision)
+        validate_review_session(updated, trusted_receipts=True)
+        committed = self.kernel.commit(
+            command_id=self._text(command_id, "command_id"),
+            expected_revision=expected_revision,
+            event_type=event_type,
+            artifact_updates={self._slot(review_type): (REVIEW_SESSION_KIND, updated)},
+            detached_artifacts=detached_artifacts,
+            command_fingerprint=command_fingerprint,
+        )
+        return self._current_result(committed, review_type)
+
     def mark_submitted(
         self,
         *,
