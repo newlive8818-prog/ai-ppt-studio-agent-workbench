@@ -21,7 +21,6 @@ from ai_ppt_studio.errors import (
     ContractValidationError,
     ReviewSessionAlreadyCurrentError,
     ReviewSessionStaleError,
-    ReviewSourceStaleError,
     RevisionConflictError,
 )
 from ai_ppt_studio.kernel.references import ArtifactReference
@@ -93,12 +92,12 @@ class ReviewSessionService:
             state, review_type, target_ref
         )
         if source_revision != authoritative_revision:
-            raise ContractValidationError(
-                "source_revision must equal the current target publication revision"
+            raise ReviewSessionStaleError(
+                str(source_revision), str(authoritative_revision)
             )
         actual_source = str(target.get("source_version") or target_ref)
         if source_version != actual_source:
-            raise ReviewSourceStaleError(source_version, actual_source)
+            raise ReviewSessionStaleError(source_version, actual_source)
         current_ref, current = self._current(state, review_type)
         identity = (target_ref, source_version, source_revision)
         if current and (
@@ -225,8 +224,8 @@ class ReviewSessionService:
         state = self._state(expected_revision)
         _, current = self._require_current(state, review_type)
         if current["review_session_id"] != review_session_id:
-            raise ContractValidationError(
-                "review_session_id does not match the current session"
+            raise ReviewSessionStaleError(
+                review_session_id, current["review_session_id"]
             )
         receipt = {
             "receipt_id": stable_id(
@@ -413,8 +412,8 @@ class ReviewSessionService:
         state = self._state(expected_revision)
         current_ref, current = self._require_current(state, review_type)
         if current["review_session_id"] != review_session_id:
-            raise ContractValidationError(
-                "review_session_id does not match the current session"
+            raise ReviewSessionStaleError(
+                review_session_id, current["review_session_id"]
             )
         updated = validate_review_session(
             {**current, field: outcome}, trusted_receipts=True
@@ -659,7 +658,7 @@ class ReviewSessionService:
             "",
         )
         if supplied_ref != current_ref:
-            raise ReviewSourceStaleError(supplied_ref, current_ref)
+            raise ReviewSessionStaleError(supplied_ref, current_ref)
         try:
             reference = ArtifactReference.parse(supplied_ref)
             envelope = self.kernel.artifacts.resolve(reference)

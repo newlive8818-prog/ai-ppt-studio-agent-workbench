@@ -14,7 +14,7 @@ from ai_ppt_studio.domains.review.contracts import validate_review_session
 from ai_ppt_studio.errors import (
     ContractValidationError,
     ReviewSessionAlreadyCurrentError,
-    ReviewSourceStaleError,
+    ReviewSessionStaleError,
 )
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.transactions import ProjectKernel
@@ -422,7 +422,7 @@ class ReviewSessionServiceTests(unittest.TestCase):
             source_version="content-v4",
         )
         next_ref = published.artifact_heads["content/reading-blueprint"]
-        with self.assertRaises(ReviewSourceStaleError):
+        with self.assertRaises(ReviewSessionStaleError):
             self.service.open_or_resume(
                 command_id="stale-open",
                 expected_revision=published.revision,
@@ -582,10 +582,7 @@ class ReviewSessionServiceTests(unittest.TestCase):
         first_ref, first_session, opened = self.open()
         before = self.kernel.load()
 
-        with self.assertRaisesRegex(
-            ContractValidationError,
-            "source_revision must equal the current target publication revision",
-        ):
+        with self.assertRaises(ReviewSessionStaleError):
             self.service.open_or_resume(
                 command_id="open-v3-with-forged-history",
                 expected_revision=opened.revision,
