@@ -27,12 +27,20 @@ Use `superpowers:using-git-worktrees` at execution time. Do not create the imple
 
 - [ ] **Step 2: Create the feature branch and linked worktree from the exact recovery HEAD**
 
-The current recovery integration tip includes the approved design and plan documents:
+At this plan self-review checkpoint, the recovery integration tip is:
 
 ```text
 codex/v22-recovery-integration-20260825
-72974554fcf766ce5984703162e90d4b0e317858
+900ed45
 ```
+
+Because documentation commits move the integration branch, execution must refresh this value immediately before creating the feature worktree:
+
+```bash
+git rev-parse codex/v22-recovery-integration-20260825
+```
+
+Use the freshly returned full SHA as the expected feature-worktree HEAD. Do not branch from the stale abbreviated value above. The implementation rollback boundary remains the pre-design code commit below.
 
 The implementation rollback boundary remains the pre-design code commit:
 
