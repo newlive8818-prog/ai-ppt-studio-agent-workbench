@@ -10,7 +10,10 @@ from ai_ppt_studio.application.bridge.delivery_experience import (
     HANDLERS as DELIVERY_EXPERIENCE_HANDLERS,
 )
 from ai_ppt_studio.application.bridge.project import HANDLERS as PROJECT_HANDLERS
-from ai_ppt_studio.application.bridge.review import HANDLERS as REVIEW_HANDLERS
+from ai_ppt_studio.application.bridge.review import (
+    HANDLERS as REVIEW_HANDLERS,
+    PRIVATE_HANDLERS as PRIVATE_REVIEW_HANDLERS,
+)
 from ai_ppt_studio.application.bridge.visual import HANDLERS as VISUAL_HANDLERS
 from ai_ppt_studio.errors import ContractValidationError
 
@@ -22,13 +25,14 @@ HANDLERS = {
     **VISUAL_HANDLERS,
     **DELIVERY_EXPERIENCE_HANDLERS,
 }
+INTERNAL_HANDLERS = {**HANDLERS, **PRIVATE_REVIEW_HANDLERS}
 
 
 def dispatch_v16(request: dict[str, Any]) -> dict[str, Any]:
     """Dispatch one public operation through its explicit domain handler."""
 
     ctx = context(request)
-    handler = HANDLERS.get(ctx.operation)
+    handler = INTERNAL_HANDLERS.get(ctx.operation)
     if handler is None:
         raise ContractValidationError(
             f"Unsupported schema 3.0 operation: {ctx.operation}"

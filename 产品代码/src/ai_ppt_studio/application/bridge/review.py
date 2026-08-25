@@ -163,15 +163,18 @@ def record_ai_receipt(ctx: BridgeContext, request: dict[str, Any]) -> dict[str, 
 
 HANDLERS = {
     "open-or-resume-review-session": open_or_resume,
-    "expire-review-session": expire_review_session,
-    "record-review-host-open-outcome": record_host_open_outcome,
-    "record-review-host-notification-outcome": record_host_notification_outcome,
-    "record-review-ai-outcome": record_ai_outcome,
     "record-review-bridge-host-open": record_bridge_host_open,
     "record-review-host-open": record_host_open,
     "record-review-host-notification": record_host_notification,
     "record-review-ai-receipt": record_ai_receipt,
 }
 
+PRIVATE_HANDLERS = {
+    "expire-review-session": expire_review_session,
+    "record-review-host-open-outcome": record_host_open_outcome,
+    "record-review-host-notification-outcome": record_host_notification_outcome,
+    "record-review-ai-outcome": record_ai_outcome,
+}
 
-__all__ = ["HANDLERS"]
+
+__all__ = ["HANDLERS", "PRIVATE_HANDLERS"]
