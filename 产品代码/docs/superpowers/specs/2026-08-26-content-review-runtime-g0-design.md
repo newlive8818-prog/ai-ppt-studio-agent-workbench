@@ -62,7 +62,7 @@ current ReadingDeckBlueprint
 - current ReviewSession 绑定同一项目、review type、Blueprint ref、sourceVersion 和 Blueprint 权威发布 revision；
 - superseded 或 expired session 不可继续投影、保存或提交。
 
-`ReviewSessionService.open_or_resume()` 对 `content-full-deck` 增加前置验证：没有 exact current `content/acceptance` 时，不得创建或恢复内容 ReviewSession。视觉 ReviewSession 行为保持不变。
+公开 Review Bridge 的 `open-or-resume-review-session` 操作对 `content-full-deck` 增加前置验证：没有 exact current `content/acceptance` 时，不得向 Host 返回可打开的内容 ReviewSession。底层 `ReviewSessionService` 保持 review-type 通用生命周期能力，便于迁移与内部测试；即使内部预建了 session，C3 投影、PageDecision、Batch 与 G0 仍必须通过同一 exact-current authority，不能形成可用页面或 Gate。视觉 ReviewSession 行为保持不变。
 
 ### 4.2 PageDecision 与 Batch
 
@@ -162,6 +162,7 @@ C3 只验证这一分离合同，不修改 Review Bridge 的视觉回执绑定�
 
 - `产品代码/src/ai_ppt_studio/application/content_review/_shared.py`
 - `产品代码/src/ai_ppt_studio/application/content_review/planning_service.py`
+- `产品代码/src/ai_ppt_studio/application/bridge/review.py`
 - `产品代码/src/ai_ppt_studio/application/review_session_service.py`
 - `产品代码/src/ai_ppt_studio/application/gate_evaluator.py`
 - `产品代码/tests/test_v22_content_review_runtime_g0.py`（新增）
