@@ -72,6 +72,46 @@ class ContentHardGateServiceTests(unittest.TestCase):
             self.assertTrue(complete["acceptance_ref"])
             self.assertEqual(complete["stop"]["code"], "")
 
+    def test_malformed_current_blueprint_governs_stop_and_cannot_pass_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = confirmed_kernel(folder, has_materials=True)
+            build_complete_chain(kernel)
+            current_ref = kernel.load().artifact_heads["content/reading-blueprint"]
+            malformed = copy.deepcopy(
+                kernel.artifacts.resolve(ArtifactReference.parse(current_ref))["payload"]
+            )
+            malformed["slides"][0]["neutral_title"] = "本方案必然成功"
+            malformed["slides"][0]["reading_quality"][
+                "independently_readable"
+            ] = False
+            state = kernel.commit(
+                command_id="seed-malformed-current-blueprint",
+                expected_revision=kernel.load().revision,
+                event_type="test.seed-malformed-current-blueprint",
+                artifact_updates={
+                    "content/reading-blueprint": (
+                        "reading-deck-blueprint",
+                        malformed,
+                    )
+                },
+            )
+            malformed_ref = state.artifact_heads["content/reading-blueprint"]
+            gates = ContentHardGateService(kernel)
+            projection = gates.inspect()
+            self.assertEqual(projection["state"], "governed-stop")
+            self.assertEqual(projection["stop"]["code"], "CONTENT_CHAIN_INCONSISTENT")
+            before = authority_snapshot(kernel)
+            with self.assertRaises(ContractValidationError):
+                gates.run_evidence_gate(
+                    command_id="reject-malformed-current-blueprint",
+                    expected_revision=state.revision,
+                    semantic_check_results=semantic_checks(
+                        "evidence", malformed_ref
+                    ),
+                    reviewer_mode="isolated-review-task",
+                )
+            self.assertEqual(authority_snapshot(kernel), before)
+
     def test_failure_exposes_exact_requirements_without_reviewer_edit(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             kernel = confirmed_kernel(folder, has_materials=True)
@@ -230,6 +270,51 @@ class ContentHardGateServiceTests(unittest.TestCase):
             )
             self.assertEqual(replay[0], first[0])
             self.assertEqual(authority_snapshot(kernel), after)
+
+    def test_committed_reading_output_requires_current_passed_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = confirmed_kernel(folder, has_materials=True)
+            build_complete_chain(kernel)
+            blueprint_ref = kernel.load().artifact_heads["content/reading-blueprint"]
+            gates = ContentHardGateService(kernel)
+            gates.run_evidence_gate(
+                command_id="initial-evidence-pass",
+                expected_revision=kernel.load().revision,
+                semantic_check_results=semantic_checks("evidence", blueprint_ref),
+                reviewer_mode="isolated-review-task",
+            )
+            _reading_ref, reading_record, _state = gates.run_presales_reading_gate(
+                command_id="initial-reading-pass",
+                expected_revision=kernel.load().revision,
+                semantic_check_results=semantic_checks(
+                    "presales-reading", blueprint_ref
+                ),
+                reviewer_mode="isolated-review-task",
+            )
+            gates.run_evidence_gate(
+                command_id="current-evidence-failed",
+                expected_revision=kernel.load().revision,
+                semantic_check_results=semantic_checks(
+                    "evidence",
+                    blueprint_ref,
+                    failed_check_id="unsupported-causality",
+                ),
+                reviewer_mode="isolated-review-task",
+            )
+            failed_state = kernel.load()
+            self.assertNotIn("content/gate/presales-reading", failed_state.artifact_heads)
+            self.assertNotIn("content/acceptance", failed_state.artifact_heads)
+            before = authority_snapshot(kernel)
+            with self.assertRaises(GateBlockedError):
+                gates.commit_reviewer_output(
+                    command_id="reject-reading-after-failed-evidence",
+                    expected_revision=failed_state.revision,
+                    reviewer_role_id="content-presales-reading-gate-reviewer",
+                    artifact_kind="content-hard-gate-record",
+                    payload=copy.deepcopy(reading_record),
+                )
+            self.assertEqual(authority_snapshot(kernel), before)
+            self.assertNotIn("content/acceptance", kernel.load().artifact_heads)
 
     def test_chief_repair_invalidates_gates_and_requires_exact_current_rerun(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

@@ -10,6 +10,10 @@ from ai_ppt_studio.application.review_commands import fingerprint, replay_ref
 from ai_ppt_studio.context_compiler import ContextCompiler
 from ai_ppt_studio.domains.content.contracts import (
     validate_content_hard_gate_record,
+    validate_customer_decision_context,
+    validate_presales_evidence_book,
+    validate_problem_solution_fit_map,
+    validate_reading_deck_blueprint,
 )
 from ai_ppt_studio.errors import (
     ArtifactReferenceError,
@@ -85,7 +89,7 @@ class ContentHardGateService:
             "stop": {"code": "", "message": "", "resumable": False},
         }
         try:
-            chain = PresalesContentService(self.kernel).get_current_content_chain()["objects"]
+            chain = self._validated_content_chain()["objects"]
         except (ArtifactReferenceError, ContractValidationError):
             return self._stopped(projection, "CONTENT_CHAIN_INCONSISTENT", "Current content chain is inconsistent")
         blueprint = chain["reading_blueprint"]
@@ -109,6 +113,12 @@ class ContentHardGateService:
             projection["next_operation"] = GATE_OPERATION["evidence"]
             return projection
         if evidence["overall_result"] == "failed":
+            if reading or projection["acceptance_ref"]:
+                return self._stopped(
+                    projection,
+                    "CONTENT_GATE_ORDER_INCONSISTENT",
+                    "Failed evidence cannot coexist with reading or acceptance",
+                )
             return self._repair_projection(projection, projection["evidence_gate_ref"], evidence)
         if not reading:
             if projection["acceptance_ref"]:
@@ -117,6 +127,12 @@ class ContentHardGateService:
             projection["next_operation"] = GATE_OPERATION["presales-reading"]
             return projection
         if reading["overall_result"] == "failed":
+            if projection["acceptance_ref"]:
+                return self._stopped(
+                    projection,
+                    "CONTENT_ACCEPTANCE_INCONSISTENT",
+                    "Failed reading cannot coexist with acceptance",
+                )
             return self._repair_projection(projection, projection["presales_reading_gate_ref"], reading)
         try:
             self._require_current_acceptance(
@@ -168,6 +184,7 @@ class ContentHardGateService:
         self._require_record_current(normalized, gate_type, blueprint)
         self._require_check_coverage(normalized, gate_type, blueprint["ref"])
         self._require_context_pack(normalized, gate_type, chain)
+        self._require_gate_order(gate_type, state, blueprint)
         return self._commit_record(
             command_id,
             state.revision,
@@ -216,19 +233,7 @@ class ContentHardGateService:
             return reference, self._payload(reference), replay_state
         if state.revision != expected_revision:
             raise RevisionConflictError(expected_revision, state.revision)
-        if gate_type == "presales-reading":
-            evidence_ref = state.artifact_heads.get("content/gate/evidence", "")
-            try:
-                evidence = self._current_record("evidence", evidence_ref, blueprint)
-            except ArtifactReferenceError as error:
-                raise GateBlockedError(
-                    "content-presales-reading",
-                    ("current-evidence-gate-invalid",),
-                ) from error
-            if not evidence or evidence["overall_result"] != "passed":
-                raise GateBlockedError(
-                    "content-presales-reading", ("current-evidence-gate-not-passed",)
-                )
+        self._require_gate_order(gate_type, state, blueprint)
         context = ContextCompiler(self.kernel).compile_role_task(
             role_id=GATE_ROLE[gate_type],
             task_type=GATE_OPERATION[gate_type],
@@ -237,7 +242,9 @@ class ContentHardGateService:
             instructions="只审查当前内容并提交 pass/fail 与修复要求；禁止编辑内容。",
         )
         context_reference = self.kernel.artifacts.reference_for("context-pack", context)
-        deterministic = self._deterministic_checks(gate_type, blueprint["ref"])
+        deterministic = self._deterministic_checks(
+            gate_type, blueprint["ref"], chain
+        )
         failures = [
             check
             for check in [*deterministic, *semantic]
@@ -301,6 +308,8 @@ class ContentHardGateService:
             removals.append("content/acceptance")
         if record["overall_result"] == "passed" and gate_type == "presales-reading":
             state = self.kernel.load()
+            _chain, blueprint = self._current_complete_chain()
+            self._require_gate_order(gate_type, state, blueprint)
             evidence_ref = state.artifact_heads["content/gate/evidence"]
             blueprint_ref = state.artifact_heads["content/reading-blueprint"]
             acceptance = {
@@ -338,10 +347,62 @@ class ContentHardGateService:
         return current_ref, record, committed
 
     def _current_complete_chain(self):
-        objects = PresalesContentService(self.kernel).get_current_content_chain()["objects"]
+        objects = self._validated_content_chain()["objects"]
         if any(value is None for value in objects.values()):
             raise ArtifactReferenceError("Complete current content chain is required")
         return objects, objects["reading_blueprint"]
+
+    def _validated_content_chain(self) -> dict[str, Any]:
+        content = PresalesContentService(self.kernel)
+        chain = content.get_current_content_chain()
+        objects = chain["objects"]
+        validators = {
+            "evidence_book": validate_presales_evidence_book,
+            "decision_context": validate_customer_decision_context,
+            "problem_solution_fit": validate_problem_solution_fit_map,
+            "reading_blueprint": validate_reading_deck_blueprint,
+        }
+        for key, validator in validators.items():
+            current = objects[key]
+            if current is not None:
+                current["payload"] = validator(current["payload"])
+
+        evidence = objects["evidence_book"]
+        fit = objects["problem_solution_fit"]
+        blueprint = objects["reading_blueprint"]
+        if evidence is not None:
+            payload = evidence["payload"]
+            content._require_current(
+                "mission/confirmation",
+                "mission-confirmation",
+                payload["mission_confirmation_ref"],
+            )
+            if payload["material_mode"] == "proposal-led":
+                if self.kernel.load().artifact_heads.get("materials"):
+                    raise ContractValidationError(
+                        "proposal-led cannot be current while materials exist"
+                    )
+            else:
+                content._require_current(
+                    "materials",
+                    "material-inventory",
+                    payload["material_inventory_ref"],
+                )
+        if evidence is not None and fit is not None:
+            content._validate_fit_evidence(
+                fit["payload"], evidence=evidence["payload"]
+            )
+        if evidence is not None and fit is not None and blueprint is not None:
+            if blueprint["payload"]["project_id"] != self.kernel.project_id:
+                raise ContractValidationError(
+                    "ReadingDeckBlueprint project_id is stale"
+                )
+            content._validate_blueprint_evidence(
+                blueprint["payload"],
+                evidence=evidence["payload"],
+                fit=fit["payload"],
+            )
+        return chain
 
     def _require_new_command(self, expected_revision: int):
         state = self.kernel.load()
@@ -349,6 +410,27 @@ class ContentHardGateService:
             raise RevisionConflictError(expected_revision, state.revision)
         chain, blueprint = self._current_complete_chain()
         return state, chain, blueprint
+
+    def _require_gate_order(
+        self,
+        gate_type: str,
+        state: KernelState,
+        blueprint: dict[str, Any],
+    ) -> None:
+        if gate_type != "presales-reading":
+            return
+        evidence_ref = state.artifact_heads.get("content/gate/evidence", "")
+        try:
+            evidence = self._current_record("evidence", evidence_ref, blueprint)
+        except ArtifactReferenceError as error:
+            raise GateBlockedError(
+                "content-presales-reading",
+                ("current-evidence-gate-invalid",),
+            ) from error
+        if not evidence or evidence["overall_result"] != "passed":
+            raise GateBlockedError(
+                "content-presales-reading", ("current-evidence-gate-not-passed",)
+            )
 
     def _current_record(
         self, gate_type: str, value: str, blueprint: dict[str, Any]
@@ -446,8 +528,14 @@ class ContentHardGateService:
 
     @staticmethod
     def _deterministic_checks(
-        gate_type: str, blueprint_ref: str
+        gate_type: str,
+        blueprint_ref: str,
+        chain: dict[str, dict[str, Any]],
     ) -> list[dict[str, Any]]:
+        if any(value is None for value in chain.values()):
+            raise ArtifactReferenceError(
+                "Deterministic checks require a validated complete content chain"
+            )
         return [
             {
                 "check_id": check_id,
