@@ -192,6 +192,8 @@ class PresalesChiefOrchestrator:
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         operation = self._payload_operation(payload)
+        if operation == "build-reading-deck-blueprint":
+            self._require_ordinary_blueprint(payload)
         state = self.kernel.load()
         if command_id not in state.processed_commands:
             if expected_revision != state.revision:
@@ -230,6 +232,20 @@ class PresalesChiefOrchestrator:
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         normalized = validate_reading_deck_blueprint(payload)
+        attempts = self._repair_history(normalized)
+        if attempts < 1:
+            raise ContractValidationError(
+                "Repair Blueprint must contain at least one repair attempt"
+            )
+        latest_failures = normalized["repair_history"][-1]["failure_refs"]
+        hard_gate_refs = normalized["hard_gate_refs"]
+        if (
+            len(set(hard_gate_refs)) != len(hard_gate_refs)
+            or hard_gate_refs != latest_failures
+        ):
+            raise ContractValidationError(
+                "Blueprint hard_gate_refs must exactly match the latest repair failures"
+            )
         state = self.kernel.load()
         if command_id in state.processed_commands:
             created_ref = self.content.build_reading_deck_blueprint(
@@ -260,14 +276,13 @@ class PresalesChiefOrchestrator:
             raise ContractValidationError(
                 "Repair history must append exactly one new attempt"
             )
-        self._repair_history(normalized)
         current_failures = projection["repair"]["failure_refs"]
         latest = new_history[-1]
-        if set(latest["failure_refs"]) != set(current_failures):
+        if latest["failure_refs"] != current_failures:
             raise ContractValidationError(
                 "Repair attempt must bind every current failed hard gate"
             )
-        if set(normalized["hard_gate_refs"]) != set(current_failures):
+        if normalized["hard_gate_refs"] != current_failures:
             raise ContractValidationError(
                 "Blueprint hard_gate_refs must bind the current failures"
             )
@@ -362,6 +377,7 @@ class PresalesChiefOrchestrator:
             if (
                 not isinstance(attempt_id, str)
                 or not attempt_id.strip()
+                or attempt_id != attempt_id.strip()
                 or len(attempt_id) > 100
                 or not isinstance(failures, list)
                 or not failures
@@ -380,6 +396,13 @@ class PresalesChiefOrchestrator:
         if len(set(attempt_ids)) != len(attempt_ids):
             raise ContractValidationError("Repair attempt identities must be unique")
         return len(history)
+
+    @staticmethod
+    def _require_ordinary_blueprint(payload: dict[str, Any]) -> None:
+        if payload.get("repair_history") != [] or payload.get("hard_gate_refs") != []:
+            raise ContractValidationError(
+                "Initial Blueprint cannot claim repair history or hard-gate refs"
+            )
 
     @staticmethod
     def _reference(value: str):

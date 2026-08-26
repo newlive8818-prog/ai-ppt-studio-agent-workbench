@@ -326,6 +326,22 @@ class PresalesChiefOrchestratorTests(unittest.TestCase):
                 self.assertNotIn(
                     "content/gate/evidence", kernel.load().artifact_heads
                 )
+                if attempt == 1:
+                    after_repair = authority_snapshot(kernel)
+                    replay = chief.repair_blueprint(
+                        command_id="repair-command-1",
+                        expected_revision=result["projection"]["revision"] - 1,
+                        payload=copy.deepcopy(repaired),
+                    )
+                    self.assertEqual(replay["created_ref"], result["created_ref"])
+                    self.assertEqual(authority_snapshot(kernel), after_repair)
+                    with self.assertRaises(ContractValidationError):
+                        chief.advance(
+                            command_id="repair-command-1",
+                            expected_revision=kernel.load().revision,
+                            payload=copy.deepcopy(repaired),
+                        )
+                    self.assertEqual(authority_snapshot(kernel), after_repair)
                 failure_ref = fail_evidence_gate(
                     kernel, f"gate-failed-{attempt}"
                 )
@@ -409,6 +425,65 @@ class PresalesChiefOrchestratorTests(unittest.TestCase):
                         command_id=f"invalid-repair-{index}",
                         expected_revision=kernel.load().revision,
                         payload=invalid,
+                    )
+                self.assertEqual(authority_snapshot(kernel), before)
+
+    def test_blueprint_build_and_repair_command_identities_cannot_cross(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = confirmed_kernel(folder, has_materials=True)
+            chief = build_complete_chain(kernel)
+            current_ref = kernel.load().artifact_heads["content/reading-blueprint"]
+            ordinary = copy.deepcopy(
+                kernel.artifacts.resolve(ArtifactReference.parse(current_ref))[
+                    "payload"
+                ]
+            )
+            before = authority_snapshot(kernel)
+            with self.assertRaises(ContractValidationError):
+                chief.repair_blueprint(
+                    command_id="complete-3",
+                    expected_revision=kernel.load().revision,
+                    payload=ordinary,
+                )
+            self.assertEqual(authority_snapshot(kernel), before)
+
+    def test_initial_blueprint_rejects_repair_and_gate_claims_before_write(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = confirmed_kernel(folder, has_materials=True)
+            chief = PresalesChiefOrchestrator(kernel)
+            payloads = payloads_for(kernel, "material-backed")
+            for index in range(3):
+                chief.advance(
+                    command_id=f"initial-{index}",
+                    expected_revision=kernel.load().revision,
+                    payload=bind_current_refs(kernel, payloads[index]),
+                )
+            ordinary = bind_current_refs(kernel, payloads[3])
+            fake_gate = "artifact://content-hard-gate-record/" + "f" * 64
+            invalid_values = (
+                {"repair_history": [{"not": "a repair record"}]},
+                {
+                    "repair_history": [
+                        {
+                            "attempt_id": "forged-attempt",
+                            "failure_refs": [fake_gate],
+                        }
+                    ]
+                },
+                {"hard_gate_refs": [fake_gate]},
+                {"hard_gate_refs": [fake_gate, fake_gate]},
+            )
+            for index, changes in enumerate(invalid_values):
+                value = copy.deepcopy(ordinary)
+                value.update(changes)
+                before = authority_snapshot(kernel)
+                with self.subTest(case=index), self.assertRaises(
+                    ContractValidationError
+                ):
+                    chief.advance(
+                        command_id=f"forged-blueprint-{index}",
+                        expected_revision=kernel.load().revision,
+                        payload=value,
                     )
                 self.assertEqual(authority_snapshot(kernel), before)
 
