@@ -144,6 +144,7 @@ test("browser runner consumes the fidelity contracts and scopes readability to e
   assert.match(runnerSource, /contract\.locator\(slideReadableSelector\)/);
   for (const token of [
     "assertLongReviewMeasurement",
+    "assertLongReviewMeasurementCoverage",
     "assertAcceptanceEnvironment",
     "performance.now()",
     "chromiumVersion",

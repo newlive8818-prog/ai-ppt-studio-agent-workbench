@@ -169,6 +169,24 @@ export function assertLongReviewMeasurement(value) {
   };
 }
 
+export function assertLongReviewMeasurementCoverage(values) {
+  if (!Array.isArray(values) || values.length !== 4) {
+    throw new Error("Long review coverage requires exactly four measurements.");
+  }
+  const measurements = values.map(assertLongReviewMeasurement);
+  const expectedIdentities = new Set([
+    "content:10", "content:24", "content:60", "visual:120",
+  ]);
+  const identities = new Set(
+    measurements.map(({ reviewType, count }) => `${reviewType}:${count}`),
+  );
+  if (identities.size !== expectedIdentities.size
+      || [...expectedIdentities].some((identity) => !identities.has(identity))) {
+    throw new Error("Long review coverage must contain each approved identity exactly once.");
+  }
+  return measurements;
+}
+
 export function assertAcceptanceEnvironment(value) {
   const fields = [
     "nodeVersion", "chromiumVersion", "platform", "release",

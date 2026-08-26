@@ -3634,16 +3634,23 @@ describe("visual professional review surface", () => {
     const markSet = projectedContractMarkSet(12);
     markSet.host_notification_status = "unavailable";
     markSet.ai_receipt_status = "unverified";
-    markSet.marks = slides.map((slide, index) => ({
+    let projectedMarkFieldReads = 0;
+    markSet.marks = slides.map((slide, index) => new Proxy({
       ...markSet.marks[0],
       mark_id: `saved-contract-mark-${index + 1}`,
       slide_id: slide.slide_id,
       revision: 12,
+    }, {
+      get(target, property, receiver) {
+        if (property === "target_key") projectedMarkFieldReads += 1;
+        return Reflect.get(target, property, receiver);
+      },
     }));
     const facts = deriveVisualReceiptFacts(markSet);
     expect(facts).not.toBeNull();
     const validated = validateInitialVisualContractMarkSet(markSet, data, facts!);
     expect(validated?.markSet?.marks).toHaveLength(120);
+    expect(projectedMarkFieldReads).toBeGreaterThan(0);
     expect(slideFindCalls).toBe(0);
   });
 

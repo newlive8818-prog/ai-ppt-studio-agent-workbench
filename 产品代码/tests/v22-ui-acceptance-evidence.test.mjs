@@ -5,6 +5,7 @@ import {
   LOCAL_PREVIEW_DISCLAIMER,
   assertAcceptanceEnvironment,
   assertLongReviewMeasurement,
+  assertLongReviewMeasurementCoverage,
   atomicPublishAcceptanceReport,
   captureEvidencePair,
   completeAcceptanceRun,
@@ -56,6 +57,25 @@ test("acceptance environment requires the exact non-empty runtime identity", () 
   for (const field of Object.keys(environment)) {
     assert.throws(() => assertAcceptanceEnvironment({ ...environment, [field]: "  " }));
   }
+});
+
+test("long review coverage requires each approved identity exactly once", () => {
+  const measurements = [
+    { ...longReviewMeasurement, reviewType: "content", count: 10 },
+    { ...longReviewMeasurement, reviewType: "content", count: 24 },
+    { ...longReviewMeasurement, reviewType: "content", count: 60 },
+    longReviewMeasurement,
+  ];
+  assert.deepEqual(assertLongReviewMeasurementCoverage(measurements), measurements);
+  assert.throws(() => assertLongReviewMeasurementCoverage(measurements.slice(0, 3)));
+  assert.throws(() => assertLongReviewMeasurementCoverage([
+    ...measurements,
+    longReviewMeasurement,
+  ]));
+  assert.throws(() => assertLongReviewMeasurementCoverage([
+    ...measurements.slice(0, 3),
+    { ...longReviewMeasurement, count: 119 },
+  ]));
 });
 
 test("candidate evidence is finite, bounded, normalized, and viewport-bound", () => {

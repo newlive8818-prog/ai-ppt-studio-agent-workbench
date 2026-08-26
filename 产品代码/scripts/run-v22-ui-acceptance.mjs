@@ -13,6 +13,7 @@ import {
   assertContentReviewSpatialFidelity,
   assertInteractionEvidenceCoverage,
   assertLongReviewMeasurement,
+  assertLongReviewMeasurementCoverage,
   assertPrototypeFidelityCounts,
   atomicPublishAcceptanceReport,
   captureEvidencePair,
@@ -706,8 +707,8 @@ async function checkLongReview(reviewType, count) {
     if (reviewType === "visual") await page.getByRole("tab", { name: "完整视觉合同" }).click();
     const selector = reviewType === "content" ? "[data-content-review-vm-slide]" : ".visual-slide-contract";
     await page.waitForSelector(selector);
-    const navigationToReadyMs = performance.now() - navigationStartedAt;
     assert(await page.locator(selector).count() === count, `${reviewType}: incomplete long review`);
+    const navigationToReadyMs = performance.now() - navigationStartedAt;
     if (reviewType === "content") {
       const textOnlyPages = page.locator(".content-review-vm-reading-grid--text-only");
       const visualPages = page.locator(".content-review-vm-reading-grid--with-visuals");
@@ -790,17 +791,7 @@ await completeAcceptanceRun({
       await browser.close();
     }
     assert(results.length === 10, `Expected 10 review results, received ${results.length}`);
-    const expectedLongReviewIdentities = new Set([
-      "content:10", "content:24", "content:60", "visual:120",
-    ]);
-    const measuredLongReviewIdentities = new Set(
-      longReviewMeasurements.map(({ reviewType, count }) => `${reviewType}:${count}`),
-    );
-    assert(
-      measuredLongReviewIdentities.size === expectedLongReviewIdentities.size
-      && [...expectedLongReviewIdentities].every((identity) => measuredLongReviewIdentities.has(identity)),
-      `Incomplete long-review measurement identities: ${JSON.stringify([...measuredLongReviewIdentities])}`,
-    );
+    const completeLongReviewMeasurements = assertLongReviewMeasurementCoverage(longReviewMeasurements);
     assertInteractionEvidenceCoverage(interactionEvidence);
     return {
       ok: true,
@@ -812,7 +803,7 @@ await completeAcceptanceRun({
       acceptanceEnvironment,
       seed,
       results,
-      longReviewMeasurements,
+      longReviewMeasurements: completeLongReviewMeasurements,
       interactionEvidence,
     };
   },
