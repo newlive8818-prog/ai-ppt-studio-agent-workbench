@@ -85,6 +85,9 @@ export function ContentReviewViewModelSurface({
   const progressPercent = viewModel.progress.total
     ? Math.min(100, (viewModel.progress.completed / viewModel.progress.total) * 100)
     : 0;
+  const nextIncompleteSlide = viewModel.slides.find(
+    (slide) => !slide.savedDecision || slide.localDraftState.dirty,
+  );
   const batchSubmitted = viewModel.batchState === "submitted";
   const pageWritesDisabled = !viewModel.availableActions.savePageDecision
     || batchSubmitted
@@ -111,6 +114,18 @@ export function ContentReviewViewModelSurface({
             <strong>{viewModel.progress.completed} / {viewModel.progress.total}</strong>
             <span>已完成 · {viewModel.progress.unsaved} 未保存</span>
           </div>
+          <button
+            className="content-review-vm-locate"
+            type="button"
+            disabled={!nextIncompleteSlide}
+            onClick={() => {
+              if (!nextIncompleteSlide) return;
+              document.getElementById(`content-vm-${nextIncompleteSlide.slideId}`)?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              });
+            }}
+          >{nextIncompleteSlide ? "定位下一页未判断" : "全部页面已完成判断"}</button>
         </div>
         <div
           className="content-review-vm-progress-track"

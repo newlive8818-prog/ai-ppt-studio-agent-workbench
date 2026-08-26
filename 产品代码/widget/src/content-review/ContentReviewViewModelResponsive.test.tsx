@@ -24,4 +24,9 @@ describe("accepted content review ViewModel responsive contract", () => {
     expect(css).toMatch(/@media\s*\(max-width:\s*380px\)[\s\S]*?\.page-decision-options\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
     expect(css).toMatch(/@media\s*\(max-width:\s*380px\)[\s\S]*?\.page-decision-option\s*\{[^}]*white-space:\s*nowrap/s);
   });
+
+  it("keeps perceptible hover and active feedback on decision controls", () => {
+    expect(css).toMatch(/\.page-decision-option:hover\s*\{[^}]*border-color:[^}]*background:/s);
+    expect(css).toMatch(/\.page-decision-option:active\s*\{[^}]*transform:\s*translateY\(1px\)/s);
+  });
 });

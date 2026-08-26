@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import type { ContentPageDecision } from "../types/content-review";
 import type { HostBridge } from "../types/host";
 import type { ContentReviewPageViewModel } from "./content-review-page-view-model";
 import { ContentReviewViewModelSurface } from "./ContentReviewViewModelSurface";
@@ -82,6 +83,28 @@ function actionProps() {
     onCommentChange: vi.fn(),
     onSavePageDecision: vi.fn(async () => true),
     onSubmitReviewBatch: vi.fn(async () => undefined),
+  };
+}
+
+function savedDecision(
+  slideId: string,
+  slideOrder: number,
+  slideTitle: string,
+): ContentPageDecision {
+  return {
+    page_decision_id: `decision-${slideId}`,
+    project_id: "p1",
+    review_session_id: "review-1",
+    source_version: "content-v1",
+    reading_blueprint_ref: `artifact://reading-deck-blueprint/${"a".repeat(64)}`,
+    slide_id: slideId,
+    slide_order: slideOrder,
+    slide_title_snapshot: slideTitle,
+    decision: "approved",
+    comment: "",
+    status: "completed",
+    saved_at: "2026-08-26T12:00:00Z",
+    supersedes_decision_ref: "",
   };
 }
 
@@ -181,6 +204,66 @@ it("renders the accepted continuous review contract from ViewModel fields only",
     "处理方式",
     "证据身份",
   ]) expect(container).not.toHaveTextContent(rejected);
+});
+
+it("locates the first page without a saved current decision without invoking a write action", () => {
+  const scrollIntoView = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: scrollIntoView,
+  });
+  const initial = pageViewModel();
+  const viewModel = {
+    ...initial,
+    progress: { completed: 1, total: 2, remaining: 1, unsaved: 0 },
+    slides: initial.slides.map((slide) => slide.slideId === "S01" ? {
+      ...slide,
+      savedDecision: savedDecision(slide.slideId, slide.order, slide.neutralTitle),
+      localDraftState: { decision: "approved" as const, comment: "", dirty: false },
+    } : slide),
+  } satisfies ContentReviewPageViewModel;
+  const actions = actionProps();
+
+  render(
+    <ContentReviewViewModelSurface
+      viewModel={viewModel}
+      bridge={bridge()}
+      projectRoot="/managed/project"
+      {...actions}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "定位下一页未判断" }));
+
+  expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  expect(scrollIntoView.mock.instances[0]).toBe(document.getElementById("content-vm-S02"));
+  expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+  expect(actions.onSavePageDecision).not.toHaveBeenCalled();
+  expect(actions.onSubmitReviewBatch).not.toHaveBeenCalled();
+});
+
+it("disables next-incomplete navigation when every page has a saved current decision", () => {
+  const initial = pageViewModel();
+  const viewModel = {
+    ...initial,
+    progress: { completed: 2, total: 2, remaining: 0, unsaved: 0 },
+    slides: initial.slides.map((slide) => ({
+      ...slide,
+      savedDecision: savedDecision(slide.slideId, slide.order, slide.neutralTitle),
+      localDraftState: { decision: "approved" as const, comment: "", dirty: false },
+    })),
+  } satisfies ContentReviewPageViewModel;
+
+  render(
+    <ContentReviewViewModelSurface
+      viewModel={viewModel}
+      bridge={bridge()}
+      projectRoot="/managed/project"
+      {...actionProps()}
+    />,
+  );
+
+  expect(screen.getByRole("button", { name: "全部页面已完成判断" })).toBeDisabled();
 });
 
 it("reports controlled page decisions, inline comments, saves, and full-deck submit without writing through the bridge", async () => {
