@@ -14,6 +14,9 @@ from ai_ppt_studio.application.content_review.decision_service import (
 from ai_ppt_studio.application.content_review.batch_service import (
     ContentReviewBatchService,
 )
+from ai_ppt_studio.application.content_hard_gate_service import (
+    ContentHardGateService,
+)
 from ai_ppt_studio.application.content_review.planning_service import (
     ContentRevisionPlanningService,
 )
@@ -22,6 +25,9 @@ from ai_ppt_studio.application.content_review.projection_service import (
 )
 from ai_ppt_studio.application.presales_content_service import (
     PresalesContentService,
+)
+from ai_ppt_studio.application.review_session_service import (
+    ReviewSessionService,
 )
 from ai_ppt_studio.application.v16_bridge import dispatch_v16
 from ai_ppt_studio.domains.review.contracts import validate_review_session
@@ -33,11 +39,13 @@ from ai_ppt_studio.errors import (
     ContractValidationError,
     GateBlockedError,
     ReviewSourceStaleError,
+    RevisionConflictError,
 )
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 from tests.test_v22_content_review_projection import accepted_review
 from tests.test_v22_content_repair_loop import build_content
+from tests.v22_hard_gate_fixtures import semantic_checks
 
 
 def snapshot_bytes(kernel: ProjectKernel) -> tuple[bytes, tuple, tuple]:
@@ -510,6 +518,254 @@ class ContentReviewRuntimeG0Tests(unittest.TestCase):
                     )
 
                 self.assertEqual(snapshot_bytes(kernel), frozen)
+
+    def test_120_page_mixed_review_recovers_conflict_and_stops_at_g0_reviewable(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            project_root = Path(folder)
+            kernel = ProjectKernel.initialize(project_root, project_id="p1")
+            empty_orders = frozenset(range(5, 121, 5))
+            initial_ref = build_content(
+                kernel,
+                slide_count=120,
+                empty_material_view_orders=empty_orders,
+            )
+            long_blueprint = artifact_payload(kernel, initial_ref)
+            for order in (7, 14, 119):
+                slide = long_blueprint["slides"][order - 1]
+                first = slide["material_views"][0]
+                slide["material_views"].append(
+                    {
+                        **first,
+                        "material_view_id": f"S{order:02d}-M02",
+                        "asset_ref": (
+                            f"review-assets/content/S{order:02d}-M02.png"
+                        ),
+                        "region_label": "补充材料区域",
+                    }
+                )
+            blueprint_ref = PresalesContentService(
+                kernel
+            ).build_reading_deck_blueprint(
+                "publish-long-mixed-blueprint",
+                kernel.load().revision,
+                long_blueprint,
+            )
+            publication_revision = kernel.load().revision
+            gates = ContentHardGateService(kernel)
+            gates.run_evidence_gate(
+                command_id="long-evidence-gate",
+                expected_revision=kernel.load().revision,
+                semantic_check_results=semantic_checks(
+                    "evidence", blueprint_ref
+                ),
+                reviewer_mode="isolated-review-task",
+            )
+            gates.run_presales_reading_gate(
+                command_id="long-reading-gate",
+                expected_revision=kernel.load().revision,
+                semantic_check_results=semantic_checks(
+                    "presales-reading", blueprint_ref
+                ),
+                reviewer_mode="isolated-review-task",
+            )
+            opened = dispatch_v16(
+                {
+                    "operation": "open-or-resume-review-session",
+                    "project_root": str(project_root),
+                    "command_id": "open-long-content-review",
+                    "expected_revision": kernel.load().revision,
+                    "review_type": "content-full-deck",
+                    "target_artifact_ref": blueprint_ref,
+                    "source_version": "content-v1",
+                    "source_revision": publication_revision,
+                    "open_policy": "foreground-if-waiting",
+                }
+            )
+            session = opened["result"]["session"]
+            projection = ContentReviewProjectionService(kernel).project(
+                session["review_session_id"]
+            )
+            self.assertEqual(len(projection["slides"]), 120)
+            self.assertEqual(
+                [slide["slide_id"] for slide in projection["slides"]],
+                [f"S{order:02d}" for order in range(1, 121)],
+            )
+            self.assertEqual(projection["slides"][4]["material_views"], [])
+            self.assertEqual(
+                [
+                    row["material_view_id"]
+                    for row in projection["slides"][6]["material_views"]
+                ],
+                ["S07-M01", "S07-M02"],
+            )
+
+            decisions = ContentDecisionService(kernel)
+            for order in range(1, 61):
+                decisions.save(
+                    command_id=f"long-approve-{order}",
+                    expected_revision=kernel.load().revision,
+                    review_session_id=session["review_session_id"],
+                    source_version="content-v1",
+                    slide_id=f"S{order:02d}",
+                    decision="approved",
+                    comment="",
+                )
+            refreshed = ContentReviewProjectionService(kernel).project(
+                session["review_session_id"]
+            )
+            self.assertEqual(refreshed["progress"]["completed"], 60)
+            stale_revision = kernel.load().revision - 1
+            frozen = snapshot_bytes(kernel)
+            with self.assertRaises(RevisionConflictError):
+                decisions.save(
+                    command_id="long-stale-approve-61",
+                    expected_revision=stale_revision,
+                    review_session_id=session["review_session_id"],
+                    source_version="content-v1",
+                    slide_id="S61",
+                    decision="approved",
+                    comment="",
+                )
+            self.assertEqual(snapshot_bytes(kernel), frozen)
+
+            for order in range(61, 121):
+                decisions.save(
+                    command_id=f"long-approve-{order}",
+                    expected_revision=kernel.load().revision,
+                    review_session_id=session["review_session_id"],
+                    source_version="content-v1",
+                    slide_id=f"S{order:02d}",
+                    decision="approved",
+                    comment="",
+                )
+            batch_ref, batch, submitted = ContentReviewBatchService(
+                kernel
+            ).submit(
+                command_id="submit-long-review",
+                expected_revision=kernel.load().revision,
+                review_session_id=session["review_session_id"],
+                source_version="content-v1",
+            )
+            self.assertEqual(
+                batch["slide_ids"],
+                [f"S{order:02d}" for order in range(1, 121)],
+            )
+            self.assertEqual(batch["counts"]["approved"], 120)
+            self.assertEqual(len(batch["decision_refs"]), 120)
+            self.assertEqual(submitted.gate_status["G0"], "locked")
+            ready = PresalesContentService(kernel).open_g0_review(
+                command_id="open-real-like-g0",
+                expected_revision=submitted.revision,
+            )
+            self.assertEqual(ready.gate_status["G0"], "user-reviewable")
+            self.assertEqual(
+                ready.artifact_heads["content/review-batch"], batch_ref
+            )
+            self.assertNotIn("gate/G0/confirmation", ready.artifact_heads)
+
+    def test_content_persistence_host_and_ai_facts_remain_separate(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = ProjectKernel.initialize(Path(folder), project_id="p1")
+            session_id, _session, _batch_ref = submitted_review(
+                kernel, [("approved", "")]
+            )
+            session_ref = kernel.load().artifact_heads[
+                "review/session/content-full-deck"
+            ]
+            session = artifact_payload(kernel, session_ref)
+            self.assertEqual(session["persistence_status"], "saved")
+            self.assertEqual(session["host_open_status"], "pending")
+            self.assertEqual(
+                session["host_notification_status"], "not-requested"
+            )
+            self.assertEqual(session["ai_receipt_status"], "pending")
+
+            frozen = snapshot_bytes(kernel)
+            with self.assertRaises(ContractValidationError):
+                ReviewSessionService(kernel).record_ai_receipt(
+                    command_id="reject-wrong-kind-ai-receipt",
+                    expected_revision=kernel.load().revision,
+                    review_type="content-full-deck",
+                    receipt_ref=kernel.load().artifact_heads[
+                        "content/review/decision/S01"
+                    ],
+                )
+            self.assertEqual(snapshot_bytes(kernel), frozen)
+
+            _ref, unavailable, state = ReviewSessionService(
+                kernel
+            ).record_host_open_outcome(
+                command_id="record-content-host-unavailable",
+                expected_revision=kernel.load().revision,
+                review_type="content-full-deck",
+                review_session_id=session_id,
+                outcome="unavailable",
+                recorded_at="2026-08-26T22:00:00+08:00",
+            )
+            self.assertEqual(unavailable["host_open_status"], "unavailable")
+            self.assertNotEqual(unavailable["host_open_status"], "opened")
+            _ref, unverified, _state = ReviewSessionService(
+                kernel
+            ).record_ai_outcome(
+                command_id="record-content-ai-unverified",
+                expected_revision=state.revision,
+                review_type="content-full-deck",
+                review_session_id=session_id,
+                outcome="unverified",
+                recorded_at="2026-08-26T22:01:00+08:00",
+            )
+            self.assertEqual(unverified["ai_receipt_status"], "unverified")
+            self.assertNotEqual(unverified["ai_receipt_status"], "received")
+            self.assertEqual(unverified["persistence_status"], "saved")
+
+    def test_legacy_content_authorizations_cannot_bypass_c2_or_c3_zero_write(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            project_root = Path(folder)
+            kernel = ProjectKernel.initialize(project_root, project_id="p1")
+            blueprint_ref = build_content(kernel)
+            publication_revision = kernel.load().revision
+            kernel.commit(
+                command_id="seed-legacy-authorizations",
+                expected_revision=kernel.load().revision,
+                event_type="test.legacy-content-authorizations-seeded",
+                artifact_updates={
+                    "content/framework-confirmation": (
+                        "framework-confirmation",
+                        {"status": "confirmed"},
+                    ),
+                    "content/full-deck-expansion-authorization": (
+                        "full-deck-expansion-authorization",
+                        {"status": "authorized"},
+                    ),
+                },
+            )
+            frozen = snapshot_bytes(kernel)
+
+            with self.assertRaises(GateBlockedError):
+                dispatch_v16(
+                    {
+                        "operation": "open-or-resume-review-session",
+                        "project_root": str(project_root),
+                        "command_id": "legacy-cannot-open-review",
+                        "expected_revision": kernel.load().revision,
+                        "review_type": "content-full-deck",
+                        "target_artifact_ref": blueprint_ref,
+                        "source_version": "content-v1",
+                        "source_revision": publication_revision,
+                        "open_policy": "foreground-if-waiting",
+                    }
+                )
+            with self.assertRaises(GateBlockedError):
+                PresalesContentService(kernel).open_g0_review(
+                    command_id="legacy-cannot-open-g0",
+                    expected_revision=kernel.load().revision,
+                )
+
+            self.assertEqual(snapshot_bytes(kernel), frozen)
 
 
 if __name__ == "__main__":
