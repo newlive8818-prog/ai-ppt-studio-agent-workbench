@@ -53,6 +53,46 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def authoritative_target_publication_revision(
+    kernel: ProjectKernel,
+    state: KernelState,
+    review_type: str,
+    target_ref: str,
+) -> int:
+    slot = next(
+        (
+            candidate
+            for candidate in SOURCE_SLOTS[review_type]
+            if state.artifact_heads.get(candidate) == target_ref
+        ),
+        "",
+    )
+    if not slot:
+        raise ContractValidationError(
+            "Current review target has no authoritative source slot"
+        )
+    previous_ref = ""
+    publication_revision = -1
+    for revision in range(1, state.revision + 1):
+        event_path = kernel.events_root / f"r{revision:08d}.json"
+        try:
+            event = json.loads(event_path.read_text(encoding="utf-8"))
+            heads = event["artifact_heads"]
+        except (OSError, json.JSONDecodeError, KeyError, TypeError) as error:
+            raise ContractValidationError(
+                "Review target publication history is unavailable"
+            ) from error
+        current_ref = str(heads.get(slot) or "")
+        if current_ref == target_ref and previous_ref != target_ref:
+            publication_revision = revision
+        previous_ref = current_ref
+    if publication_revision < 0:
+        raise ContractValidationError(
+            "Review target publication revision cannot be resolved"
+        )
+    return publication_revision
+
+
 class ReviewSessionService:
     """Own all current-session state; adapters may only supply immutable receipts."""
 
@@ -674,38 +714,9 @@ class ReviewSessionService:
     def _target_publication_revision(
         self, state: KernelState, review_type: str, target_ref: str
     ) -> int:
-        slot = next(
-            (
-                candidate
-                for candidate in SOURCE_SLOTS[review_type]
-                if state.artifact_heads.get(candidate) == target_ref
-            ),
-            "",
+        return authoritative_target_publication_revision(
+            self.kernel, state, review_type, target_ref
         )
-        if not slot:
-            raise ContractValidationError(
-                "Current review target has no authoritative source slot"
-            )
-        previous_ref = ""
-        publication_revision = -1
-        for revision in range(1, state.revision + 1):
-            event_path = self.kernel.events_root / f"r{revision:08d}.json"
-            try:
-                event = json.loads(event_path.read_text(encoding="utf-8"))
-                heads = event["artifact_heads"]
-            except (OSError, json.JSONDecodeError, KeyError, TypeError) as error:
-                raise ContractValidationError(
-                    "Review target publication history is unavailable"
-                ) from error
-            current_ref = str(heads.get(slot) or "")
-            if current_ref == target_ref and previous_ref != target_ref:
-                publication_revision = revision
-            previous_ref = current_ref
-        if publication_revision < 0:
-            raise ContractValidationError(
-                "Review target publication revision cannot be resolved"
-            )
-        return publication_revision
 
     def _current(
         self, state: KernelState, review_type: str

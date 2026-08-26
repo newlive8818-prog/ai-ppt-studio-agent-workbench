@@ -602,15 +602,23 @@ class ReviewSessionServiceTests(unittest.TestCase):
         self.assertEqual(current["review_session_id"], first_session["review_session_id"])
 
     def test_bridge_exposes_session_write_and_status_read_without_raw_state(self) -> None:
+        visual = publish_source(
+            self.kernel,
+            command_id="bridge-visual-source",
+            slot="visual/contract",
+            kind="visual-contract",
+            source_version="visual-v1",
+        )
+        visual_ref = visual.artifact_heads["visual/contract"]
         request = {
             "operation": "open-or-resume-review-session",
             "project_root": str(self.root),
             "command_id": "bridge-open",
             "expected_revision": self.kernel.load().revision,
-            "review_type": "content-full-deck",
-            "target_artifact_ref": self.source_ref,
-            "source_version": "content-v3",
-            "source_revision": 1,
+            "review_type": "visual-professional",
+            "target_artifact_ref": visual_ref,
+            "source_version": "visual-v1",
+            "source_revision": visual.revision,
             "open_policy": "notify-only",
         }
         opened = dispatch_v16(request)
@@ -625,16 +633,24 @@ class ReviewSessionServiceTests(unittest.TestCase):
         )
 
     def test_bridge_records_browser_open_with_an_internal_exact_operation(self) -> None:
+        visual = publish_source(
+            self.kernel,
+            command_id="bridge-open-visual-source",
+            slot="visual/contract",
+            kind="visual-contract",
+            source_version="visual-v1",
+        )
+        visual_ref = visual.artifact_heads["visual/contract"]
         opened = dispatch_v16(
             {
                 "operation": "open-or-resume-review-session",
                 "project_root": str(self.root),
                 "command_id": "bridge-open-session",
                 "expected_revision": self.kernel.load().revision,
-                "review_type": "content-full-deck",
-                "target_artifact_ref": self.source_ref,
-                "source_version": "content-v3",
-                "source_revision": 1,
+                "review_type": "visual-professional",
+                "target_artifact_ref": visual_ref,
+                "source_version": "visual-v1",
+                "source_revision": visual.revision,
                 "open_policy": "notify-only",
             }
         )
@@ -644,7 +660,7 @@ class ReviewSessionServiceTests(unittest.TestCase):
                 "operation": "record-review-bridge-host-open",
                 "project_root": str(self.root),
                 "expected_revision": opened["result"]["snapshot"]["revision"],
-                "review_type": "content-full-deck",
+                "review_type": "visual-professional",
                 "review_session_id": session["review_session_id"],
                 "bridge_session_id": "bridge-session-01",
                 "recorded_at": NOW,

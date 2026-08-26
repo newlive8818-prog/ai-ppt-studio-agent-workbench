@@ -15,6 +15,7 @@
 | File | Responsibility in this slice |
 |---|---|
 | `tests/test_v22_content_review_runtime_g0.py` | C3-only RED/GREEN and real-like end-to-end proof |
+| `tests/test_v22_review_session.py` | Keep generic public Bridge lifecycle tests independent of the newly enforced content-authority precondition |
 | `src/ai_ppt_studio/application/bridge/review.py` | Refuse the public content ReviewSession handoff before exact current C2 acceptance |
 | `src/ai_ppt_studio/application/review_session_service.py` | Expose one authoritative publication-revision resolver shared by session creation and C3 reuse validation |
 | `src/ai_ppt_studio/application/content_review/_shared.py` | Revalidate persisted current content ReviewSession revision and exact current acceptance context |
@@ -28,6 +29,7 @@ Do not modify `widget/`, `application/visual*`, PPTX, delivery, release, install
 **Files:**
 
 - Create: `tests/test_v22_content_review_runtime_g0.py`
+- Modify: `tests/test_v22_review_session.py`
 - Modify: `src/ai_ppt_studio/application/bridge/review.py`
 - Modify: `src/ai_ppt_studio/application/review_session_service.py`
 - Modify: `src/ai_ppt_studio/application/content_review/_shared.py`
@@ -199,6 +201,7 @@ Run the focused C3, ReviewSession, content projection, and atomicity modules. Re
 ```bash
 git add -- \
   产品代码/tests/test_v22_content_review_runtime_g0.py \
+  产品代码/tests/test_v22_review_session.py \
   产品代码/src/ai_ppt_studio/application/bridge/review.py \
   产品代码/src/ai_ppt_studio/application/review_session_service.py \
   产品代码/src/ai_ppt_studio/application/content_review/_shared.py

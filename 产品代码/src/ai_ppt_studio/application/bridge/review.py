@@ -5,8 +5,12 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from ai_ppt_studio.application.bridge import BridgeContext, result
+from ai_ppt_studio.application.content_hard_gate_service import (
+    ContentHardGateService,
+)
 from ai_ppt_studio.application.review_session_service import ReviewSessionService
 from ai_ppt_studio.errors import (
+    GateBlockedError,
     ReviewAiReceiptUnverifiedError,
     ReviewHostOpenFailedError,
     ReviewHostOpenUnavailableError,
@@ -19,14 +23,30 @@ def _session_result(ctx: BridgeContext, outcome: tuple[str, dict[str, Any], Any]
 
 
 def open_or_resume(ctx: BridgeContext, request: dict[str, Any]) -> dict[str, Any]:
+    review_type = str(request.get("review_type") or "")
+    target_ref = str(request.get("target_artifact_ref") or "")
+    source_version = str(request.get("source_version") or "")
+    if review_type == "content-full-deck":
+        readiness = ContentHardGateService(ctx.kernel).inspect()
+        if (
+            readiness.get("state") != "content-user-reviewable"
+            or readiness.get("blueprint_ref") != target_ref
+            or readiness.get("source_version") != source_version
+            or not readiness.get("acceptance_ref")
+        ):
+            stop = readiness.get("stop") or {}
+            blocker = str(
+                stop.get("code") or "CURRENT_CONTENT_ACCEPTANCE_REQUIRED"
+            )
+            raise GateBlockedError("content-review", (blocker,))
     return _session_result(
         ctx,
         ReviewSessionService(ctx.kernel).open_or_resume(
             command_id=ctx.command_id,
             expected_revision=int(request["expected_revision"]),
-            review_type=str(request.get("review_type") or ""),
-            target_artifact_ref=str(request.get("target_artifact_ref") or ""),
-            source_version=str(request.get("source_version") or ""),
+            review_type=review_type,
+            target_artifact_ref=target_ref,
+            source_version=source_version,
             source_revision=int(request["source_revision"]),
             open_policy=str(request.get("open_policy") or ""),
         ),

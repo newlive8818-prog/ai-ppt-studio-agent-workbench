@@ -23,6 +23,9 @@ from ai_ppt_studio.errors import (
 )
 from ai_ppt_studio.application.artifact_guards import require_exact_ref
 from ai_ppt_studio.application.review_commands import fingerprint, replay_ref, stable_id
+from ai_ppt_studio.application.review_session_service import (
+    authoritative_target_publication_revision,
+)
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.state import KernelState
 from ai_ppt_studio.kernel.transactions import ProjectKernel
@@ -200,6 +203,13 @@ def review_context(
     ):
         raise ReviewSourceStaleError(
             str(review_session_id), str(session.get("review_session_id") or "")
+        )
+    authoritative_revision = authoritative_target_publication_revision(
+        kernel, state, "content-full-deck", blueprint_ref
+    )
+    if session["revision"] != authoritative_revision:
+        raise ReviewSourceStaleError(
+            str(session["revision"]), str(authoritative_revision)
         )
     return ContentReviewContext(
         state, blueprint_ref, blueprint, acceptance_ref, acceptance, session_ref, session
