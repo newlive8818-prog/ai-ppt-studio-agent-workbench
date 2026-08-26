@@ -48,6 +48,20 @@ def evidence_item(identity: str = "来源事实") -> dict:
 
 def evidence_book(mode: str = "material-backed") -> dict:
     fact = evidence_item()
+    gap = {
+        **fact,
+        "item_id": "gap-1",
+        "identity": "证据缺口",
+        "statement": "业务影响待联合确认",
+        "source_refs": [] if mode == "proposal-led" else [REF],
+    }
+    forbidden = {
+        **fact,
+        "item_id": "forbid-1",
+        "identity": "禁止使用",
+        "statement": "不得编造收益数字",
+        "source_refs": [] if mode == "proposal-led" else [REF],
+    }
     return {
         "source_version": "content-v1",
         "material_mode": mode,
@@ -58,12 +72,8 @@ def evidence_book(mode: str = "material-backed") -> dict:
         "inferences": [],
         "conflicts": [],
         "unknowns": [],
-        "evidence_gaps": [
-            {**fact, "item_id": "gap-1", "identity": "证据缺口", "statement": "业务影响待联合确认"}
-        ],
-        "forbidden_extrapolations": [
-            {**fact, "item_id": "forbid-1", "identity": "禁止使用", "statement": "不得编造收益数字"}
-        ],
+        "evidence_gaps": [gap],
+        "forbidden_extrapolations": [forbidden],
         "excluded_material_refs": [],
         "source_refs": [] if mode == "proposal-led" else [REF],
         "generated_by": "presales-solution-chief",
@@ -85,13 +95,24 @@ def decision_context() -> dict:
     }
 
 
-def fit_map() -> dict:
-    node = lambda node_id, identity="来源事实": {
+def fit_map(mode: str = "material-backed") -> dict:
+    def node(node_id: str, identity: str = "来源事实") -> dict:
+        effective_identity = identity
+        if mode == "proposal-led":
+            if node_id.startswith(("situation", "symptom", "cause", "impact", "constraint", "unknown")):
+                effective_identity = "诊断假设"
+            elif node_id.startswith("requirement"):
+                effective_identity = "AI 分析"
+            elif node_id.startswith(("solution", "boundary", "alternative")):
+                effective_identity = "方案建议"
+            elif node_id.startswith("validation"):
+                effective_identity = "待联合验证"
+        return {
         "id": node_id,
         "statement": node_id,
-        "identity": identity,
-        "evidence_refs": [REF] if identity == "来源事实" else [],
-    }
+        "identity": effective_identity,
+        "evidence_refs": [] if mode == "proposal-led" else ([REF] if identity == "来源事实" else []),
+        }
     return {
         "evidence_book_ref": "artifact://presales-evidence-book/" + "d" * 64,
         "decision_context_ref": "artifact://customer-decision-context/" + "e" * 64,
@@ -109,7 +130,7 @@ def fit_map() -> dict:
             "requirement_ref": "requirement-1",
             "solution_component_ref": "solution-1",
             "identity": "方案建议",
-            "evidence_refs": [REF],
+            "evidence_refs": [] if mode == "proposal-led" else [REF],
         }],
         "boundaries": [node("boundary-1", "方案建议")],
         "alternatives": [node("alternative-1", "方案建议")],
@@ -196,6 +217,201 @@ class V22ContentContractTests(unittest.TestCase):
         del incomplete["mappings"][0]["evidence_refs"]
         with self.assertRaises(ContractValidationError):
             validate_problem_solution_fit_map(incomplete)
+
+    def test_authoritative_roots_and_nested_records_are_closed(self) -> None:
+        cases = []
+
+        value = evidence_book()
+        value["unexpected"] = True
+        cases.append(("evidence-root", value, validate_presales_evidence_book))
+        value = evidence_book()
+        value["facts"][0]["unexpected"] = True
+        cases.append(("evidence-row", value, validate_presales_evidence_book))
+
+        value = decision_context()
+        value["unexpected"] = True
+        cases.append(("decision-root", value, validate_customer_decision_context))
+
+        value = fit_map()
+        value["unexpected"] = True
+        cases.append(("fit-root", value, validate_problem_solution_fit_map))
+        value = fit_map()
+        value["symptoms"][0]["unexpected"] = True
+        cases.append(("fit-node", value, validate_problem_solution_fit_map))
+        value = fit_map()
+        value["mappings"][0]["unexpected"] = True
+        cases.append(("fit-mapping", value, validate_problem_solution_fit_map))
+
+        for field in ("visible_copy_blocks", "analysis_or_proposal_blocks"):
+            value = blueprint()
+            value["slides"][0][field][0]["unexpected"] = True
+            cases.append((field, value, validate_reading_deck_blueprint))
+        value = blueprint()
+        value["slides"][0]["evidence_bindings"][0]["unexpected"] = True
+        cases.append(("evidence-binding", value, validate_reading_deck_blueprint))
+        value = blueprint()
+        value["slides"][0]["reading_quality"]["unexpected"] = True
+        cases.append(("reading-quality", value, validate_reading_deck_blueprint))
+        value = blueprint()
+        value["slides"][0]["unexpected"] = True
+        cases.append(("slide", value, validate_reading_deck_blueprint))
+
+        for label, payload, validator in cases:
+            with self.subTest(label=label), self.assertRaisesRegex(
+                ContractValidationError,
+                "fields are not closed",
+            ):
+                validator(payload)
+
+    def test_evidence_book_buckets_enforce_identity_roles(self) -> None:
+        wrong_identities = {
+            "facts": "方案建议",
+            "user_confirmed_facts": "来源事实",
+            "inferences": "来源事实",
+            "conflicts": "方案建议",
+            "unknowns": "材料推断",
+            "evidence_gaps": "来源事实",
+            "forbidden_extrapolations": "待联合验证",
+        }
+        for field, identity in wrong_identities.items():
+            invalid = evidence_book()
+            row = evidence_item(identity)
+            row["item_id"] = f"{field}-1"
+            invalid[field] = [row]
+            with self.subTest(field=field, identity=identity), self.assertRaises(
+                ContractValidationError
+            ):
+                validate_presales_evidence_book(invalid)
+
+    def test_evidence_book_sources_are_unique_disjoint_and_declared(self) -> None:
+        duplicate_source = evidence_book()
+        duplicate_source["source_refs"].append(REF)
+        with self.assertRaises(ContractValidationError):
+            validate_presales_evidence_book(duplicate_source)
+
+        excluded_ref = "artifact://material-finding/" + "b" * 64
+        duplicate_excluded = evidence_book()
+        duplicate_excluded["excluded_material_refs"] = [excluded_ref, excluded_ref]
+        with self.assertRaises(ContractValidationError):
+            validate_presales_evidence_book(duplicate_excluded)
+
+        overlapping = evidence_book()
+        overlapping["excluded_material_refs"] = [REF]
+        with self.assertRaises(ContractValidationError):
+            validate_presales_evidence_book(overlapping)
+
+        undeclared = evidence_book()
+        undeclared["facts"][0]["source_refs"] = [excluded_ref]
+        with self.assertRaises(ContractValidationError):
+            validate_presales_evidence_book(undeclared)
+
+        excluded = evidence_book()
+        excluded["facts"][0]["source_refs"] = [excluded_ref]
+        excluded["source_refs"].append(excluded_ref)
+        excluded["excluded_material_refs"] = [excluded_ref]
+        with self.assertRaises(ContractValidationError):
+            validate_presales_evidence_book(excluded)
+
+    def test_ai_analysis_is_internal_only(self) -> None:
+        valid_fit = fit_map()
+        valid_fit["derived_requirements"][0]["identity"] = "AI 分析"
+        self.assertEqual(
+            validate_problem_solution_fit_map(valid_fit)["derived_requirements"][0][
+                "identity"
+            ],
+            "AI 分析",
+        )
+        valid_blueprint = blueprint()
+        valid_blueprint["slides"][0]["analysis_or_proposal_blocks"][0][
+            "identity"
+        ] = "AI 分析"
+        self.assertEqual(
+            validate_reading_deck_blueprint(valid_blueprint)["slides"][0][
+                "analysis_or_proposal_blocks"
+            ][0]["identity"],
+            "AI 分析",
+        )
+
+        invalid_cases = []
+        value = evidence_book()
+        value["facts"][0]["identity"] = "AI 分析"
+        invalid_cases.append(("fact", value, validate_presales_evidence_book))
+        value = blueprint()
+        value["slides"][0]["visible_copy_blocks"][0]["identity"] = "AI 分析"
+        invalid_cases.append(("visible-copy", value, validate_reading_deck_blueprint))
+        value = blueprint()
+        value["slides"][0]["identity_labels"] = ["AI 分析"]
+        invalid_cases.append(("identity-label", value, validate_reading_deck_blueprint))
+        value = blueprint()
+        value["slides"][0]["material_views"][0]["evidence_identity"] = "AI 分析"
+        invalid_cases.append(("material-view", value, validate_reading_deck_blueprint))
+        value = blueprint()
+        value["slides"][0]["customer_decision_item"]["identity"] = "AI 分析"
+        invalid_cases.append(("customer-decision", value, validate_reading_deck_blueprint))
+
+        for label, payload, validator in invalid_cases:
+            with self.subTest(label=label), self.assertRaises(ContractValidationError):
+                validator(payload)
+
+    def test_fit_map_ids_and_mapping_categories_are_closed(self) -> None:
+        duplicate_node = fit_map()
+        duplicate_node["symptoms"].append(copy.deepcopy(duplicate_node["symptoms"][0]))
+        with self.assertRaises(ContractValidationError):
+            validate_problem_solution_fit_map(duplicate_node)
+
+        duplicate_mapping = fit_map()
+        duplicate_mapping["mappings"].append(
+            copy.deepcopy(duplicate_mapping["mappings"][0])
+        )
+        with self.assertRaises(ContractValidationError):
+            validate_problem_solution_fit_map(duplicate_mapping)
+
+        for field, wrong_ref in (
+            ("problem_ref", "requirement-1"),
+            ("requirement_ref", "solution-1"),
+            ("solution_component_ref", "symptom-1"),
+        ):
+            invalid = fit_map()
+            invalid["mappings"][0][field] = wrong_ref
+            with self.subTest(field=field), self.assertRaises(
+                ContractValidationError
+            ):
+                validate_problem_solution_fit_map(invalid)
+
+    def test_blueprint_local_ids_and_references_are_closed(self) -> None:
+        duplicate_block = blueprint()
+        duplicate_block["slides"][0]["analysis_or_proposal_blocks"][0][
+            "block_id"
+        ] = "b1"
+        with self.assertRaises(ContractValidationError):
+            validate_reading_deck_blueprint(duplicate_block)
+
+        unknown_content = blueprint()
+        unknown_content["slides"][0]["evidence_bindings"][0][
+            "content_ref"
+        ] = "missing"
+        with self.assertRaises(ContractValidationError):
+            validate_reading_deck_blueprint(unknown_content)
+
+        duplicate_binding = blueprint()
+        duplicate_binding["slides"][0]["evidence_bindings"].append(
+            copy.deepcopy(duplicate_binding["slides"][0]["evidence_bindings"][0])
+        )
+        with self.assertRaises(ContractValidationError):
+            validate_reading_deck_blueprint(duplicate_binding)
+
+        for field in ("identity_labels", "solution_mapping_refs"):
+            invalid = blueprint()
+            invalid["slides"][0][field].append(invalid["slides"][0][field][0])
+            with self.subTest(field=field), self.assertRaises(
+                ContractValidationError
+            ):
+                validate_reading_deck_blueprint(invalid)
+
+        duplicate_section = blueprint()
+        duplicate_section["section_flow"].append(duplicate_section["section_flow"][0])
+        with self.assertRaises(ContractValidationError):
+            validate_reading_deck_blueprint(duplicate_section)
 
     def test_customer_decision_item_is_closed_normalized_and_non_coercive(self) -> None:
         for invalid_item in (None, [], "not-an-object"):

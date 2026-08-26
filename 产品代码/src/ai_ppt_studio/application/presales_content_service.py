@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import copy
+from types import MappingProxyType
 from typing import Any
 
 from ai_ppt_studio.application.gate_evaluator import GateEvaluator
-from ai_ppt_studio.application.review_commands import fingerprint, replay_state
+from ai_ppt_studio.application.review_commands import (
+    fingerprint,
+    replay_ref,
+    replay_state,
+)
 from ai_ppt_studio.application.scoped_confirmation import ScopedConfirmationPolicy
 from ai_ppt_studio.domains.content.contracts import (
     validate_customer_decision_context,
@@ -48,6 +54,39 @@ class PresalesContentService:
         "experience/project-retrospective",
         "experience/retrospective/error",
     }
+    _FIT_NODE_FIELDS = (
+        "situations",
+        "symptoms",
+        "causes_or_hypotheses",
+        "impacts",
+        "constraints",
+        "unknowns",
+        "derived_requirements",
+        "solution_components",
+        "boundaries",
+        "alternatives",
+        "validation_items",
+    )
+    _CONTENT_CHAIN_OBJECTS = MappingProxyType(
+        {
+            "evidence_book": (
+                "content/evidence-book",
+                "presales-evidence-book",
+            ),
+            "decision_context": (
+                "content/decision-context",
+                "customer-decision-context",
+            ),
+            "problem_solution_fit": (
+                "content/problem-solution-fit",
+                "problem-solution-fit-map",
+            ),
+            "reading_blueprint": (
+                "content/reading-blueprint",
+                "reading-deck-blueprint",
+            ),
+        }
+    )
 
     def __init__(self, kernel: ProjectKernel) -> None:
         self.kernel = kernel
@@ -56,6 +95,17 @@ class PresalesContentService:
         self, command_id: str, expected_revision: int, payload: dict[str, Any]
     ) -> str:
         normalized = validate_presales_evidence_book(payload)
+        command_fingerprint = fingerprint(
+            "build-presales-evidence-book", normalized
+        )
+        replay = replay_ref(
+            self.kernel,
+            command_id,
+            command_fingerprint,
+            "content/evidence-book",
+        )
+        if replay is not None:
+            return replay[0]
         self._require_current(
             "mission/confirmation",
             "mission-confirmation",
@@ -76,12 +126,24 @@ class PresalesContentService:
             "content/evidence-book",
             "presales-evidence-book",
             normalized,
+            command_fingerprint,
         )
 
     def build_decision_context(
         self, command_id: str, expected_revision: int, payload: dict[str, Any]
     ) -> str:
         normalized = validate_customer_decision_context(payload)
+        command_fingerprint = fingerprint(
+            "build-customer-decision-context", normalized
+        )
+        replay = replay_ref(
+            self.kernel,
+            command_id,
+            command_fingerprint,
+            "content/decision-context",
+        )
+        if replay is not None:
+            return replay[0]
         self._require_current(
             "content/evidence-book",
             "presales-evidence-book",
@@ -94,12 +156,24 @@ class PresalesContentService:
             "content/decision-context",
             "customer-decision-context",
             normalized,
+            command_fingerprint,
         )
 
     def build_problem_solution_fit(
         self, command_id: str, expected_revision: int, payload: dict[str, Any]
     ) -> str:
         normalized = validate_problem_solution_fit_map(payload)
+        command_fingerprint = fingerprint(
+            "build-problem-solution-fit", normalized
+        )
+        replay = replay_ref(
+            self.kernel,
+            command_id,
+            command_fingerprint,
+            "content/problem-solution-fit",
+        )
+        if replay is not None:
+            return replay[0]
         self._require_current(
             "content/evidence-book",
             "presales-evidence-book",
@@ -110,6 +184,8 @@ class PresalesContentService:
             "customer-decision-context",
             normalized["decision_context_ref"],
         )
+        evidence = self._payload(normalized["evidence_book_ref"])
+        self._validate_fit_evidence(normalized, evidence=evidence)
         return self._commit(
             command_id,
             expected_revision,
@@ -117,12 +193,24 @@ class PresalesContentService:
             "content/problem-solution-fit",
             "problem-solution-fit-map",
             normalized,
+            command_fingerprint,
         )
 
     def build_reading_deck_blueprint(
         self, command_id: str, expected_revision: int, payload: dict[str, Any]
     ) -> str:
         normalized = validate_reading_deck_blueprint(payload)
+        command_fingerprint = fingerprint(
+            "build-reading-deck-blueprint", normalized
+        )
+        replay = replay_ref(
+            self.kernel,
+            command_id,
+            command_fingerprint,
+            "content/reading-blueprint",
+        )
+        if replay is not None:
+            return replay[0]
         if normalized["project_id"] != self.kernel.project_id:
             raise ContractValidationError("ReadingDeckBlueprint project_id is stale")
         upstream = (
@@ -135,6 +223,14 @@ class PresalesContentService:
         evidence = self._payload(normalized["evidence_book_ref"])
         if evidence.get("material_mode") != normalized["material_mode"]:
             raise ContractValidationError("ReadingDeckBlueprint material_mode is stale")
+        if evidence.get("source_version") != normalized["source_version"]:
+            raise ContractValidationError("ReadingDeckBlueprint source_version is stale")
+        fit = self._payload(normalized["problem_solution_fit_ref"])
+        self._validate_blueprint_evidence(
+            normalized,
+            evidence=evidence,
+            fit=fit,
+        )
         state = self.kernel.load()
         artifact_updates = {
             "content/reading-blueprint": ("reading-deck-blueprint", normalized)
@@ -185,8 +281,31 @@ class PresalesContentService:
                     if reference
                 )
             ),
+            command_fingerprint=command_fingerprint,
         )
         return committed.artifact_heads["content/reading-blueprint"]
+
+    def get_current_content_chain(self) -> dict[str, Any]:
+        state = self.kernel.load()
+        objects: dict[str, dict[str, Any] | None] = {}
+        for key, (slot, kind) in self._CONTENT_CHAIN_OBJECTS.items():
+            value = state.artifact_heads.get(slot, "")
+            if not value:
+                objects[key] = None
+                continue
+            reference = ArtifactReference.parse(value)
+            if reference.kind != kind:
+                raise ArtifactReferenceError(f"{slot} must reference {kind}")
+            envelope = self.kernel.artifacts.resolve(reference)
+            objects[key] = {
+                "ref": value,
+                "payload": copy.deepcopy(envelope["payload"]),
+            }
+        return {
+            "project_id": self.kernel.project_id,
+            "revision": state.revision,
+            "objects": objects,
+        }
 
     def repair_reading_deck_blueprint(
         self, command_id: str, expected_revision: int, payload: dict[str, Any]
@@ -324,12 +443,14 @@ class PresalesContentService:
         slot: str,
         kind: str,
         payload: dict[str, Any],
+        command_fingerprint: str,
     ) -> str:
         state = self.kernel.commit(
             command_id=command_id,
             expected_revision=expected_revision,
             event_type=event_type,
             artifact_updates={slot: (kind, payload)},
+            command_fingerprint=command_fingerprint,
         )
         return state.artifact_heads[slot]
 
@@ -341,6 +462,98 @@ class PresalesContentService:
         if reference.kind != kind:
             raise ArtifactReferenceError(f"{slot} must reference {kind}")
         self.kernel.artifacts.resolve(reference)
+
+    @staticmethod
+    def _declared_evidence(
+        evidence: dict[str, Any],
+    ) -> tuple[set[str], set[str]]:
+        return (
+            set(evidence.get("source_refs", [])),
+            set(evidence.get("excluded_material_refs", [])),
+        )
+
+    @staticmethod
+    def _require_declared_refs(
+        refs: list[str],
+        *,
+        declared: set[str],
+        excluded: set[str],
+        field: str,
+    ) -> None:
+        invalid = [ref for ref in refs if ref not in declared or ref in excluded]
+        if invalid:
+            raise ContractValidationError(
+                f"{field} must reference declared, non-excluded evidence"
+            )
+
+    def _validate_fit_evidence(
+        self,
+        payload: dict[str, Any],
+        *,
+        evidence: dict[str, Any],
+    ) -> None:
+        declared, excluded = self._declared_evidence(evidence)
+        mode = evidence["material_mode"]
+        rows = [
+            row
+            for field in self._FIT_NODE_FIELDS
+            for row in payload[field]
+        ]
+        mappings = payload["mappings"]
+        if mode == "proposal-led":
+            if any(row["evidence_refs"] for row in rows + mappings):
+                raise ContractValidationError(
+                    "proposal-led fit cannot cite project evidence"
+                )
+            factual_identities = {"来源事实", "用户已确认", "材料推断"}
+            if any(row["identity"] in factual_identities for row in rows + mappings):
+                raise ContractValidationError(
+                    "proposal-led fit cannot claim factual identities"
+                )
+            return
+        for row in rows + mappings:
+            self._require_declared_refs(
+                row["evidence_refs"],
+                declared=declared,
+                excluded=excluded,
+                field="ProblemSolutionFit evidence_refs",
+            )
+        if any(not mapping["evidence_refs"] for mapping in mappings):
+            raise ContractValidationError(
+                f"{mode} mappings require declared evidence"
+            )
+
+    def _validate_blueprint_evidence(
+        self,
+        payload: dict[str, Any],
+        *,
+        evidence: dict[str, Any],
+        fit: dict[str, Any],
+    ) -> None:
+        declared, excluded = self._declared_evidence(evidence)
+        mapping_ids = {mapping["mapping_id"] for mapping in fit["mappings"]}
+        for slide in payload["slides"]:
+            for binding in slide["evidence_bindings"]:
+                self._require_declared_refs(
+                    binding["source_refs"],
+                    declared=declared,
+                    excluded=excluded,
+                    field="ReadingDeckBlueprint evidence binding",
+                )
+            for material_view in slide["material_views"]:
+                self._require_declared_refs(
+                    [material_view["source_ref"]],
+                    declared=declared,
+                    excluded=excluded,
+                    field="ReadingDeckBlueprint material view",
+                )
+            if any(
+                mapping_ref not in mapping_ids
+                for mapping_ref in slide["solution_mapping_refs"]
+            ):
+                raise ContractValidationError(
+                    "ReadingDeckBlueprint solution mapping refs must be current"
+                )
 
     @classmethod
     def _replacement_removals(

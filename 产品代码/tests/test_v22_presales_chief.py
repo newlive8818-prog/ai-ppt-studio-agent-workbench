@@ -205,7 +205,7 @@ class PresalesChiefServiceTests(unittest.TestCase):
                 context["evidence_book_ref"] = evidence_ref
                 context_ref = service.build_decision_context("context", kernel.load().revision, context)
 
-                mapping = fit_map()
+                mapping = fit_map(mode)
                 mapping["evidence_book_ref"] = evidence_ref
                 mapping["decision_context_ref"] = context_ref
                 mapping_ref = service.build_problem_solution_fit("fit", kernel.load().revision, mapping)
