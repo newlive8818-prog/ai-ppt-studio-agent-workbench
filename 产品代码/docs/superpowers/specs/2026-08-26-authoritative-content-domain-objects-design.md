@@ -102,6 +102,8 @@ Factual rows require source references. Proposal-led objects cannot claim projec
 - `requirement_ref` points only to `derived_requirements`.
 - `solution_component_ref` points only to `solution_components`.
 - A factual node requires evidence; internal analysis or proposal nodes do not become facts merely because they carry evidence references.
+- Every fit-node and mapping evidence reference is declared by the current evidence book and is not excluded.
+- In `proposal-led` mode, fit nodes and mappings carry no project evidence and cannot use factual identities; in the two material modes, each mapping keeps at least one declared evidence reference.
 
 ### 6.3 Blueprint and upstream chain
 
