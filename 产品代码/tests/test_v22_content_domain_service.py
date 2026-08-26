@@ -192,6 +192,158 @@ class V22ContentDomainServiceTests(unittest.TestCase):
                     ),
                 )
 
+    def test_customer_decision_evidence_is_declared_and_not_excluded(self) -> None:
+        for label, invalid_ref in (
+            ("undeclared", "artifact://material-finding/" + "c" * 64),
+            ("excluded", EXCLUDED_REF),
+        ):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as folder:
+                fixture = ContentChainFixture(folder)
+                _fit_payload, fit_ref = fixture.build_fit()
+                value = fixture.valid_blueprint(fit_ref)
+                value["slides"][0]["customer_decision_item"] = {
+                    "text": "客户材料记录了当前流程断点。",
+                    "identity": "来源事实",
+                    "evidence_refs": [invalid_ref],
+                }
+                self.assert_zero_write_rejection(
+                    fixture,
+                    lambda: fixture.service.build_reading_deck_blueprint(
+                        "invalid-customer-decision-evidence",
+                        fixture.kernel.load().revision,
+                        value,
+                    ),
+                )
+
+    def test_upstream_replacement_invalidates_only_dependent_current_heads(self) -> None:
+        cases = {
+            "evidence": (
+                "content/evidence-book",
+                (
+                    "content/decision-context",
+                    "content/problem-solution-fit",
+                    "content/reading-blueprint",
+                ),
+            ),
+            "context": (
+                "content/decision-context",
+                ("content/problem-solution-fit", "content/reading-blueprint"),
+            ),
+            "fit": (
+                "content/problem-solution-fit",
+                ("content/reading-blueprint",),
+            ),
+        }
+        for operation, (replaced_slot, invalidated_slots) in cases.items():
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as folder:
+                fixture = ContentChainFixture(folder)
+                fit_v1, fit_ref_v1 = fixture.build_fit()
+                deck_v1 = fixture.valid_blueprint(fit_ref_v1)
+                fixture.service.build_reading_deck_blueprint(
+                    "deck-v1", fixture.kernel.load().revision, deck_v1
+                )
+                before_heads = dict(fixture.kernel.load().artifact_heads)
+                historical_refs = {
+                    slot: before_heads[slot] for slot in invalidated_slots
+                }
+
+                if operation == "evidence":
+                    value = copy.deepcopy(fixture.evidence_payload)
+                    value["generated_at"] = "2026-08-16T00:00:00+08:00"
+                    new_ref = fixture.service.build_evidence_book(
+                        "evidence-v2", fixture.kernel.load().revision, value
+                    )
+                elif operation == "context":
+                    value = copy.deepcopy(fixture.context_payload)
+                    value["current_business_matter"] = "确认第二版业务事项"
+                    new_ref = fixture.service.build_decision_context(
+                        "context-v2", fixture.kernel.load().revision, value
+                    )
+                else:
+                    value = copy.deepcopy(fit_v1)
+                    value["symptoms"][0]["statement"] = "第二版问题陈述"
+                    new_ref = fixture.service.build_problem_solution_fit(
+                        "fit-v2", fixture.kernel.load().revision, value
+                    )
+
+                current = fixture.kernel.load().artifact_heads
+                self.assertEqual(current[replaced_slot], new_ref)
+                for slot in invalidated_slots:
+                    self.assertNotIn(slot, current)
+                    old_ref = historical_refs[slot]
+                    self.assertEqual(
+                        fixture.kernel.artifacts.resolve(
+                            ArtifactReference.parse(old_ref)
+                        )["kind"],
+                        ArtifactReference.parse(old_ref).kind,
+                    )
+                projection = fixture.service.get_current_content_chain()["objects"]
+                output_keys = {
+                    "content/decision-context": "decision_context",
+                    "content/problem-solution-fit": "problem_solution_fit",
+                    "content/reading-blueprint": "reading_blueprint",
+                }
+                for slot in invalidated_slots:
+                    self.assertIsNone(projection[output_keys[slot]])
+
+    def test_mixed_current_lineage_fails_closed_for_reads_and_builds(self) -> None:
+        for mismatch in ("evidence-context", "context-fit", "fit-blueprint"):
+            with self.subTest(mismatch=mismatch), tempfile.TemporaryDirectory() as folder:
+                fixture = ContentChainFixture(folder)
+                fit_v1, fit_ref_v1 = fixture.build_fit()
+                deck_v1 = fixture.valid_blueprint(fit_ref_v1)
+                fixture.service.build_reading_deck_blueprint(
+                    "deck-v1", fixture.kernel.load().revision, deck_v1
+                )
+
+                if mismatch == "evidence-context":
+                    replacement = copy.deepcopy(fixture.evidence_payload)
+                    replacement["generated_at"] = "2026-08-16T00:00:00+08:00"
+                    slot = "content/evidence-book"
+                    kind = "presales-evidence-book"
+                elif mismatch == "context-fit":
+                    replacement = copy.deepcopy(fixture.context_payload)
+                    replacement["current_business_matter"] = "确认第二版业务事项"
+                    slot = "content/decision-context"
+                    kind = "customer-decision-context"
+                else:
+                    replacement = copy.deepcopy(fit_v1)
+                    replacement["symptoms"][0]["statement"] = "第二版问题陈述"
+                    slot = "content/problem-solution-fit"
+                    kind = "problem-solution-fit-map"
+                corrupted = fixture.kernel.commit(
+                    command_id=f"corrupt-{mismatch}",
+                    expected_revision=fixture.kernel.load().revision,
+                    event_type="test.mixed-current-lineage",
+                    artifact_updates={slot: (kind, replacement)},
+                )
+
+                with self.assertRaisesRegex(
+                    ContractValidationError, "content chain lineage"
+                ):
+                    fixture.service.get_current_content_chain()
+
+                before = authority_snapshot(fixture.kernel)
+                if mismatch == "evidence-context":
+                    value = fixture.valid_fit()
+                    value["evidence_book_ref"] = corrupted.artifact_heads[slot]
+                    with self.assertRaisesRegex(
+                        ContractValidationError, "content chain lineage"
+                    ):
+                        fixture.service.build_problem_solution_fit(
+                            "mixed-fit", fixture.kernel.load().revision, value
+                        )
+                elif mismatch == "context-fit":
+                    value = fixture.valid_blueprint(fit_ref_v1)
+                    value["decision_context_ref"] = corrupted.artifact_heads[slot]
+                    with self.assertRaisesRegex(
+                        ContractValidationError, "content chain lineage"
+                    ):
+                        fixture.service.build_reading_deck_blueprint(
+                            "mixed-blueprint", fixture.kernel.load().revision, value
+                        )
+                self.assertEqual(authority_snapshot(fixture.kernel), before)
+
     def test_four_build_operations_replay_original_results_semantically(self) -> None:
         for operation in ("evidence", "context", "fit", "blueprint"):
             with self.subTest(operation=operation), tempfile.TemporaryDirectory() as folder:

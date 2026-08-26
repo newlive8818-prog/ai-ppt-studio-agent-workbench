@@ -38,6 +38,12 @@ class PresalesContentService:
         "content/problem-solution-fit",
         "content/reading-blueprint",
     }
+    _CONTENT_CHAIN_SLOTS = (
+        "content/evidence-book",
+        "content/decision-context",
+        "content/problem-solution-fit",
+        "content/reading-blueprint",
+    )
     _DOWNSTREAM_PREFIXES = (
         "agent/",
         "visual/",
@@ -184,6 +190,11 @@ class PresalesContentService:
             "customer-decision-context",
             normalized["decision_context_ref"],
         )
+        context = self._payload(normalized["decision_context_ref"])
+        if context.get("evidence_book_ref") != normalized["evidence_book_ref"]:
+            raise ContractValidationError(
+                "Current content chain lineage is inconsistent"
+            )
         evidence = self._payload(normalized["evidence_book_ref"])
         self._validate_fit_evidence(normalized, evidence=evidence)
         return self._commit(
@@ -225,7 +236,17 @@ class PresalesContentService:
             raise ContractValidationError("ReadingDeckBlueprint material_mode is stale")
         if evidence.get("source_version") != normalized["source_version"]:
             raise ContractValidationError("ReadingDeckBlueprint source_version is stale")
+        context = self._payload(normalized["decision_context_ref"])
         fit = self._payload(normalized["problem_solution_fit_ref"])
+        if (
+            context.get("evidence_book_ref") != normalized["evidence_book_ref"]
+            or fit.get("evidence_book_ref") != normalized["evidence_book_ref"]
+            or fit.get("decision_context_ref")
+            != normalized["decision_context_ref"]
+        ):
+            raise ContractValidationError(
+                "Current content chain lineage is inconsistent"
+            )
         self._validate_blueprint_evidence(
             normalized,
             evidence=evidence,
@@ -301,6 +322,7 @@ class PresalesContentService:
                 "ref": value,
                 "payload": copy.deepcopy(envelope["payload"]),
             }
+        self._require_content_chain_lineage(objects)
         return {
             "project_id": self.kernel.project_id,
             "revision": state.revision,
@@ -445,11 +467,30 @@ class PresalesContentService:
         payload: dict[str, Any],
         command_fingerprint: str,
     ) -> str:
+        current = self.kernel.load()
+        chain_index = self._CONTENT_CHAIN_SLOTS.index(slot)
+        invalidated_content_slots = self._CONTENT_CHAIN_SLOTS[chain_index + 1 :]
+        replacement_plan_active = bool(
+            current.artifact_heads.get("content/change-set")
+        )
         state = self.kernel.commit(
             command_id=command_id,
             expected_revision=expected_revision,
             event_type=event_type,
             artifact_updates={slot: (kind, payload)},
+            artifact_removals=tuple(
+                downstream_slot
+                for downstream_slot in invalidated_content_slots
+                if downstream_slot in current.artifact_heads
+                and not replacement_plan_active
+            ),
+            gate_mutation=GateEvaluator(self.kernel).content_source_replaced(
+                tuple(
+                    current.artifact_heads[current_slot]
+                    for current_slot in self._CONTENT_CHAIN_SLOTS
+                    if current_slot in current.artifact_heads
+                )
+            ),
             command_fingerprint=command_fingerprint,
         )
         return state.artifact_heads[slot]
@@ -533,6 +574,12 @@ class PresalesContentService:
         declared, excluded = self._declared_evidence(evidence)
         mapping_ids = {mapping["mapping_id"] for mapping in fit["mappings"]}
         for slide in payload["slides"]:
+            self._require_declared_refs(
+                slide["customer_decision_item"]["evidence_refs"],
+                declared=declared,
+                excluded=excluded,
+                field="ReadingDeckBlueprint customer decision item",
+            )
             for binding in slide["evidence_bindings"]:
                 self._require_declared_refs(
                     binding["source_refs"],
@@ -555,6 +602,53 @@ class PresalesContentService:
                     "ReadingDeckBlueprint solution mapping refs must be current"
                 )
 
+    @staticmethod
+    def _require_content_chain_lineage(
+        objects: dict[str, dict[str, Any] | None],
+    ) -> None:
+        evidence = objects["evidence_book"]
+        context = objects["decision_context"]
+        fit = objects["problem_solution_fit"]
+        blueprint = objects["reading_blueprint"]
+        inconsistent = False
+        if context is not None:
+            inconsistent = evidence is None or (
+                context["payload"].get("evidence_book_ref")
+                != evidence["ref"]
+            )
+        if fit is not None:
+            inconsistent = inconsistent or evidence is None or context is None
+            if evidence is not None and context is not None:
+                inconsistent = inconsistent or (
+                    fit["payload"].get("evidence_book_ref") != evidence["ref"]
+                    or fit["payload"].get("decision_context_ref")
+                    != context["ref"]
+                )
+        if blueprint is not None:
+            inconsistent = (
+                inconsistent
+                or evidence is None
+                or context is None
+                or fit is None
+            )
+            if evidence is not None and context is not None and fit is not None:
+                inconsistent = inconsistent or (
+                    blueprint["payload"].get("evidence_book_ref")
+                    != evidence["ref"]
+                    or blueprint["payload"].get("decision_context_ref")
+                    != context["ref"]
+                    or blueprint["payload"].get("problem_solution_fit_ref")
+                    != fit["ref"]
+                    or blueprint["payload"].get("source_version")
+                    != evidence["payload"].get("source_version")
+                    or blueprint["payload"].get("material_mode")
+                    != evidence["payload"].get("material_mode")
+                )
+        if inconsistent:
+            raise ContractValidationError(
+                "Current content chain lineage is inconsistent"
+            )
+
     @classmethod
     def _replacement_removals(
         cls,
@@ -576,6 +670,7 @@ class PresalesContentService:
                 or slot.startswith(cls._DOWNSTREAM_PREFIXES)
             )
         )
+
     def _payload(self, reference: str) -> dict[str, Any]:
         return dict(
             self.kernel.artifacts.resolve(ArtifactReference.parse(reference))["payload"]
