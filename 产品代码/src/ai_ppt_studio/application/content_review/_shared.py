@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from ai_ppt_studio.domains.content.contracts import (
@@ -44,6 +45,60 @@ class ContentReviewContext:
 
 class DecisionLineageMismatchError(ContractValidationError):
     """A valid PageDecision belongs to a different authoritative slide."""
+
+
+CONTENT_ACCEPTANCE_FIELDS = {
+    "source_version",
+    "reading_blueprint_ref",
+    "evidence_gate_ref",
+    "presales_reading_gate_ref",
+    "overall_result",
+    "accepted_at",
+}
+
+
+def validate_content_acceptance(value: dict[str, Any]) -> dict[str, Any]:
+    """Validate the closed current acceptance authority used by review paths."""
+
+    if not isinstance(value, dict) or set(value) != CONTENT_ACCEPTANCE_FIELDS:
+        raise ContractValidationError("Content acceptance fields are not closed")
+    normalized = dict(value)
+    for field in ("source_version", "accepted_at"):
+        if not isinstance(normalized.get(field), str) or not normalized[field].strip():
+            raise ContractValidationError(f"Content acceptance {field} is invalid")
+        normalized[field] = normalized[field].strip()
+    reference_kinds = {
+        "reading_blueprint_ref": "reading-deck-blueprint",
+        "evidence_gate_ref": "content-hard-gate-record",
+        "presales_reading_gate_ref": "content-hard-gate-record",
+    }
+    for field, kind in reference_kinds.items():
+        try:
+            reference = ArtifactReference.parse(str(normalized.get(field) or ""))
+        except Exception as error:
+            raise ContractValidationError(
+                f"Content acceptance {field} is invalid"
+            ) from error
+        if reference.kind != kind:
+            raise ContractValidationError(
+                f"Content acceptance {field} must reference {kind}"
+            )
+        normalized[field] = str(reference)
+    if normalized.get("overall_result") != "passed":
+        raise ContractValidationError("Content acceptance must be passed")
+    try:
+        accepted_at = datetime.fromisoformat(
+            normalized["accepted_at"].replace("Z", "+00:00")
+        )
+    except ValueError as error:
+        raise ContractValidationError(
+            "Content acceptance accepted_at must be an ISO timestamp"
+        ) from error
+    if accepted_at.tzinfo is None or accepted_at.utcoffset() is None:
+        raise ContractValidationError(
+            "Content acceptance accepted_at must include a timezone"
+        )
+    return normalized
 
 
 def payload(kernel: ProjectKernel, reference: str, kind: str) -> dict[str, Any]:
@@ -179,7 +234,9 @@ def review_context(
     acceptance_ref = state.artifact_heads.get("content/acceptance", "")
     if not acceptance_ref:
         raise GateBlockedError("content-review", ("current-content-acceptance",))
-    acceptance = payload(kernel, acceptance_ref, "content-acceptance")
+    acceptance = validate_content_acceptance(
+        payload(kernel, acceptance_ref, "content-acceptance")
+    )
     expected_acceptance = {
         "source_version": blueprint["source_version"],
         "reading_blueprint_ref": blueprint_ref,
@@ -225,4 +282,5 @@ __all__ = [
     "replay_ref",
     "review_context",
     "stable_id",
+    "validate_content_acceptance",
 ]

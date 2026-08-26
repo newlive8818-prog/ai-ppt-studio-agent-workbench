@@ -106,6 +106,56 @@ def artifact_payload(kernel: ProjectKernel, reference: str) -> dict:
 
 
 class ContentReviewRuntimeG0Tests(unittest.TestCase):
+    def test_malformed_current_acceptance_blocks_every_review_path_zero_write(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = ProjectKernel.initialize(Path(folder), project_id="p1")
+            _blueprint_ref, _session_ref, session, _state = accepted_review(
+                kernel, slide_count=1
+            )
+            acceptance_ref = kernel.load().artifact_heads["content/acceptance"]
+            acceptance = artifact_payload(kernel, acceptance_ref)
+            kernel.commit(
+                command_id="install-malformed-current-acceptance",
+                expected_revision=kernel.load().revision,
+                event_type="test.current-content-acceptance-malformed",
+                artifact_updates={
+                    "content/acceptance": (
+                        "content-acceptance",
+                        {**acceptance, "forged_extra": "not-closed"},
+                    )
+                },
+            )
+            frozen = snapshot_bytes(kernel)
+
+            with self.assertRaises((ContractValidationError, GateBlockedError)):
+                ContentReviewProjectionService(kernel).project(
+                    session["review_session_id"]
+                )
+            self.assertEqual(snapshot_bytes(kernel), frozen)
+
+            with self.assertRaises((ContractValidationError, GateBlockedError)):
+                ContentDecisionService(kernel).save(
+                    command_id="reject-decision-through-malformed-acceptance",
+                    expected_revision=kernel.load().revision,
+                    review_session_id=session["review_session_id"],
+                    source_version="content-v1",
+                    slide_id="S01",
+                    decision="approved",
+                    comment="",
+                )
+            self.assertEqual(snapshot_bytes(kernel), frozen)
+
+            with self.assertRaises((ContractValidationError, GateBlockedError)):
+                ContentReviewBatchService(kernel).submit(
+                    command_id="reject-batch-through-malformed-acceptance",
+                    expected_revision=kernel.load().revision,
+                    review_session_id=session["review_session_id"],
+                    source_version="content-v1",
+                )
+            self.assertEqual(snapshot_bytes(kernel), frozen)
+
     def test_content_session_requires_exact_current_c2_acceptance_zero_write(
         self,
     ) -> None:
@@ -187,6 +237,57 @@ class ContentReviewRuntimeG0Tests(unittest.TestCase):
                     command_id="reject-plan-for-all-approved",
                     expected_revision=kernel.load().revision,
                     batch_ref=batch_ref,
+                    source_version="content-v1",
+                    plan=revision_plan(["all"]),
+                )
+
+            self.assertEqual(snapshot_bytes(kernel), frozen)
+
+    def test_revision_plan_recomputes_current_decisions_instead_of_batch_counts(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = ProjectKernel.initialize(Path(folder), project_id="p1")
+            _session_id, _session, batch_ref = submitted_review(
+                kernel, [("approved", "")]
+            )
+            batch = artifact_payload(kernel, batch_ref)
+            forged_batch = validate_content_review_batch(
+                {
+                    **batch,
+                    "batch_id": "forged-change-request-counts",
+                    "counts": {
+                        "approved": 0,
+                        "modify": 1,
+                        "evidence": 0,
+                        "merge-or-delete": 0,
+                    },
+                    "supersedes_ref": batch_ref,
+                }
+            )
+            forged_ref = str(
+                kernel.artifacts.reference_for(
+                    "content-review-batch", forged_batch
+                )
+            )
+            kernel.commit(
+                command_id="install-forged-change-request-counts",
+                expected_revision=kernel.load().revision,
+                event_type="test.content-review-batch-counts-forged",
+                artifact_updates={
+                    "content/review-batch": (
+                        "content-review-batch",
+                        forged_batch,
+                    )
+                },
+            )
+            frozen = snapshot_bytes(kernel)
+
+            with self.assertRaises(ContractValidationError):
+                ContentRevisionPlanningService(kernel).save_plan(
+                    command_id="reject-plan-from-forged-counts",
+                    expected_revision=kernel.load().revision,
+                    batch_ref=forged_ref,
                     source_version="content-v1",
                     plan=revision_plan(["all"]),
                 )

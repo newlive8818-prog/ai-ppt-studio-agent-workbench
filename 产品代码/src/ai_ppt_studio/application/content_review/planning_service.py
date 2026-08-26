@@ -3,19 +3,27 @@
 from __future__ import annotations
 
 import hashlib
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
 from ai_ppt_studio.application.scoped_confirmation import ScopedConfirmationPolicy
 from ai_ppt_studio.application.content_review._shared import (
+    decision_lineage,
     fingerprint,
     payload,
     replay_ref,
+    review_context,
     stable_id,
 )
+from ai_ppt_studio.application.review_session_service import (
+    authoritative_target_publication_revision,
+)
 from ai_ppt_studio.domains.content.contracts import validate_reading_deck_blueprint
+from ai_ppt_studio.domains.content.page_decisions import DECISIONS
 from ai_ppt_studio.domains.content.review_batches import validate_content_review_batch
 from ai_ppt_studio.domains.content.revision_plans import validate_revision_plan
+from ai_ppt_studio.domains.review.contracts import validate_review_session
 from ai_ppt_studio.errors import ContractValidationError, ReviewSourceStaleError, RevisionConflictError
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.transactions import ProjectKernel
@@ -49,7 +57,12 @@ class ContentRevisionPlanningService:
                 payload(self.kernel, reference, "content-batch-revision-plan")
             ), state
         state = self._state(expected_revision)
-        batch = self._current_batch(state, batch_ref, source_version)
+        batch = self._current_batch(
+            state,
+            batch_ref,
+            source_version,
+            require_current_content_authority=True,
+        )
         plan_payload = validate_revision_plan(
             {
                 "plan_id": stable_id("content-revision-plan", batch_ref, command_id),
@@ -343,7 +356,14 @@ class ContentRevisionPlanningService:
             raise RevisionConflictError(expected_revision, state.revision)
         return state
 
-    def _current_batch(self, state, batch_ref: str, source_version: str):
+    def _current_batch(
+        self,
+        state,
+        batch_ref: str,
+        source_version: str,
+        *,
+        require_current_content_authority: bool = False,
+    ):
         if state.artifact_heads.get("content/review-batch") != batch_ref:
             raise ContractValidationError("batch_ref is not current")
         batch = validate_content_review_batch(
@@ -353,6 +373,85 @@ class ContentRevisionPlanningService:
             raise ReviewSourceStaleError(source_version, batch["source_version"])
         if batch["status"] != "submitted":
             raise ContractValidationError("Revision plan requires a submitted batch")
+        blueprint = validate_reading_deck_blueprint(
+            payload(
+                self.kernel,
+                batch["reading_blueprint_ref"],
+                "reading-deck-blueprint",
+            )
+        )
+        session_ref = state.review_session_ref("content-full-deck")
+        session = validate_review_session(
+            payload(self.kernel, session_ref, "review-session"),
+            trusted_receipts=True,
+        )
+        authoritative_revision = authoritative_target_publication_revision(
+            self.kernel,
+            state,
+            "content-full-deck",
+            batch["reading_blueprint_ref"],
+        )
+        if (
+            batch["project_id"] != state.project_id
+            or blueprint["project_id"] != state.project_id
+            or blueprint["source_version"] != source_version
+            or batch["review_session_id"] != session["review_session_id"]
+            or session["project_id"] != state.project_id
+            or session["review_type"] != "content-full-deck"
+            or session["target_artifact_ref"] != batch["reading_blueprint_ref"]
+            or session["source_version"] != source_version
+            or session["revision"] != authoritative_revision
+            or session["status"] != "submitted"
+        ):
+            raise ContractValidationError(
+                "Revision plan requires the exact submitted review authority"
+            )
+        if require_current_content_authority:
+            current = review_context(
+                self.kernel,
+                batch["review_session_id"],
+                source_version=source_version,
+            )
+            if (
+                current.blueprint_ref != batch["reading_blueprint_ref"]
+                or current.session_ref != session_ref
+            ):
+                raise ContractValidationError(
+                    "Revision plan requires current content authority"
+                )
+        slides = blueprint["slides"]
+        if batch["slide_ids"] != [slide["slide_id"] for slide in slides]:
+            raise ContractValidationError(
+                "Revision plan requires the exact current review batch"
+            )
+        actual_counts: Counter[str] = Counter()
+        for slide, decision_ref in zip(slides, batch["decision_refs"], strict=True):
+            slot = f"content/review/decision/{slide['slide_id']}"
+            if state.artifact_heads.get(slot) != decision_ref:
+                raise ContractValidationError(
+                    "Revision plan requires current PageDecision heads"
+                )
+            decision = decision_lineage(
+                self.kernel,
+                decision_ref,
+                {
+                    "project_id": state.project_id,
+                    "review_session_id": session["review_session_id"],
+                    "source_version": source_version,
+                    "reading_blueprint_ref": batch["reading_blueprint_ref"],
+                    "slide_id": slide["slide_id"],
+                    "slide_order": slide["order"],
+                    "slide_title_snapshot": slide["neutral_title"],
+                    "status": "completed",
+                },
+            )
+            actual_counts[decision["decision"]] += 1
+        if batch["counts"] != {
+            choice: actual_counts.get(choice, 0) for choice in DECISIONS
+        }:
+            raise ContractValidationError(
+                "Revision plan batch counts do not match current PageDecisions"
+            )
         return batch
 
     def _current_plan_lineage(

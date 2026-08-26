@@ -26,6 +26,9 @@ from ai_ppt_studio.application.artifact_guards import (
 from ai_ppt_studio.application.review_session_service import (
     authoritative_target_publication_revision,
 )
+from ai_ppt_studio.application.content_review._shared import (
+    validate_content_acceptance,
+)
 from ai_ppt_studio.domains.review.contracts import validate_review_session
 from ai_ppt_studio.domains.content.page_decisions import validate_page_decision
 from ai_ppt_studio.domains.content.review_batches import (
@@ -256,10 +259,10 @@ class GateEvaluator:
         """Validate the exact all-approved content lineage used by G0."""
 
         state = self.kernel.load()
-        acceptance = self._resolve(acceptance_ref, "content-acceptance")[
-            "payload"
-        ]
         try:
+            acceptance = validate_content_acceptance(
+                self._resolve(acceptance_ref, "content-acceptance")["payload"]
+            )
             blueprint = validate_reading_deck_blueprint(
                 self._resolve(blueprint_ref, "reading-deck-blueprint")[
                     "payload"
@@ -283,20 +286,8 @@ class GateEvaluator:
             blockers.append("reading-blueprint-not-current")
         if state.artifact_heads.get("content/review-batch") != review_batch_ref:
             blockers.append("content-review-batch-not-current")
-        acceptance_fields = {
-            "source_version",
-            "reading_blueprint_ref",
-            "evidence_gate_ref",
-            "presales_reading_gate_ref",
-            "overall_result",
-            "accepted_at",
-        }
         if (
-            set(acceptance) != acceptance_fields
-            or not isinstance(acceptance.get("accepted_at"), str)
-            or not acceptance.get("accepted_at", "").strip()
-            or acceptance.get("overall_result") != "passed"
-            or acceptance.get("reading_blueprint_ref") != blueprint_ref
+            acceptance.get("reading_blueprint_ref") != blueprint_ref
             or acceptance.get("source_version") != blueprint.get("source_version")
             or acceptance.get("evidence_gate_ref")
             != state.artifact_heads.get("content/gate/evidence")
