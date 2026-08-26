@@ -1,5 +1,22 @@
 import { createHash } from "node:crypto";
 
+export const PUBLIC_TOOL_GROUP_COUNTS = Object.freeze({
+  project: 15,
+  content: 15,
+  review: 4,
+  visual: 3,
+  "delivery-experience": 6,
+});
+
+const DESCRIPTOR_FIELDS = Object.freeze([
+  "name",
+  "group",
+  "handler",
+  "operation",
+  "schema",
+]);
+const LOCAL_ASSET_TOOL = "read_ai_ppt_project_asset";
+
 const rows = [
   ["create_ai_ppt_project", "project", "createProject", "create-project"],
   ["get_ai_ppt_project_snapshot", "project", "getSnapshot", "get-project-snapshot"],
@@ -51,12 +68,108 @@ export const PUBLIC_TOOL_CATALOG = Object.freeze(
     Object.freeze({ name, group, handler, operation, schema: name })),
 );
 
+export function assertPublicToolCatalog(catalog) {
+  if (!Array.isArray(catalog) || !Object.isFrozen(catalog)) {
+    throw new Error("Public tool catalog must be frozen");
+  }
+  const expectedTotal = Object.values(PUBLIC_TOOL_GROUP_COUNTS)
+    .reduce((total, count) => total + count, 0);
+  if (catalog.length !== expectedTotal) {
+    throw new Error(
+      `Public tool catalog group count mismatch: expected ${expectedTotal}, received ${catalog.length}`,
+    );
+  }
+
+  const names = new Set();
+  const handlers = new Set();
+  const operations = new Set();
+  const nullOperationTools = [];
+  const groupCounts = Object.fromEntries(
+    Object.keys(PUBLIC_TOOL_GROUP_COUNTS).map((group) => [group, 0]),
+  );
+
+  for (const descriptor of catalog) {
+    if (!descriptor || !Object.isFrozen(descriptor)) {
+      throw new Error("Every public tool descriptor must be frozen");
+    }
+    if (JSON.stringify(Object.keys(descriptor)) !== JSON.stringify(DESCRIPTOR_FIELDS)) {
+      throw new Error("Public tool descriptor fields do not match the fixed contract");
+    }
+    if (typeof descriptor.name !== "string" || !descriptor.name.trim()) {
+      throw new Error("Public tool name must be a non-empty string");
+    }
+    if (names.has(descriptor.name)) {
+      throw new Error(`Public tool catalog has duplicate tool name: ${descriptor.name}`);
+    }
+    names.add(descriptor.name);
+
+    if (!Object.hasOwn(PUBLIC_TOOL_GROUP_COUNTS, descriptor.group)) {
+      throw new Error(`Public tool catalog has unsupported group: ${descriptor.group}`);
+    }
+    groupCounts[descriptor.group] += 1;
+
+    if (descriptor.schema !== descriptor.name) {
+      throw new Error(`Public tool schema identity mismatch: ${descriptor.name}`);
+    }
+    if (typeof descriptor.handler !== "string" || !descriptor.handler.trim()) {
+      throw new Error(`Public tool handler identity is invalid: ${descriptor.name}`);
+    }
+    if (handlers.has(descriptor.handler)) {
+      throw new Error(`Public tool catalog has duplicate handler: ${descriptor.handler}`);
+    }
+    handlers.add(descriptor.handler);
+
+    if (descriptor.operation === null) {
+      if (descriptor.name !== LOCAL_ASSET_TOOL) {
+        throw new Error(`Only the local-asset operation may be null: ${descriptor.name}`);
+      }
+      nullOperationTools.push(descriptor.name);
+      continue;
+    }
+    if (typeof descriptor.operation !== "string" || !descriptor.operation.trim()) {
+      throw new Error(`Public tool operation identity is invalid: ${descriptor.name}`);
+    }
+    if (operations.has(descriptor.operation)) {
+      throw new Error(`Public tool catalog has duplicate operation: ${descriptor.operation}`);
+    }
+    operations.add(descriptor.operation);
+  }
+
+  for (const [group, expectedCount] of Object.entries(PUBLIC_TOOL_GROUP_COUNTS)) {
+    if (groupCounts[group] !== expectedCount) {
+      throw new Error(
+        `Public tool catalog group count mismatch for ${group}: expected ${expectedCount}, received ${groupCounts[group]}`,
+      );
+    }
+  }
+  if (
+    nullOperationTools.length !== 1
+    || nullOperationTools[0] !== LOCAL_ASSET_TOOL
+  ) {
+    throw new Error("Public tool catalog local-asset operation contract is incomplete");
+  }
+  return catalog;
+}
+
+assertPublicToolCatalog(PUBLIC_TOOL_CATALOG);
+
 export const PUBLIC_TOOL_CATALOG_SHA256 = createHash("sha256")
   .update(JSON.stringify(PUBLIC_TOOL_CATALOG))
   .digest("hex");
 
 export function registerCatalogGroup(server, group, schemas, handlers) {
-  for (const tool of PUBLIC_TOOL_CATALOG.filter((item) => item.group === group)) {
+  if (!Object.hasOwn(PUBLIC_TOOL_GROUP_COUNTS, group)) {
+    throw new Error(`Unknown public tool group: ${group}`);
+  }
+  const tools = PUBLIC_TOOL_CATALOG.filter((item) => item.group === group);
+  const expectedSchemas = tools.map((tool) => tool.schema).sort();
+  const actualSchemas = Object.keys(schemas).sort();
+  if (JSON.stringify(actualSchemas) !== JSON.stringify(expectedSchemas)) {
+    throw new Error(
+      `Schema contract mismatch for ${group}: expected ${expectedSchemas.join(", ")}; received ${actualSchemas.join(", ")}`,
+    );
+  }
+  for (const tool of tools) {
     const schema = schemas[tool.schema];
     const handler = handlers[tool.handler];
     if (!schema || typeof handler !== "function") {

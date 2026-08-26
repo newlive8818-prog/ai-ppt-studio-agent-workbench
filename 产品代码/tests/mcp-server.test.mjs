@@ -234,6 +234,18 @@ test("MCP exposes data contracts without rendering a Widget in chat", async () =
     );
     assert.ok(PUBLIC_TOOL_CATALOG.every((tool) => tool.schema && tool.handler));
     assert.match(PUBLIC_TOOL_CATALOG_SHA256, /^[0-9a-f]{64}$/);
+    const listedByName = [...tools.tools].sort((left, right) =>
+      left.name.localeCompare(right.name));
+    const catalogByName = [...PUBLIC_TOOL_CATALOG].sort((left, right) =>
+      left.name.localeCompare(right.name));
+    assert.equal(listedByName.length, 43);
+    assert.deepEqual(
+      listedByName.map(({ name }) => name),
+      catalogByName.map(({ name }) => name),
+    );
+    assert.ok(
+      listedByName.every((tool) => tool.inputSchema?.type === "object"),
+    );
     const readTool = tools.tools.find((tool) => tool.name === "get_ai_ppt_project_snapshot");
     assert.equal(readTool._meta?.ui?.resourceUri, undefined);
     const saveTool = tools.tools.find(
