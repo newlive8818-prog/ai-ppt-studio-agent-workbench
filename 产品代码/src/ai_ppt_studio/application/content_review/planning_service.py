@@ -61,6 +61,7 @@ class ContentRevisionPlanningService:
                 "saved_at": datetime.now(timezone.utc).isoformat(),
             }
         )
+        self._require_plan_semantics(plan_payload, batch)
         committed = self.kernel.commit(
             command_id=command_id,
             expected_revision=expected_revision,
@@ -371,6 +372,7 @@ class ContentRevisionPlanningService:
         if plan["source_version"] != source_version:
             raise ReviewSourceStaleError(source_version, plan["source_version"])
         batch = self._current_batch(state, plan["batch_ref"], source_version)
+        self._require_plan_semantics(plan, batch)
         if (
             batch["project_id"] != state.project_id
             or batch["reading_blueprint_ref"] != plan["reading_blueprint_ref"]
@@ -394,6 +396,23 @@ class ContentRevisionPlanningService:
                 source_version, str(blueprint.get("source_version") or "")
         )
         return plan, {**batch, "batch_ref": plan["batch_ref"]}
+
+    @staticmethod
+    def _require_plan_semantics(
+        plan: dict[str, Any], batch: dict[str, Any]
+    ) -> None:
+        requested = sum(
+            batch["counts"][choice]
+            for choice in ("modify", "evidence", "merge-or-delete")
+        )
+        if requested == 0:
+            raise ContractValidationError(
+                "Revision plan requires at least one non-approved PageDecision"
+            )
+        if plan["plan"]["rereview_scope"] != ["all"]:
+            raise ContractValidationError(
+                "Revision plan must require complete full-deck rereview"
+            )
 
     def _require_trusted_confirmation(
         self,

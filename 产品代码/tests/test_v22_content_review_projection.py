@@ -330,8 +330,8 @@ class ContentReviewProjectionTests(unittest.TestCase):
                 review_session_id=session["review_session_id"],
                 source_version="content-v1",
                 slide_id="S01",
-                decision="approved",
-                comment="",
+                decision="modify",
+                comment="请按整套方案调整本页",
             )
             self.assertEqual(decision["status"], "completed")
             self.assertEqual(state.gate_status["G0"], "locked")
@@ -443,8 +443,8 @@ class ContentReviewProjectionTests(unittest.TestCase):
                 review_session_id=session["review_session_id"],
                 source_version="content-v1",
                 slide_id="S01",
-                decision="approved",
-                comment="",
+                decision="modify",
+                comment="请修订本页后重新审核",
             )
             batch_ref, _batch, state = ContentReviewBatchService(kernel).submit(
                 command_id="submit",
@@ -498,8 +498,8 @@ class ContentReviewProjectionTests(unittest.TestCase):
                 review_session_id=session["review_session_id"],
                 source_version="content-v1",
                 slide_id="S01",
-                decision="approved",
-                comment="",
+                decision="modify",
+                comment="请修订本页并重验完整链路",
             )
             batch_ref, _batch, state = ContentReviewBatchService(kernel).submit(
                 command_id="submit-for-lineage-check",
@@ -582,8 +582,8 @@ class ContentReviewProjectionTests(unittest.TestCase):
                 review_session_id=session["review_session_id"],
                 source_version="content-v1",
                 slide_id="S01",
-                decision="approved",
-                comment="",
+                decision="modify",
+                comment="请修订本页后验证确认绑定",
             )
             batch_ref, _batch, state = ContentReviewBatchService(kernel).submit(
                 command_id="submit-for-binding-check",
@@ -904,8 +904,8 @@ class ContentReviewProjectionTests(unittest.TestCase):
                 review_session_id=session["review_session_id"],
                 source_version="content-v1",
                 slide_id="S01",
-                decision="approved",
-                comment="",
+                decision="modify",
+                comment="请通过 Bridge 确认整稿修订方案",
             )
             batch_ref, _batch, state = ContentReviewBatchService(kernel).submit(
                 command_id="bridge-plan-submit",

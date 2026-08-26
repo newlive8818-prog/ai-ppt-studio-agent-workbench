@@ -383,8 +383,8 @@ class ContentReviewAtomicityTests(unittest.TestCase):
                 review_session_id=session["review_session_id"],
                 source_version="content-v1",
                 slide_id="S01",
-                decision="approved",
-                comment="",
+                decision="modify",
+                comment="请修订本页后重新审核",
             )
             batch_ref, _batch, submitted = ContentReviewBatchService(kernel).submit(
                 command_id="submit",
