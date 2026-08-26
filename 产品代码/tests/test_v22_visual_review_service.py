@@ -34,6 +34,7 @@ from ai_ppt_studio.kernel.transactions import ProjectKernel
 from tests.test_v22_content_review_projection import accepted_review
 from tests.test_v22_visual_review_contracts import region_feedback
 from tests.host_confirmation_fixtures import gate_confirmation_kwargs
+from tests.v22_hard_gate_fixtures import semantic_checks
 from tests.v16_visual_fixtures import (
     G2_REVIEW_FORGERY_VARIANTS,
     forge_g2_visual_review,
@@ -115,13 +116,17 @@ def seed_visual_review(kernel: ProjectKernel):
             hard_gates.run_evidence_gate(
                 command_id="visual-review-seed-evidence-pass",
                 expected_revision=kernel.load().revision,
-                semantic_check_results=[],
+                semantic_check_results=semantic_checks(
+                    "evidence", reading_blueprint_ref
+                ),
                 reviewer_mode="isolated-review-task",
             )
             hard_gates.run_presales_reading_gate(
                 command_id="visual-review-seed-reading-pass",
                 expected_revision=kernel.load().revision,
-                semantic_check_results=[],
+                semantic_check_results=semantic_checks(
+                    "presales-reading", reading_blueprint_ref
+                ),
                 reviewer_mode="isolated-review-task",
             )
         state = kernel.load()

@@ -20,6 +20,7 @@ from ai_ppt_studio.application.presales_content_service import PresalesContentSe
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 from tests.test_v22_content_contracts import blueprint, decision_context, evidence_book, fit_map
+from tests.v22_hard_gate_fixtures import semantic_checks
 
 
 class V16ContentChainMigrationTests(unittest.TestCase):
@@ -84,13 +85,13 @@ class V16ContentChainMigrationTests(unittest.TestCase):
             gates.run_evidence_gate(
                 command_id="evidence-gate",
                 expected_revision=kernel.load().revision,
-                semantic_check_results=[],
+                semantic_check_results=semantic_checks("evidence", deck_ref),
                 reviewer_mode="isolated-review-task",
             )
             gates.run_presales_reading_gate(
                 command_id="reading-gate",
                 expected_revision=kernel.load().revision,
-                semantic_check_results=[],
+                semantic_check_results=semantic_checks("presales-reading", deck_ref),
                 reviewer_mode="isolated-review-task",
             )
 

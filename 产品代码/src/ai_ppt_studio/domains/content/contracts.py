@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -717,6 +718,18 @@ def validate_reading_deck_blueprint(payload: dict[str, Any]) -> dict[str, Any]:
 def _hard_gate_checks(payload: dict[str, Any], field: str) -> list[dict[str, Any]]:
     checks = []
     for row in _v22_objects(payload, field):
+        _require_exact_keys(
+            row,
+            (
+                "check_id",
+                "applicability",
+                "result",
+                "hard",
+                "evidence_refs",
+                "failure_reason",
+            ),
+            "Content hard-gate check",
+        )
         applicability = _text(row, "applicability")
         result = _text(row, "result")
         if applicability not in {"applicable", "not-applicable"}:
@@ -725,20 +738,35 @@ def _hard_gate_checks(payload: dict[str, Any], field: str) -> list[dict[str, Any
             raise ContractValidationError("Hard-gate result is invalid")
         if applicability == "not-applicable" and result != "not-applicable":
             raise ContractValidationError("Non-applicable checks must be not-applicable")
+        if applicability == "applicable" and result == "not-applicable":
+            raise ContractValidationError("Applicable checks must pass or fail")
+        if row.get("hard") is not True:
+            raise ContractValidationError("Content hard-gate checks must be hard")
         failure_reason = _boundary_text(row, "failure_reason")
         if applicability == "applicable" and result == "failed" and not failure_reason:
             raise ContractValidationError("Failed hard-gate checks require a reason")
+        if result != "failed" and failure_reason:
+            raise ContractValidationError("Only failed hard-gate checks may have a reason")
+        evidence_refs = _v22_strings(
+            row,
+            "evidence_refs",
+            non_empty=applicability == "applicable",
+        )
+        if applicability == "not-applicable" and evidence_refs:
+            raise ContractValidationError(
+                "Non-applicable hard-gate checks cannot cite evidence"
+            )
+        if len(set(evidence_refs)) != len(evidence_refs):
+            raise ContractValidationError(
+                "Hard-gate check evidence refs must be unique"
+            )
         checks.append(
             {
                 "check_id": _text(row, "check_id"),
                 "applicability": applicability,
                 "result": result,
-                "hard": row.get("hard") is True,
-                "evidence_refs": _v22_strings(
-                    row,
-                    "evidence_refs",
-                    non_empty=applicability == "applicable",
-                ),
+                "hard": True,
+                "evidence_refs": evidence_refs,
                 "failure_reason": failure_reason,
             }
         )
@@ -748,54 +776,96 @@ def _hard_gate_checks(payload: dict[str, Any], field: str) -> list[dict[str, Any
 def validate_content_hard_gate_record(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ContractValidationError("ContentHardGateRecord must be an object")
+    _require_exact_keys(
+        payload,
+        (
+            "gate_type",
+            "input_source_version",
+            "input_hash",
+            "reviewer_mode",
+            "independent_agent_instance_id",
+            "context_pack_ref",
+            "context_pack_hash",
+            "output_ref",
+            "deterministic_check_results",
+            "semantic_check_results",
+            "overall_result",
+            "repair_requirements",
+            "reviewer_cannot_edit",
+            "created_at",
+        ),
+        "ContentHardGateRecord",
+    )
     gate_type = _text(payload, "gate_type")
     if gate_type not in {"evidence", "presales-reading"}:
         raise ContractValidationError("gate_type is invalid")
     reviewer_mode = _text(payload, "reviewer_mode")
     if reviewer_mode not in {"independent-agent", "isolated-review-task"}:
         raise ContractValidationError("reviewer_mode is invalid")
+    input_hash = _text(payload, "input_hash")
+    context_pack_hash = _text(payload, "context_pack_hash")
+    if not re.fullmatch(r"[0-9a-f]{64}", input_hash):
+        raise ContractValidationError("input_hash must be a lowercase SHA-256")
+    if not re.fullmatch(r"[0-9a-f]{64}", context_pack_hash):
+        raise ContractValidationError(
+            "context_pack_hash must be a lowercase SHA-256"
+        )
+    context_pack_ref = _text(payload, "context_pack_ref")
+    if not re.fullmatch(
+        r"artifact://context-pack/[0-9a-f]{64}", context_pack_ref
+    ):
+        raise ContractValidationError("context_pack_ref must reference a context-pack")
+    created_at = _text(payload, "created_at")
+    try:
+        timestamp = datetime.fromisoformat(created_at)
+    except ValueError as error:
+        raise ContractValidationError("created_at must be ISO-8601") from error
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        raise ContractValidationError("created_at must include a timezone")
+    independent_id = _boundary_text(payload, "independent_agent_instance_id")
+    output_ref = _boundary_text(payload, "output_ref")
     normalized = {
         "gate_type": gate_type,
         "input_source_version": _text(payload, "input_source_version"),
-        "input_hash": _text(payload, "input_hash"),
+        "input_hash": input_hash,
         "reviewer_mode": reviewer_mode,
-        "independent_agent_instance_id": _boundary_text(
-            payload, "independent_agent_instance_id"
-        ),
-        "context_pack_ref": _text(payload, "context_pack_ref"),
-        "context_pack_hash": _text(payload, "context_pack_hash"),
-        "output_ref": _boundary_text(payload, "output_ref"),
+        "independent_agent_instance_id": independent_id,
+        "context_pack_ref": context_pack_ref,
+        "context_pack_hash": context_pack_hash,
+        "output_ref": output_ref,
         "deterministic_check_results": _hard_gate_checks(
             payload, "deterministic_check_results"
         ),
         "semantic_check_results": _hard_gate_checks(
             payload, "semantic_check_results"
         ),
-        "repair_requirements": _v22_objects(payload, "repair_requirements"),
+        "repair_requirements": [],
         "reviewer_cannot_edit": payload.get("reviewer_cannot_edit") is True,
-        "created_at": _text(payload, "created_at"),
+        "created_at": created_at,
     }
     if not normalized["reviewer_cannot_edit"]:
         raise ContractValidationError("reviewer_cannot_edit must be true")
-    if reviewer_mode == "independent-agent" and any(
-        not normalized[field]
-        for field in (
-            "independent_agent_instance_id",
-            "input_hash",
-            "context_pack_ref",
-            "context_pack_hash",
-            "output_ref",
-        )
-    ):
+    if reviewer_mode == "independent-agent":
+        if not independent_id or not re.fullmatch(
+            r"artifact://agent-output/[0-9a-f]{64}", output_ref
+        ):
+            raise ContractValidationError(
+                "independent-agent requires instance and agent-output evidence"
+            )
+    elif independent_id or output_ref:
         raise ContractValidationError(
-            "independent-agent requires instance, context, input, and output evidence"
+            "isolated-review-task cannot claim independent-agent evidence"
         )
+    all_checks = (
+        normalized["deterministic_check_results"]
+        + normalized["semantic_check_results"]
+    )
+    check_ids = [check["check_id"] for check in all_checks]
+    if len(set(check_ids)) != len(check_ids):
+        raise ContractValidationError("Content hard-gate check ids must be unique")
     failures = [
         check
-        for check in (
-            normalized["deterministic_check_results"]
-            + normalized["semantic_check_results"]
-        )
+        for check in all_checks
         if check["applicability"] == "applicable"
         and check["hard"]
         and check["result"] == "failed"
@@ -803,7 +873,25 @@ def validate_content_hard_gate_record(payload: dict[str, Any]) -> dict[str, Any]
     computed = "failed" if failures else "passed"
     if payload.get("overall_result") != computed:
         raise ContractValidationError(f"overall_result must be {computed}")
-    if failures and not normalized["repair_requirements"]:
-        raise ContractValidationError("Failed hard gates require repair requirements")
+    repair_requirements = []
+    for row in _v22_objects(payload, "repair_requirements"):
+        _require_exact_keys(
+            row,
+            ("check_id", "instruction"),
+            "Content hard-gate repair requirement",
+        )
+        repair_requirements.append(
+            {
+                "check_id": _text(row, "check_id"),
+                "instruction": _text(row, "instruction"),
+            }
+        )
+    failed_ids = [check["check_id"] for check in failures]
+    requirement_ids = [row["check_id"] for row in repair_requirements]
+    if requirement_ids != failed_ids:
+        raise ContractValidationError(
+            "Repair requirements must exactly cover failed hard-gate checks"
+        )
+    normalized["repair_requirements"] = repair_requirements
     normalized["overall_result"] = computed
     return normalized

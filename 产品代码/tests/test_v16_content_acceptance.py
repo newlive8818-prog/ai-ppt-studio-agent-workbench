@@ -30,6 +30,7 @@ from tests.test_v22_content_contracts import blueprint, decision_context, eviden
 from tests.test_v22_content_repair_loop import build_content
 from tests.test_v22_content_review_projection import accepted_review
 from tests.host_confirmation_fixtures import gate_confirmation_kwargs
+from tests.v22_hard_gate_fixtures import semantic_checks
 
 
 def authority_snapshot(kernel: ProjectKernel):
@@ -45,16 +46,17 @@ def authority_snapshot(kernel: ProjectKernel):
 
 def pass_content_gates(kernel: ProjectKernel) -> None:
     gates = ContentHardGateService(kernel)
+    blueprint_ref = kernel.load().artifact_heads["content/reading-blueprint"]
     gates.run_evidence_gate(
         command_id="evidence-pass",
         expected_revision=kernel.load().revision,
-        semantic_check_results=[],
+        semantic_check_results=semantic_checks("evidence", blueprint_ref),
         reviewer_mode="isolated-review-task",
     )
     gates.run_presales_reading_gate(
         command_id="reading-pass",
         expected_revision=kernel.load().revision,
-        semantic_check_results=[],
+        semantic_check_results=semantic_checks("presales-reading", blueprint_ref),
         reviewer_mode="isolated-review-task",
     )
 
@@ -131,7 +133,12 @@ class V16ContentAcceptanceTests(unittest.TestCase):
                     ContentHardGateService(kernel).run_evidence_gate(
                         command_id=f"reject-tampered-{slot}",
                         expected_revision=state.revision,
-                        semantic_check_results=[],
+                        semantic_check_results=semantic_checks(
+                            "evidence",
+                            kernel.load().artifact_heads[
+                                "content/reading-blueprint"
+                            ],
+                        ),
                         reviewer_mode="isolated-review-task",
                     )
                 self.assertEqual(authority_snapshot(kernel), before)
@@ -145,7 +152,10 @@ class V16ContentAcceptanceTests(unittest.TestCase):
             evidence_ref, _record, state = gates.run_evidence_gate(
                 command_id="evidence-pass",
                 expected_revision=kernel.load().revision,
-                semantic_check_results=[],
+                semantic_check_results=semantic_checks(
+                    "evidence",
+                    kernel.load().artifact_heads["content/reading-blueprint"],
+                ),
                 reviewer_mode="isolated-review-task",
             )
             payload = kernel.artifacts.resolve(
@@ -164,7 +174,12 @@ class V16ContentAcceptanceTests(unittest.TestCase):
                 gates.run_presales_reading_gate(
                     command_id="reject-wrong-kind",
                     expected_revision=state.revision,
-                    semantic_check_results=[],
+                    semantic_check_results=semantic_checks(
+                        "presales-reading",
+                        kernel.load().artifact_heads[
+                            "content/reading-blueprint"
+                        ],
+                    ),
                     reviewer_mode="isolated-review-task",
                 )
             self.assertEqual(authority_snapshot(kernel), before)
@@ -319,16 +334,11 @@ class V16ContentAcceptanceTests(unittest.TestCase):
             _failed_ref, failed, _state = gates.run_evidence_gate(
                 command_id="failed-evidence",
                 expected_revision=kernel.load().revision,
-                semantic_check_results=[
-                    {
-                        "check_id": "unsupported-causality",
-                        "applicability": "applicable",
-                        "result": "failed",
-                        "hard": True,
-                        "evidence_refs": [blueprint_ref],
-                        "failure_reason": "存在无证因果跳跃",
-                    }
-                ],
+                semantic_check_results=semantic_checks(
+                    "evidence",
+                    blueprint_ref,
+                    failed_check_id="unsupported-causality",
+                ),
                 reviewer_mode="isolated-review-task",
             )
             self.assertEqual(failed["overall_result"], "failed")
@@ -337,7 +347,9 @@ class V16ContentAcceptanceTests(unittest.TestCase):
                 gates.run_presales_reading_gate(
                     command_id="reading-after-failed-evidence",
                     expected_revision=kernel.load().revision,
-                    semantic_check_results=[],
+                    semantic_check_results=semantic_checks(
+                        "presales-reading", blueprint_ref
+                    ),
                     reviewer_mode="isolated-review-task",
                 )
             self.assertEqual(authority_snapshot(kernel), before)

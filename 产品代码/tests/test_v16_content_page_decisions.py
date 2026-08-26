@@ -34,6 +34,7 @@ from ai_ppt_studio.domains.content.page_decisions import (
 from ai_ppt_studio.domains.content.review_batches import validate_content_review_batch
 from tests.test_v22_content_contracts import blueprint as v22_blueprint
 from tests.test_v22_content_repair_loop import build_content as build_v22_content
+from tests.v22_hard_gate_fixtures import semantic_checks
 
 
 def artifact_ref(kind: str, marker: str = "a") -> str:
@@ -60,13 +61,13 @@ def accepted_v22_review(kernel, slide_count: int = 1):
     gates.run_evidence_gate(
         command_id="evidence-pass",
         expected_revision=kernel.load().revision,
-        semantic_check_results=[],
+        semantic_check_results=semantic_checks("evidence", blueprint_ref),
         reviewer_mode="isolated-review-task",
     )
     gates.run_presales_reading_gate(
         command_id="reading-pass",
         expected_revision=kernel.load().revision,
-        semantic_check_results=[],
+        semantic_check_results=semantic_checks("presales-reading", blueprint_ref),
         reviewer_mode="isolated-review-task",
     )
     state = kernel.load()
@@ -736,13 +737,15 @@ class ContentReviewServiceTests(unittest.TestCase):
             gates.run_evidence_gate(
                 command_id="evidence-v2",
                 expected_revision=kernel.load().revision,
-                semantic_check_results=[],
+                semantic_check_results=semantic_checks("evidence", second_blueprint),
                 reviewer_mode="isolated-review-task",
             )
             gates.run_presales_reading_gate(
                 command_id="reading-v2",
                 expected_revision=kernel.load().revision,
-                semantic_check_results=[],
+                semantic_check_results=semantic_checks(
+                    "presales-reading", second_blueprint
+                ),
                 reviewer_mode="isolated-review-task",
             )
             state = kernel.load()

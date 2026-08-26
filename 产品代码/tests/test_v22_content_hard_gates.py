@@ -51,7 +51,10 @@ def record(result: str = "passed", reviewer_mode: str = "isolated-review-task") 
 class ContentHardGateContractTests(unittest.TestCase):
     def test_any_applicable_hard_failure_forces_overall_failed(self) -> None:
         payload = record("failed")
-        payload["deterministic_check_results"].extend(check("passed") for _ in range(20))
+        for index in range(20):
+            passed = check("passed")
+            passed["check_id"] = f"passed-{index}"
+            payload["deterministic_check_results"].append(passed)
         self.assertEqual(validate_content_hard_gate_record(payload)["overall_result"], "failed")
         invalid = copy.deepcopy(payload)
         invalid["overall_result"] = "passed"
@@ -64,6 +67,103 @@ class ContentHardGateContractTests(unittest.TestCase):
             invalid = record(reviewer_mode="independent-agent")
             invalid[missing] = ""
             with self.subTest(missing=missing), self.assertRaises(ContractValidationError):
+                validate_content_hard_gate_record(invalid)
+
+    def test_record_check_and_repair_contracts_are_closed(self) -> None:
+        mutations = []
+        unknown_root = record()
+        unknown_root["score"] = 100
+        mutations.append(unknown_root)
+        unknown_check = record()
+        unknown_check["deterministic_check_results"][0]["weight"] = 1
+        mutations.append(unknown_check)
+        unknown_repair = record("failed")
+        unknown_repair["repair_requirements"][0]["owner"] = "reviewer"
+        mutations.append(unknown_repair)
+        for index, invalid in enumerate(mutations):
+            with self.subTest(case=index), self.assertRaises(
+                ContractValidationError
+            ):
+                validate_content_hard_gate_record(invalid)
+
+    def test_hash_timestamp_and_reviewer_identities_are_canonical(self) -> None:
+        mutations = []
+        uppercase_hash = record()
+        uppercase_hash["input_hash"] = "A" * 64
+        mutations.append(uppercase_hash)
+        short_context_hash = record()
+        short_context_hash["context_pack_hash"] = "b" * 63
+        mutations.append(short_context_hash)
+        naive_time = record()
+        naive_time["created_at"] = "2026-08-26T10:00:00"
+        mutations.append(naive_time)
+        isolated_with_instance = record()
+        isolated_with_instance["independent_agent_instance_id"] = "agent-1"
+        mutations.append(isolated_with_instance)
+        wrong_output_kind = record(reviewer_mode="independent-agent")
+        wrong_output_kind["output_ref"] = (
+            "artifact://reading-deck-blueprint/" + "c" * 64
+        )
+        mutations.append(wrong_output_kind)
+        for index, invalid in enumerate(mutations):
+            with self.subTest(case=index), self.assertRaises(
+                ContractValidationError
+            ):
+                validate_content_hard_gate_record(invalid)
+
+    def test_checks_are_unique_hard_binary_and_evidence_bound(self) -> None:
+        mutations = []
+        duplicate = record()
+        duplicate["semantic_check_results"] = [copy.deepcopy(check())]
+        mutations.append(duplicate)
+        soft = record()
+        soft["deterministic_check_results"][0]["hard"] = False
+        mutations.append(soft)
+        passed_with_reason = record()
+        passed_with_reason["deterministic_check_results"][0][
+            "failure_reason"
+        ] = "不应存在"
+        mutations.append(passed_with_reason)
+        not_applicable_with_evidence = record()
+        row = not_applicable_with_evidence["deterministic_check_results"][0]
+        row.update(
+            applicability="not-applicable",
+            result="not-applicable",
+            evidence_refs=["artifact://reading-deck-blueprint/" + "a" * 64],
+        )
+        mutations.append(not_applicable_with_evidence)
+        applicable_without_evidence = record()
+        applicable_without_evidence["deterministic_check_results"][0][
+            "evidence_refs"
+        ] = []
+        mutations.append(applicable_without_evidence)
+        for index, invalid in enumerate(mutations):
+            with self.subTest(case=index), self.assertRaises(
+                ContractValidationError
+            ):
+                validate_content_hard_gate_record(invalid)
+
+    def test_repair_requirements_exactly_cover_failed_checks(self) -> None:
+        missing = record("failed")
+        missing["repair_requirements"] = []
+        extra = record("failed")
+        extra["repair_requirements"].append(
+            {"check_id": "not-failed", "instruction": "不得出现"}
+        )
+        duplicate = record("failed")
+        duplicate["repair_requirements"].append(
+            copy.deepcopy(duplicate["repair_requirements"][0])
+        )
+        passed_with_repair = record()
+        passed_with_repair["repair_requirements"] = [
+            {"check_id": "source-traceability", "instruction": "伪造修复"}
+        ]
+        for index, invalid in enumerate(
+            (missing, extra, duplicate, passed_with_repair)
+        ):
+            with self.subTest(case=index), self.assertRaises(
+                ContractValidationError
+            ):
                 validate_content_hard_gate_record(invalid)
 
     def test_reviewer_cannot_write_the_blueprint(self) -> None:

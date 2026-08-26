@@ -24,6 +24,7 @@ from tests.test_v22_content_contracts import (
     fit_map,
 )
 from tests.test_v22_content_domain_service import authority_snapshot
+from tests.v22_hard_gate_fixtures import semantic_checks
 
 
 def confirmed_kernel(folder: str, *, has_materials: bool) -> ProjectKernel:
@@ -110,18 +111,11 @@ def fail_evidence_gate(kernel: ProjectKernel, command_id: str) -> str:
     failed_ref, record, _state = ContentHardGateService(kernel).run_evidence_gate(
         command_id=command_id,
         expected_revision=kernel.load().revision,
-        semantic_check_results=[
-            {
-                "check_id": "semantic-causality",
-                "applicability": "applicable",
-                "result": "failed",
-                "hard": True,
-                "evidence_refs": [
-                    kernel.load().artifact_heads["content/reading-blueprint"]
-                ],
-                "failure_reason": "存在无证因果跳跃",
-            }
-        ],
+        semantic_check_results=semantic_checks(
+            "evidence",
+            kernel.load().artifact_heads["content/reading-blueprint"],
+            failed_check_id="unsupported-causality",
+        ),
         reviewer_mode="isolated-review-task",
     )
     assert record["overall_result"] == "failed"

@@ -46,6 +46,7 @@ from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 from tests.test_v22_content_repair_loop import build_content as build_v22_content
 from tests.host_confirmation_fixtures import gate_confirmation_kwargs
+from tests.v22_hard_gate_fixtures import semantic_checks
 
 
 MISSION = {
@@ -137,13 +138,13 @@ class FrameworkDiscussionTests(unittest.TestCase):
         gates.run_evidence_gate(
             command_id=f"evidence-pass-{source_version}",
             expected_revision=self.kernel.load().revision,
-            semantic_check_results=[],
+            semantic_check_results=semantic_checks("evidence", blueprint_ref),
             reviewer_mode="isolated-review-task",
         )
         gates.run_presales_reading_gate(
             command_id=f"reading-pass-{source_version}",
             expected_revision=self.kernel.load().revision,
-            semantic_check_results=[],
+            semantic_check_results=semantic_checks("presales-reading", blueprint_ref),
             reviewer_mode="isolated-review-task",
         )
         state = self.kernel.load()

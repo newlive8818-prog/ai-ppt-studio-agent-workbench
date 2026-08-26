@@ -16,6 +16,7 @@ from ai_ppt_studio.errors import GateBlockedError
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 from tests.test_v22_content_contracts import blueprint, decision_context, evidence_book, fit_map
+from tests.v22_hard_gate_fixtures import semantic_checks
 
 
 def build_content(
@@ -142,14 +143,11 @@ class ContentRepairLoopTests(unittest.TestCase):
             failed_ref, failed, _ = gates.run_evidence_gate(
                 command_id="evidence-failed",
                 expected_revision=kernel.load().revision,
-                semantic_check_results=[{
-                    "check_id": "semantic-causality",
-                    "applicability": "applicable",
-                    "result": "failed",
-                    "hard": True,
-                    "evidence_refs": [first],
-                    "failure_reason": "存在无证因果跳跃",
-                }],
+                semantic_check_results=semantic_checks(
+                    "evidence",
+                    first,
+                    failed_check_id="unsupported-causality",
+                ),
                 reviewer_mode="isolated-review-task",
             )
             self.assertEqual(failed["overall_result"], "failed")
@@ -158,7 +156,9 @@ class ContentRepairLoopTests(unittest.TestCase):
                 gates.run_presales_reading_gate(
                     command_id="reading-too-early",
                     expected_revision=kernel.load().revision,
-                    semantic_check_results=[],
+                    semantic_check_results=semantic_checks(
+                        "presales-reading", first
+                    ),
                     reviewer_mode="isolated-review-task",
                 )
 
@@ -171,13 +171,15 @@ class ContentRepairLoopTests(unittest.TestCase):
             gates.run_evidence_gate(
                 command_id="evidence-passed",
                 expected_revision=current.revision,
-                semantic_check_results=[],
+                semantic_check_results=semantic_checks("evidence", second),
                 reviewer_mode="isolated-review-task",
             )
             _reading_ref, reading, accepted = gates.run_presales_reading_gate(
                 command_id="reading-passed",
                 expected_revision=kernel.load().revision,
-                semantic_check_results=[],
+                semantic_check_results=semantic_checks(
+                    "presales-reading", second
+                ),
                 reviewer_mode="isolated-review-task",
             )
             self.assertEqual(reading["overall_result"], "passed")

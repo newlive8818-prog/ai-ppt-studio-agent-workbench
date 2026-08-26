@@ -29,6 +29,7 @@ from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.transactions import ProjectKernel
 from tests.host_confirmation_fixtures import gate_confirmation_kwargs
 from tests.test_v22_content_repair_loop import build_content
+from tests.v22_hard_gate_fixtures import semantic_checks
 
 
 CONTENT_REVIEW_SLIDE_FIELDS = {
@@ -87,13 +88,13 @@ def accepted_review(
     gates.run_evidence_gate(
         command_id="evidence-pass",
         expected_revision=kernel.load().revision,
-        semantic_check_results=[],
+        semantic_check_results=semantic_checks("evidence", blueprint_ref),
         reviewer_mode="isolated-review-task",
     )
     gates.run_presales_reading_gate(
         command_id="reading-pass",
         expected_revision=kernel.load().revision,
-        semantic_check_results=[],
+        semantic_check_results=semantic_checks("presales-reading", blueprint_ref),
         reviewer_mode="isolated-review-task",
     )
     state = kernel.load()
@@ -755,13 +756,17 @@ class ContentReviewProjectionTests(unittest.TestCase):
             gates.run_evidence_gate(
                 command_id="evidence-pass-after-application",
                 expected_revision=replaced.revision,
-                semantic_check_results=[],
+                semantic_check_results=semantic_checks(
+                    "evidence", second_blueprint_ref
+                ),
                 reviewer_mode="isolated-review-task",
             )
             gates.run_presales_reading_gate(
                 command_id="reading-pass-after-application",
                 expected_revision=kernel.load().revision,
-                semantic_check_results=[],
+                semantic_check_results=semantic_checks(
+                    "presales-reading", second_blueprint_ref
+                ),
                 reviewer_mode="isolated-review-task",
             )
             _new_session_ref, new_session, new_state = ReviewSessionService(
