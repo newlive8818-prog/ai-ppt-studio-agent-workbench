@@ -294,6 +294,45 @@ class ContentReviewRuntimeG0Tests(unittest.TestCase):
 
             self.assertEqual(snapshot_bytes(kernel), frozen)
 
+    def test_failed_current_gate_invalidates_plan_confirmation_context_zero_write(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kernel = ProjectKernel.initialize(Path(folder), project_id="p1")
+            _session_id, _session, batch_ref = submitted_review(
+                kernel, [("modify", "请调整本页")]
+            )
+            planning = ContentRevisionPlanningService(kernel)
+            plan_ref, _plan, _state = planning.save_plan(
+                command_id="save-plan-before-gate-failure",
+                expected_revision=kernel.load().revision,
+                batch_ref=batch_ref,
+                source_version="content-v1",
+                plan=revision_plan(["all"]),
+            )
+            blueprint_ref = kernel.load().artifact_heads[
+                "content/reading-blueprint"
+            ]
+            ContentHardGateService(kernel).run_evidence_gate(
+                command_id="rerun-current-evidence-as-failed",
+                expected_revision=kernel.load().revision,
+                semantic_check_results=semantic_checks(
+                    "evidence",
+                    blueprint_ref,
+                    failed_check_id="selective-evidence-risk",
+                ),
+                reviewer_mode="isolated-review-task",
+            )
+            frozen = snapshot_bytes(kernel)
+
+            with self.assertRaises((ContractValidationError, GateBlockedError)):
+                planning.confirmation_context(
+                    plan_ref=plan_ref,
+                    source_version="content-v1",
+                )
+
+            self.assertEqual(snapshot_bytes(kernel), frozen)
+
     def test_revision_plan_requires_full_deck_rereview_scope_zero_write(
         self,
     ) -> None:

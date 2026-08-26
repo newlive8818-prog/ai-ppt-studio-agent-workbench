@@ -274,6 +274,7 @@ class ContentRevisionPlanningService:
             state,
             plan_ref=plan_ref,
             source_version=source_version,
+            require_current_content_authority=False,
         )
         if (
             state.artifact_heads.get("content/revision-plan-confirmation")
@@ -460,6 +461,7 @@ class ContentRevisionPlanningService:
         *,
         plan_ref: str,
         source_version: str,
+        require_current_content_authority: bool = True,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         if state.artifact_heads.get("content/revision-plan") != plan_ref:
             raise ContractValidationError("plan_ref is not current")
@@ -470,7 +472,12 @@ class ContentRevisionPlanningService:
             raise ContractValidationError("Revision plan belongs to another project")
         if plan["source_version"] != source_version:
             raise ReviewSourceStaleError(source_version, plan["source_version"])
-        batch = self._current_batch(state, plan["batch_ref"], source_version)
+        batch = self._current_batch(
+            state,
+            plan["batch_ref"],
+            source_version,
+            require_current_content_authority=require_current_content_authority,
+        )
         self._require_plan_semantics(plan, batch)
         if (
             batch["project_id"] != state.project_id
