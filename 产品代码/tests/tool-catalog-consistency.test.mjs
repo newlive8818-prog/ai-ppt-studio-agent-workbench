@@ -183,7 +183,12 @@ test("catalog group registration rejects incomplete or foreign wiring", () => {
   const handlers = Object.fromEntries(
     tools.map((tool) => [tool.handler, () => {}]),
   );
-  const server = { registerTool() {} };
+  const registrations = [];
+  const server = {
+    registerTool(name) {
+      registrations.push(name);
+    },
+  };
 
   assert.throws(
     () => registerCatalogGroup(server, "legacy", {}, handlers),
@@ -209,10 +214,22 @@ test("catalog group registration rejects incomplete or foreign wiring", () => {
       server,
       "visual",
       schemas,
-      { ...handlers, [tools[0].handler]: null },
+      { ...handlers, [tools.at(-1).handler]: null },
     ),
-    new RegExp(`Incomplete public tool contract: ${tools[0].name}`),
+    new RegExp(`Incomplete public tool contract: ${tools.at(-1).name}`),
   );
+  assert.deepEqual(registrations, []);
+
+  assert.throws(
+    () => registerCatalogGroup(
+      server,
+      "visual",
+      { ...schemas, [tools.at(-1).schema]: null },
+      handlers,
+    ),
+    new RegExp(`Incomplete public tool contract: ${tools.at(-1).name}`),
+  );
+  assert.deepEqual(registrations, []);
 });
 
 test("catalog, Node handlers, and Python operations have one exact public surface", () => {

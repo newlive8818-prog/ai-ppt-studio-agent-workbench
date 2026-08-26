@@ -169,12 +169,15 @@ export function registerCatalogGroup(server, group, schemas, handlers) {
       `Schema contract mismatch for ${group}: expected ${expectedSchemas.join(", ")}; received ${actualSchemas.join(", ")}`,
     );
   }
-  for (const tool of tools) {
+  const registrations = tools.map((tool) => {
     const schema = schemas[tool.schema];
     const handler = handlers[tool.handler];
     if (!schema || typeof handler !== "function") {
       throw new Error(`Incomplete public tool contract: ${tool.name}`);
     }
+    return { tool, schema, handler };
+  });
+  for (const { tool, schema, handler } of registrations) {
     server.registerTool(tool.name, schema, (input, extra) =>
       handler(input, tool.operation, extra));
   }

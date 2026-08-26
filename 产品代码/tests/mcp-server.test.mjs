@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
@@ -13,6 +14,9 @@ import {
   PUBLIC_TOOL_CATALOG_SHA256,
 } from "../mcp/tool-catalog.mjs";
 import { PythonBridgeError } from "../mcp/runtime-bridge/python-runtime.mjs";
+
+const EXPECTED_PUBLIC_INPUT_SCHEMA_SHA256 =
+  "b7ea4016731a9789bcbba66c842698d31189409d20f28fa5f2960efbe5dfb565";
 
 const snapshot = {
   schema_version: "3.0",
@@ -246,6 +250,12 @@ test("MCP exposes data contracts without rendering a Widget in chat", async () =
     assert.ok(
       listedByName.every((tool) => tool.inputSchema?.type === "object"),
     );
+    const inputSchemaSha256 = createHash("sha256")
+      .update(JSON.stringify(
+        listedByName.map(({ name, inputSchema }) => ({ name, inputSchema })),
+      ))
+      .digest("hex");
+    assert.equal(inputSchemaSha256, EXPECTED_PUBLIC_INPUT_SCHEMA_SHA256);
     const readTool = tools.tools.find((tool) => tool.name === "get_ai_ppt_project_snapshot");
     assert.equal(readTool._meta?.ui?.resourceUri, undefined);
     const saveTool = tools.tools.find(
