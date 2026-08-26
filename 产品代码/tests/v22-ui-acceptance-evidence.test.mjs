@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   LOCAL_PREVIEW_DISCLAIMER,
+  assertAcceptanceEnvironment,
+  assertLongReviewMeasurement,
   atomicPublishAcceptanceReport,
   captureEvidencePair,
   completeAcceptanceRun,
@@ -11,6 +13,50 @@ import {
 
 const canvas = { x: 10, y: 20, width: 400, height: 200 };
 const viewport = { width: 760, height: 480 };
+
+const longReviewMeasurement = {
+  reviewType: "visual",
+  count: 120,
+  viewport: { width: 1000, height: 900 },
+  navigationToReadyMs: 1250.5,
+  finalObjectAccessMs: 220.25,
+  measurementMode: "local-playwright-measurement-only",
+  complete: true,
+  finalObjectPresent: true,
+  noHorizontalOverflow: true,
+  consoleErrorCount: 0,
+};
+
+test("long review evidence is closed, finite, successful, and measurement-only", () => {
+  assert.deepEqual(assertLongReviewMeasurement(longReviewMeasurement), longReviewMeasurement);
+  for (const invalid of [
+    { navigationToReadyMs: -1 },
+    { navigationToReadyMs: Number.POSITIVE_INFINITY },
+    { finalObjectAccessMs: "220" },
+    { measurementMode: "performance-passed" },
+    { count: 0 },
+    { viewport: { width: 0, height: 900 } },
+    { complete: false },
+    { finalObjectPresent: false },
+    { noHorizontalOverflow: false },
+    { consoleErrorCount: 1 },
+  ]) assert.throws(() => assertLongReviewMeasurement({ ...longReviewMeasurement, ...invalid }));
+});
+
+test("acceptance environment requires the exact non-empty runtime identity", () => {
+  const environment = {
+    nodeVersion: "v25.8.2",
+    chromiumVersion: "Chromium 140",
+    platform: "darwin",
+    release: "25.0.0",
+    architecture: "arm64",
+    runId: "run-1",
+  };
+  assert.deepEqual(assertAcceptanceEnvironment(environment), environment);
+  for (const field of Object.keys(environment)) {
+    assert.throws(() => assertAcceptanceEnvironment({ ...environment, [field]: "  " }));
+  }
+});
 
 test("candidate evidence is finite, bounded, normalized, and viewport-bound", () => {
   assert.deepEqual(computeCandidateRegion({

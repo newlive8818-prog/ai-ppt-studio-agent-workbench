@@ -115,6 +115,78 @@ function finiteViewport(value) {
   return { width: value.width, height: value.height };
 }
 
+function finiteNonNegativeDuration(value, label) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error(`${label} must be a finite non-negative number.`);
+  }
+  return value;
+}
+
+export function assertLongReviewMeasurement(value) {
+  const expectedFields = [
+    "reviewType", "count", "viewport", "navigationToReadyMs",
+    "finalObjectAccessMs", "measurementMode", "complete",
+    "finalObjectPresent", "noHorizontalOverflow", "consoleErrorCount",
+  ];
+  if (!value || typeof value !== "object" || Array.isArray(value)
+      || Object.keys(value).length !== expectedFields.length
+      || expectedFields.some((field) => !Object.hasOwn(value, field))) {
+    throw new Error("Long review measurement must be a closed evidence object.");
+  }
+  if (value.reviewType !== "content" && value.reviewType !== "visual") {
+    throw new Error("Long review type must be content or visual.");
+  }
+  if (!Number.isSafeInteger(value.count) || value.count < 1) {
+    throw new Error("Long review count must be a positive safe integer.");
+  }
+  const viewport = finiteViewport(value.viewport);
+  const navigationToReadyMs = finiteNonNegativeDuration(
+    value.navigationToReadyMs,
+    "Navigation-to-ready duration",
+  );
+  const finalObjectAccessMs = finiteNonNegativeDuration(
+    value.finalObjectAccessMs,
+    "Final-object access duration",
+  );
+  if (value.measurementMode !== "local-playwright-measurement-only") {
+    throw new Error("Long review timing must remain local Playwright measurement-only evidence.");
+  }
+  if (value.complete !== true || value.finalObjectPresent !== true
+      || value.noHorizontalOverflow !== true || value.consoleErrorCount !== 0) {
+    throw new Error("Long review measurement requires complete, overflow-free, error-free evidence.");
+  }
+  return {
+    reviewType: value.reviewType,
+    count: value.count,
+    viewport,
+    navigationToReadyMs,
+    finalObjectAccessMs,
+    measurementMode: value.measurementMode,
+    complete: true,
+    finalObjectPresent: true,
+    noHorizontalOverflow: true,
+    consoleErrorCount: 0,
+  };
+}
+
+export function assertAcceptanceEnvironment(value) {
+  const fields = [
+    "nodeVersion", "chromiumVersion", "platform", "release",
+    "architecture", "runId",
+  ];
+  if (!value || typeof value !== "object" || Array.isArray(value)
+      || Object.keys(value).length !== fields.length
+      || fields.some((field) => !Object.hasOwn(value, field))) {
+    throw new Error("Acceptance environment must be a closed runtime identity.");
+  }
+  return Object.fromEntries(fields.map((field) => {
+    if (typeof value[field] !== "string" || !value[field].trim()) {
+      throw new Error(`Acceptance environment ${field} must be a non-empty string.`);
+    }
+    return [field, value[field].trim()];
+  }));
+}
+
 export const CONTENT_REVIEW_SPATIAL_CONTRACT = Object.freeze({
   viewport: Object.freeze({ width: 1280, height: 720 }),
   maxHeaderHeight: 96,

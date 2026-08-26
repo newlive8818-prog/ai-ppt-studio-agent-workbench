@@ -142,6 +142,14 @@ test("browser runner consumes the fidelity contracts and scopes readability to e
   assert.match(runnerSource, /firstViewportScreenshot/);
   assert.doesNotMatch(runnerSource, /\.visual-contract-title-page code/);
   assert.match(runnerSource, /contract\.locator\(slideReadableSelector\)/);
+  for (const token of [
+    "assertLongReviewMeasurement",
+    "assertAcceptanceEnvironment",
+    "performance.now()",
+    "chromiumVersion",
+    "longReviewMeasurements",
+    "local-playwright-measurement-only",
+  ]) assert.ok(runnerSource.includes(token), `browser runner missing ${token}`);
 });
 
 test("browser runner covers mixed image and zero-image content reviews", () => {

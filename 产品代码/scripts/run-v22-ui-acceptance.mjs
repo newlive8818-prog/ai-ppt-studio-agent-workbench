@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -8,8 +9,10 @@ import {
   LOCAL_PREVIEW_DISCLAIMER,
   LOCAL_PREVIEW_EVIDENCE,
   PROTOTYPE_FIDELITY_REQUIREMENTS,
+  assertAcceptanceEnvironment,
   assertContentReviewSpatialFidelity,
   assertInteractionEvidenceCoverage,
+  assertLongReviewMeasurement,
   assertPrototypeFidelityCounts,
   atomicPublishAcceptanceReport,
   captureEvidencePair,
@@ -194,8 +197,17 @@ await writeFile(
 
 const { chromium } = await loadPlaywright();
 const browser = await chromium.launch({ headless: true });
+const acceptanceEnvironment = assertAcceptanceEnvironment({
+  nodeVersion: process.version,
+  chromiumVersion: browser.version(),
+  platform: os.platform(),
+  release: os.release(),
+  architecture: os.arch(),
+  runId,
+});
 const results = [];
 const interactionEvidence = [];
+const longReviewMeasurements = [];
 
 async function openPage(file, width, height = 900) {
   const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
@@ -688,13 +700,14 @@ async function checkSavedUnverifiedReceipt() {
 }
 
 async function checkLongReview(reviewType, count) {
+  const navigationStartedAt = performance.now();
   const { context, page, consoleErrors } = await openPage(`ai-ppt-${reviewType}-review-long-${count}.html`, 1000);
   try {
     if (reviewType === "visual") await page.getByRole("tab", { name: "完整视觉合同" }).click();
     const selector = reviewType === "content" ? "[data-content-review-vm-slide]" : ".visual-slide-contract";
     await page.waitForSelector(selector);
+    const navigationToReadyMs = performance.now() - navigationStartedAt;
     assert(await page.locator(selector).count() === count, `${reviewType}: incomplete long review`);
-    assert((await page.locator("body").textContent()).includes(`第 ${count} 页`), `${reviewType}: final long-review page missing`);
     if (reviewType === "content") {
       const textOnlyPages = page.locator(".content-review-vm-reading-grid--text-only");
       const visualPages = page.locator(".content-review-vm-reading-grid--with-visuals");
@@ -728,8 +741,29 @@ async function checkLongReview(reviewType, count) {
         `${reviewType}-${count}: near-viewport image did not load`,
       );
     }
-    assertNoOverflow(await metrics(page), `${reviewType}-long-${count}`);
+    const finalObjectStartedAt = performance.now();
+    const finalObject = page.locator(selector).last();
+    await finalObject.scrollIntoViewIfNeeded();
+    await finalObject.waitFor({ state: "visible" });
+    const finalObjectPresent = (await finalObject.textContent())?.includes(`第 ${count} 页`) === true;
+    const finalObjectAccessMs = performance.now() - finalObjectStartedAt;
+    assert(finalObjectPresent, `${reviewType}: final long-review page missing`);
+    const layout = await metrics(page);
+    assertNoOverflow(layout, `${reviewType}-long-${count}`);
     assert(consoleErrors.length === 0, `${reviewType}-long-${count}: ${consoleErrors.join(" | ")}`);
+    longReviewMeasurements.push(assertLongReviewMeasurement({
+      reviewType,
+      count,
+      viewport: { width: 1000, height: 900 },
+      navigationToReadyMs,
+      finalObjectAccessMs,
+      measurementMode: "local-playwright-measurement-only",
+      complete: true,
+      finalObjectPresent,
+      noHorizontalOverflow: layout.bodyScrollWidth <= layout.innerWidth + 1
+        && layout.documentScrollWidth <= layout.innerWidth + 1,
+      consoleErrorCount: consoleErrors.length,
+    }));
   } finally {
     await context.close();
   }
@@ -756,6 +790,17 @@ await completeAcceptanceRun({
       await browser.close();
     }
     assert(results.length === 10, `Expected 10 review results, received ${results.length}`);
+    const expectedLongReviewIdentities = new Set([
+      "content:10", "content:24", "content:60", "visual:120",
+    ]);
+    const measuredLongReviewIdentities = new Set(
+      longReviewMeasurements.map(({ reviewType, count }) => `${reviewType}:${count}`),
+    );
+    assert(
+      measuredLongReviewIdentities.size === expectedLongReviewIdentities.size
+      && [...expectedLongReviewIdentities].every((identity) => measuredLongReviewIdentities.has(identity)),
+      `Incomplete long-review measurement identities: ${JSON.stringify([...measuredLongReviewIdentities])}`,
+    );
     assertInteractionEvidenceCoverage(interactionEvidence);
     return {
       ok: true,
@@ -764,8 +809,10 @@ await completeAcceptanceRun({
       surfaces: ["content-review", "visual-review"],
       previewEvidence: { ...LOCAL_PREVIEW_EVIDENCE },
       disclaimer: LOCAL_PREVIEW_DISCLAIMER,
+      acceptanceEnvironment,
       seed,
       results,
+      longReviewMeasurements,
       interactionEvidence,
     };
   },
