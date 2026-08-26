@@ -215,19 +215,20 @@ it("locates the first page without a saved current decision without invoking a w
   const initial = pageViewModel();
   const viewModel = {
     ...initial,
-    progress: { completed: 1, total: 2, remaining: 1, unsaved: 0 },
+    progress: { completed: 1, total: 2, remaining: 1, unsaved: 1 },
     slides: initial.slides.map((slide) => slide.slideId === "S01" ? {
       ...slide,
       savedDecision: savedDecision(slide.slideId, slide.order, slide.neutralTitle),
-      localDraftState: { decision: "approved" as const, comment: "", dirty: false },
+      localDraftState: { decision: "modify" as const, comment: "保留未保存修改。", dirty: true },
     } : slide),
   } satisfies ContentReviewPageViewModel;
   const actions = actionProps();
+  const hostCall = vi.fn();
 
   render(
     <ContentReviewViewModelSurface
       viewModel={viewModel}
-      bridge={bridge()}
+      bridge={bridge(hostCall)}
       projectRoot="/managed/project"
       {...actions}
     />,
@@ -236,8 +237,11 @@ it("locates the first page without a saved current decision without invoking a w
   fireEvent.click(screen.getByRole("button", { name: "定位下一页未判断" }));
 
   expect(scrollIntoView).toHaveBeenCalledTimes(1);
-  expect(scrollIntoView.mock.instances[0]).toBe(document.getElementById("content-vm-S02"));
+  expect(scrollIntoView.mock.instances[0]).toBe(document.getElementById("content-vm-S01"));
   expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+  expect(hostCall).not.toHaveBeenCalled();
+  expect(actions.onDecisionChange).not.toHaveBeenCalled();
+  expect(actions.onCommentChange).not.toHaveBeenCalled();
   expect(actions.onSavePageDecision).not.toHaveBeenCalled();
   expect(actions.onSubmitReviewBatch).not.toHaveBeenCalled();
 });

@@ -26,7 +26,9 @@ describe("accepted content review ViewModel responsive contract", () => {
   });
 
   it("keeps perceptible hover and active feedback on decision controls", () => {
-    expect(css).toMatch(/\.page-decision-option:hover\s*\{[^}]*border-color:[^}]*background:/s);
-    expect(css).toMatch(/\.page-decision-option:active\s*\{[^}]*transform:\s*translateY\(1px\)/s);
+    expect(css).toMatch(/\.page-decision-option:not\(:has\(input:disabled\)\):hover\s*\{[^}]*border-color:[^}]*background:/s);
+    expect(css).toMatch(/\.page-decision-option:not\(:has\(input:disabled\)\):active\s*\{[^}]*transform:\s*translateY\(1px\)/s);
+    expect(css).toMatch(/\.page-decision-option:has\(input:disabled\)\s*\{[^}]*cursor:\s*not-allowed[^}]*opacity:/s);
+    expect(css).not.toMatch(/\.page-decision-option:(?:hover|active)\s*\{/s);
   });
 });
