@@ -229,6 +229,17 @@ const visualLineageMutations: Array<[string, VisualLineageMutation]> = [
   }],
 ];
 
+function expectVisualReviewPage() {
+  expect(screen.getByRole("tab", { name: "3 页锚点成果" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "完整视觉合同" })).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+}
+
+function expectContentReviewPage() {
+  expect(screen.getByRole("heading", { name: "p1" })).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+}
+
 describe("on-demand professional-review routing", () => {
   it("routes content-full-deck through the accepted ViewModel surface without legacy backend modules", () => {
     const content = contentReviewSurface();
@@ -346,6 +357,101 @@ describe("on-demand professional-review routing", () => {
     expect(
       screen.queryByRole("navigation", { name: "五空间导航" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders a ready notify-only visual session while host notification is pending", () => {
+    const visual = visualReviewSurface();
+    visual.review.review_session.open_policy = "notify-only";
+    visual.review.review_session.host_notification_status = "pending";
+
+    render(<ReviewSurfaceRouter data={visual} bridge={bridge} />);
+
+    expectVisualReviewPage();
+  });
+
+  it("renders a ready notify-only content session while host notification is pending", () => {
+    const content = contentReviewSurface();
+    content.review.review_session.open_policy = "notify-only";
+    content.review.review_session.host_notification_status = "pending";
+
+    render(<ReviewSurfaceRouter data={content} bridge={bridge} />);
+
+    expectContentReviewPage();
+  });
+
+  it("renders a ready foreground visual session while host opening is pending", () => {
+    const visual = visualReviewSurface();
+    visual.review.review_session.host_open_status = "pending";
+
+    render(<ReviewSurfaceRouter data={visual} bridge={bridge} />);
+
+    expectVisualReviewPage();
+  });
+
+  it.each([
+    ["host open unavailable", (data: VisualReviewSurfaceData) => {
+      data.review.review_session.host_open_status = "unavailable";
+    }],
+    ["host notification unavailable", (data: VisualReviewSurfaceData) => {
+      data.review.review_session.host_notification_status = "unavailable";
+    }],
+    ["AI receipt rejected", (data: VisualReviewSurfaceData) => {
+      data.review.review_session.ai_receipt_status = "rejected";
+    }],
+    ["AI receipt unverified", (data: VisualReviewSurfaceData) => {
+      data.review.review_session.ai_receipt_status = "unverified";
+    }],
+  ] as Array<[string, (data: VisualReviewSurfaceData) => void]>) (
+    "renders a visual review for authoritative %s status",
+    (_label, mutate) => {
+      const visual = visualReviewSurface();
+      mutate(visual);
+
+      render(<ReviewSurfaceRouter data={visual} bridge={bridge} />);
+
+      expectVisualReviewPage();
+    },
+  );
+
+  it.each([
+    ["host_open_status", "opening"],
+    ["host_notification_status", "queued"],
+    ["ai_receipt_status", "failed"],
+  ])("rejects unknown ReviewSession %s value", (field, status) => {
+    const visual = visualReviewSurface();
+    visual.review.review_session[field] = status;
+
+    render(<ReviewSurfaceRouter data={visual} bridge={bridge} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/审核数据无效.*重新打开/);
+  });
+
+  it("rejects opened host status without its success receipt", () => {
+    const visual = visualReviewSurface();
+    visual.review.review_session.host_open_status = "opened";
+    visual.review.review_session.last_opened_at = "2026-08-15T00:01:00Z";
+
+    render(<ReviewSurfaceRouter data={visual} bridge={bridge} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/审核数据无效.*重新打开/);
+  });
+
+  it("rejects sent notification status without its success receipt", () => {
+    const visual = visualReviewSurface();
+    visual.review.review_session.host_notification_status = "sent";
+
+    render(<ReviewSurfaceRouter data={visual} bridge={bridge} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/审核数据无效.*重新打开/);
+  });
+
+  it("rejects received AI status without its success receipt", () => {
+    const visual = visualReviewSurface();
+    visual.review.review_session.ai_receipt_status = "received";
+
+    render(<ReviewSurfaceRouter data={visual} bridge={bridge} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/审核数据无效.*重新打开/);
   });
 
   it("accepts the closed Python anchor identity", () => {

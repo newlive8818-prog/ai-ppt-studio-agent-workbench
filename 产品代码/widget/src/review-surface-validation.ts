@@ -182,10 +182,10 @@ function validateSession(
     || value.revision > identity.authoritativeRevision
     || !["ready", "opened", "submitted", "superseded"].includes(String(value.status))
     || !["foreground-if-waiting", "notify-only"].includes(String(value.open_policy))
-    || !["not-requested", "opened", "failed"].includes(String(value.host_open_status))
+    || !["not-requested", "pending", "opened", "failed", "unavailable"].includes(String(value.host_open_status))
     || value.persistence_status !== "saved"
-    || !["not-requested", "sent", "failed"].includes(String(value.host_notification_status))
-    || !["pending", "received", "failed"].includes(String(value.ai_receipt_status))
+    || !["not-requested", "pending", "sent", "failed", "unavailable"].includes(String(value.host_notification_status))
+    || !["pending", "received", "rejected", "unverified"].includes(String(value.ai_receipt_status))
     || !isTimestamp(value.created_at)
     || !isTimestampOrNull(value.last_opened_at)
     || !isTimestampOrNull(value.submitted_at)
