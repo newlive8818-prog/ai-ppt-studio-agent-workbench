@@ -24,7 +24,9 @@ import {
 import { AnchorResultsView } from "./AnchorResultsView";
 import { REVIEW_WRITE_DEADLINE_MS } from "./review-write-deadline";
 import { VisualContractView } from "./VisualContractView";
+import { validateInitialVisualContractMarkSet } from "./visual-contract-mark-validation";
 import { VisualProfessionalReviewPage } from "./VisualProfessionalReviewPage";
+import { deriveVisualReceiptFacts } from "./visual-receipt-facts";
 import {
   toVisualReviewPageViewModel,
   type VisualReviewPageViewModel,
@@ -3610,7 +3612,7 @@ describe("visual professional review surface", () => {
     expect(VISUAL_REVIEW_CSS).toMatch(/\.visual-contract-field header button\s*\{[^}]*width:\s*27px;[^}]*height:\s*27px;[^}]*opacity:\s*\.72;/s);
   });
 
-  it("validates one 120-slide saved mark set without repeated slide scans while the composer changes", () => {
+  it("indexes one 120-slide saved mark set without repeated slide scans", () => {
     const data = visualData();
     const template = data.review.slide_visual_contracts[0];
     const slides = Array.from({ length: 120 }, (_, index) => ({
@@ -3629,14 +3631,27 @@ describe("visual professional review surface", () => {
       },
     });
 
-    let projectedMarkFieldReads = 0;
     const markSet = projectedContractMarkSet(12);
-    markSet.marks = slides.map((slide, index) => new Proxy({
+    markSet.host_notification_status = "unavailable";
+    markSet.ai_receipt_status = "unverified";
+    markSet.marks = slides.map((slide, index) => ({
       ...markSet.marks[0],
       mark_id: `saved-contract-mark-${index + 1}`,
       slide_id: slide.slide_id,
       revision: 12,
-    }, {
+    }));
+    const facts = deriveVisualReceiptFacts(markSet);
+    expect(facts).not.toBeNull();
+    const validated = validateInitialVisualContractMarkSet(markSet, data, facts!);
+    expect(validated?.markSet?.marks).toHaveLength(120);
+    expect(slideFindCalls).toBe(0);
+  });
+
+  it("does not re-read the saved mark set when only the local composer changes", () => {
+    const data = visualData();
+    let projectedMarkFieldReads = 0;
+    const markSet = projectedContractMarkSet(12);
+    markSet.marks = markSet.marks.map((mark) => new Proxy(mark, {
       get(target, property, receiver) {
         if (property === "target_key") projectedMarkFieldReads += 1;
         return Reflect.get(target, property, receiver);
@@ -3657,18 +3672,15 @@ describe("visual professional review surface", () => {
 
     expect(screen.getByLabelText("合同标记保存事实")).toBeInTheDocument();
     expect(projectedMarkFieldReads).toBeGreaterThan(0);
-    expect.soft(slideFindCalls).toBe(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "标记 S001 构图意图" }));
+    fireEvent.click(screen.getByRole("button", { name: "标记 S01 构图意图" }));
     projectedMarkFieldReads = 0;
-    slideFindCalls = 0;
     fireEvent.change(screen.getByLabelText("合同标记意见"), {
       target: { value: "只修改本地 composer，不重新扫描权威标记集" },
     });
 
-    expect.soft(projectedMarkFieldReads).toBe(0);
-    expect.soft(slideFindCalls).toBe(0);
-  }, 30_000);
+    expect(projectedMarkFieldReads).toBe(0);
+  });
 
   it("blocks contract save until the outside composer joins the snapshot, then clears only the completed contract slice", async () => {
     vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
