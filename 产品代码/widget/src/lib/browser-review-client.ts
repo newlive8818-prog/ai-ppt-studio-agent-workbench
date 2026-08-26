@@ -339,11 +339,25 @@ export function createBrowserReviewClient(
         );
         if (!openReceipt) throw invalidConnectionError();
         if (!isWritableRevision(openReceipt.snapshotRevision)) throw invalidRevisionError();
+        const refreshedResponse = await connectionFetch("/api/review");
+        requireCurrentConnection(attempt.generation);
+        const refreshed = validateReviewConnectionEnvelope(
+          await jsonOrError(refreshedResponse),
+        );
+        if (
+          !refreshed
+          || refreshed.projectRoot !== payload.projectRoot
+          || refreshed.review.review_type !== payload.review.review_type
+          || refreshed.review.source_version !== payload.review.source_version
+          || refreshed.bridgeSessionId !== payload.bridgeSessionId
+          || refreshed.expectedRevision !== openReceipt.snapshotRevision
+          || refreshed.review.review_session_id !== payload.review.review_session_id
+        ) throw invalidConnectionError();
         const connected = validateReviewSurfaceData({
           surface: "review" as const,
-          selectedProjectRoot: payload.projectRoot,
+          selectedProjectRoot: refreshed.projectRoot,
           snapshotRevision: openReceipt.snapshotRevision,
-          review: payload.review,
+          review: refreshed.review,
         });
         if (!connected) throw invalidConnectionError();
         requireCurrentConnection(attempt.generation);
