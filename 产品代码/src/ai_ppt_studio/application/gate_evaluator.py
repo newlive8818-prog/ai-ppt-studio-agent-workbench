@@ -23,6 +23,18 @@ from ai_ppt_studio.application.artifact_guards import (
     VisualReviewEvidenceError,
     require_visual_review_target_evidence,
 )
+from ai_ppt_studio.application.review_session_service import (
+    authoritative_target_publication_revision,
+)
+from ai_ppt_studio.domains.review.contracts import validate_review_session
+from ai_ppt_studio.domains.content.page_decisions import validate_page_decision
+from ai_ppt_studio.domains.content.review_batches import (
+    validate_content_review_batch,
+)
+from ai_ppt_studio.domains.content.contracts import (
+    validate_content_hard_gate_record,
+    validate_reading_deck_blueprint,
+)
 from ai_ppt_studio.kernel.gates import GateMutation, issue_gate_mutation
 from ai_ppt_studio.kernel.references import ArtifactReference
 from ai_ppt_studio.kernel.transactions import ProjectKernel
@@ -244,9 +256,24 @@ class GateEvaluator:
         """Validate the exact all-approved content lineage used by G0."""
 
         state = self.kernel.load()
-        acceptance = self._resolve(acceptance_ref, "content-acceptance")["payload"]
-        blueprint = self._resolve(blueprint_ref, "reading-deck-blueprint")["payload"]
-        batch = self._resolve(review_batch_ref, "content-review-batch")["payload"]
+        acceptance = self._resolve(acceptance_ref, "content-acceptance")[
+            "payload"
+        ]
+        try:
+            blueprint = validate_reading_deck_blueprint(
+                self._resolve(blueprint_ref, "reading-deck-blueprint")[
+                    "payload"
+                ]
+            )
+            batch = validate_content_review_batch(
+                self._resolve(review_batch_ref, "content-review-batch")[
+                    "payload"
+                ]
+            )
+        except ContractValidationError as error:
+            raise GateBlockedError(
+                "G0", ("content-review-evidence-malformed",)
+            ) from error
         blockers = []
         if state.gate_status.get("G0") != required_gate_status:
             blockers.append(f"content-review-not-{required_gate_status}")
@@ -256,8 +283,19 @@ class GateEvaluator:
             blockers.append("reading-blueprint-not-current")
         if state.artifact_heads.get("content/review-batch") != review_batch_ref:
             blockers.append("content-review-batch-not-current")
+        acceptance_fields = {
+            "source_version",
+            "reading_blueprint_ref",
+            "evidence_gate_ref",
+            "presales_reading_gate_ref",
+            "overall_result",
+            "accepted_at",
+        }
         if (
-            acceptance.get("overall_result") != "passed"
+            set(acceptance) != acceptance_fields
+            or not isinstance(acceptance.get("accepted_at"), str)
+            or not acceptance.get("accepted_at", "").strip()
+            or acceptance.get("overall_result") != "passed"
             or acceptance.get("reading_blueprint_ref") != blueprint_ref
             or acceptance.get("source_version") != blueprint.get("source_version")
             or acceptance.get("evidence_gate_ref")
@@ -266,30 +304,164 @@ class GateEvaluator:
             != state.artifact_heads.get("content/gate/presales-reading")
         ):
             blockers.append("content-acceptance-lineage-mismatch")
+        blueprint_hash = ArtifactReference.parse(blueprint_ref).sha256
+        gate_specs = (
+            (
+                "evidence",
+                state.artifact_heads.get("content/gate/evidence", ""),
+            ),
+            (
+                "presales-reading",
+                state.artifact_heads.get(
+                    "content/gate/presales-reading", ""
+                ),
+            ),
+        )
+        for gate_type, gate_ref in gate_specs:
+            try:
+                gate = validate_content_hard_gate_record(
+                    self._resolve(
+                        gate_ref, "content-hard-gate-record"
+                    )["payload"]
+                )
+            except (ContractValidationError, GateBlockedError):
+                blockers.append(f"content-{gate_type}-gate-not-current")
+                continue
+            if (
+                gate["gate_type"] != gate_type
+                or gate["overall_result"] != "passed"
+                or gate["input_source_version"]
+                != blueprint["source_version"]
+                or gate["input_hash"] != blueprint_hash
+            ):
+                blockers.append(f"content-{gate_type}-gate-not-current")
         if (
-            batch.get("status") != "submitted"
+            batch.get("project_id") != state.project_id
+            or batch.get("status") != "submitted"
             or not batch.get("immutable_after_submit")
             or batch.get("reading_blueprint_ref") != blueprint_ref
             or batch.get("source_version") != blueprint.get("source_version")
         ):
             blockers.append("content-review-batch-not-current")
-        slide_ids = [slide.get("slide_id") for slide in blueprint.get("slides") or []]
+        session_ref = state.review_session_ref("content-full-deck")
+        if not session_ref:
+            blockers.append("content-review-session-not-current")
+            session = {}
+        else:
+            session = validate_review_session(
+                self._resolve(session_ref, "review-session")["payload"],
+                trusted_receipts=True,
+            )
+            authoritative_revision = authoritative_target_publication_revision(
+                self.kernel, state, "content-full-deck", blueprint_ref
+            )
+            if (
+                session.get("project_id") != state.project_id
+                or session.get("review_type") != "content-full-deck"
+                or session.get("review_session_id")
+                != batch.get("review_session_id")
+                or session.get("target_artifact_ref") != blueprint_ref
+                or session.get("source_version")
+                != blueprint.get("source_version")
+                or session.get("revision") != authoritative_revision
+                or session.get("status") != "submitted"
+            ):
+                blockers.append("content-review-session-not-current")
+        slide_ids = [
+            slide.get("slide_id")
+            for slide in blueprint.get("slides") or []
+        ]
         decision_refs = batch.get("decision_refs") or []
-        if batch.get("slide_ids") != slide_ids or len(decision_refs) != len(slide_ids):
+        expected_counts = {
+            "approved": len(slide_ids),
+            "modify": 0,
+            "evidence": 0,
+            "merge-or-delete": 0,
+        }
+        if (
+            batch.get("slide_ids") != slide_ids
+            or len(decision_refs) != len(slide_ids)
+            or batch.get("counts") != expected_counts
+        ):
             blockers.append("content-review-decisions-incomplete")
         else:
-            for slide_id, decision_ref in zip(slide_ids, decision_refs, strict=True):
-                decision = self._resolve(decision_ref, "content-page-decision")["payload"]
+            for slide, decision_ref in zip(
+                blueprint.get("slides") or [], decision_refs, strict=True
+            ):
+                slide_id = slide.get("slide_id")
                 if (
-                    decision.get("slide_id") != slide_id
+                    state.artifact_heads.get(
+                        f"content/review/decision/{slide_id}"
+                    )
+                    != decision_ref
+                ):
+                    blockers.append(
+                        f"content-page-decision-not-current:{slide_id}"
+                    )
+                decision = validate_page_decision(
+                    self._resolve(decision_ref, "content-page-decision")[
+                        "payload"
+                    ]
+                )
+                if (
+                    decision.get("project_id") != state.project_id
+                    or decision.get("review_session_id")
+                    != session.get("review_session_id")
+                    or decision.get("slide_id") != slide_id
+                    or decision.get("slide_order") != slide.get("order")
+                    or decision.get("slide_title_snapshot")
+                    != slide.get("neutral_title")
                     or decision.get("decision") != "approved"
                     or decision.get("reading_blueprint_ref") != blueprint_ref
                     or decision.get("source_version") != blueprint.get("source_version")
+                    or decision.get("status") != "completed"
                 ):
                     blockers.append(f"content-page-not-approved:{slide_id}")
+                lineage_identity = {
+                    "project_id": state.project_id,
+                    "review_session_id": session.get("review_session_id"),
+                    "source_version": blueprint.get("source_version"),
+                    "reading_blueprint_ref": blueprint_ref,
+                    "slide_id": slide_id,
+                    "slide_order": slide.get("order"),
+                    "slide_title_snapshot": slide.get("neutral_title"),
+                    "status": "completed",
+                }
+                if not self._content_decision_lineage_matches(
+                    decision_ref, lineage_identity
+                ):
+                    blockers.append(
+                        f"content-page-decision-lineage-stale:{slide_id}"
+                    )
         if blockers:
             raise GateBlockedError("G0", tuple(sorted(set(blockers))))
         return tuple(decision_refs)
+
+    def _content_decision_lineage_matches(
+        self,
+        decision_ref: str,
+        expected_identity: dict[str, Any],
+    ) -> bool:
+        seen: set[str] = set()
+        while decision_ref:
+            if decision_ref in seen:
+                return False
+            seen.add(decision_ref)
+            try:
+                decision = validate_page_decision(
+                    self._resolve(
+                        decision_ref, "content-page-decision"
+                    )["payload"]
+                )
+            except (ContractValidationError, KeyError, TypeError, ValueError):
+                return False
+            if any(
+                decision.get(field) != value
+                for field, value in expected_identity.items()
+            ):
+                return False
+            decision_ref = decision["supersedes_decision_ref"]
+        return bool(seen)
 
     def pass_g1(self) -> GateMutation:
         state = self.kernel.load()
