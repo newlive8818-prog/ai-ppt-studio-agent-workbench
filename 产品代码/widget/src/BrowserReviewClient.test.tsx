@@ -213,6 +213,23 @@ function reviewEnvelope(review: ReturnType<typeof contentReviewProjection> | Ret
   };
 }
 
+function refreshedReviewResponse(
+  review: ReturnType<typeof contentReviewProjection> | ReturnType<typeof visualReviewProjection>,
+  expectedRevision = 8,
+) {
+  const refreshed = structuredClone(review);
+  Object.assign(refreshed.review_session, {
+    status: "opened",
+    host_open_status: "opened",
+    last_opened_at: "2026-08-15T00:00:01Z",
+    host_open_receipt_ref: `artifact://review-host-open-receipt/${"a".repeat(64)}`,
+  });
+  return new Response(JSON.stringify(reviewEnvelope(refreshed, expectedRevision)), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 function visualFeedback(revision = 8) {
   return {
     feedback_id: "f1",
@@ -379,6 +396,9 @@ describe("Browser Review loopback client", () => {
           reviewEnvelope(contentReviewProjection(), 9),
         ), { status: 200, headers: { "Content-Type": "application/json" } }));
       }
+      if (fetchCount === 4) {
+        return Promise.resolve(refreshedReviewResponse(contentReviewProjection(), 10));
+      }
       return Promise.resolve(new Response(JSON.stringify({
         ok: true,
         hostOpenStatus: "opened",
@@ -406,7 +426,7 @@ describe("Browser Review loopback client", () => {
     ), { status: 200, headers: { "Content-Type": "application/json" } }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(firstData).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(secondData).toHaveBeenCalledOnce();
   });
 
@@ -421,7 +441,8 @@ describe("Browser Review loopback client", () => {
         ok: true,
         hostOpenStatus: "opened",
         snapshotRevision: 8,
-      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(contentReviewProjection()));
     const client = createBrowserReviewClient();
     const received = vi.fn();
 
@@ -451,6 +472,46 @@ describe("Browser Review loopback client", () => {
       }),
       signal: expect.any(AbortSignal),
     });
+  });
+
+  it("refreshes the authoritative projection after host-open advances the revision", async () => {
+    window.history.replaceState(null, "", "/#token=short-lived-token");
+    const refreshedProjection: any = structuredClone(contentReviewProjection());
+    Object.assign(refreshedProjection.review_session, {
+      status: "opened",
+      host_open_status: "opened",
+      last_opened_at: "2026-08-15T00:00:01Z",
+      host_open_receipt_ref: `artifact://review-host-open-receipt/${"a".repeat(64)}`,
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify(reviewEnvelope(contentReviewProjection(), 7)), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ok: true,
+        hostOpenStatus: "opened",
+        snapshotRevision: 8,
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(reviewEnvelope(refreshedProjection, 8)), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+    const received = vi.fn();
+
+    await createBrowserReviewClient().connect(received);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/review", {
+      headers: { authorization: "Bearer short-lived-token" },
+      signal: expect.any(AbortSignal),
+    });
+    expect(received).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshotRevision: 8,
+        review: expect.objectContaining({ authoritative_revision: 8 }),
+      }),
+    );
   });
 
   it.each([
@@ -606,6 +667,7 @@ describe("Browser Review loopback client", () => {
     projection.contract_review_marks.ai_receipt_status = "received";
     projection.anchor_feedback_batch.host_notification_status = "sent";
     projection.anchor_feedback_batch.ai_receipt_status = "received";
+    const refreshed = refreshedReviewResponse(projection);
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify(reviewEnvelope(projection)), {
         status: 200,
@@ -615,12 +677,13 @@ describe("Browser Review loopback client", () => {
         ok: true,
         hostOpenStatus: "opened",
         snapshotRevision: 8,
-      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshed);
     const onData = vi.fn();
 
     await createBrowserReviewClient().connect(onData);
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(onData).toHaveBeenCalledOnce();
   });
 
@@ -655,12 +718,13 @@ describe("Browser Review loopback client", () => {
         ok: true,
         hostOpenStatus: "opened",
         snapshotRevision: 8,
-      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(projection));
     const onData = vi.fn();
 
     await createBrowserReviewClient().connect(onData);
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     const installed = onData.mock.calls[0][0];
     expect(installed.review.anchor_feedback_batch).toMatchObject({
       host_notification_status: "sent",
@@ -751,6 +815,7 @@ describe("Browser Review loopback client", () => {
         hostOpenStatus: "opened",
         snapshotRevision: 8,
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(visualReviewProjection()))
       .mockResolvedValueOnce(
         new Response(JSON.stringify(automaticHostReceipt), {
           status: 200,
@@ -775,7 +840,7 @@ describe("Browser Review loopback client", () => {
     expect(result.mark_set_ref).toBe(VISUAL_MARK_SET_REF);
     expect(result.mark_set.host_notification_status).toBe("sent");
     expect(result.mark_set.ai_receipt_status).toBe("unverified");
-    expect(fetchMock.mock.calls[2][0]).toBe("/api/visual/marks");
+    expect(fetchMock.mock.calls[3][0]).toBe("/api/visual/marks");
   });
 
   it("fails closed when a direct visual-contract save claims an AI receipt", async () => {
@@ -796,6 +861,7 @@ describe("Browser Review loopback client", () => {
         hostOpenStatus: "opened",
         snapshotRevision: 8,
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(visualReviewProjection()))
       .mockResolvedValueOnce(new Response(JSON.stringify(spoofedAiReceipt), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -823,6 +889,9 @@ describe("Browser Review loopback client", () => {
         hostOpenStatus: "opened",
         snapshotRevision: 8,
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(
+        visualReviewProjection(initialVisualMarkSet(), initialVisualAnchorBatch()),
+      ))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         ok: true,
         savedArtifactRef: VISUAL_ANCHOR_BATCH_REF,
@@ -851,7 +920,7 @@ describe("Browser Review loopback client", () => {
       hostNotificationStatus: "sent",
       snapshotRevision: 9,
     });
-    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/host-notification", {
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/host-notification", {
       method: "POST",
       headers: { authorization: "Bearer short-lived-token", "content-type": "application/json" },
       signal: controller.signal,
@@ -876,8 +945,8 @@ describe("Browser Review loopback client", () => {
       aiReceiptStatus: "received",
       snapshotRevision: 10,
     });
-    expect(fetchMock.mock.calls[3][0]).toBe("/api/ai-receipt");
-    expect(JSON.parse(String(fetchMock.mock.calls[3][1]?.body))).toEqual({
+    expect(fetchMock.mock.calls[4][0]).toBe("/api/ai-receipt");
+    expect(JSON.parse(String(fetchMock.mock.calls[4][1]?.body))).toEqual({
       expectedRevision: 9,
       reviewSessionId: "visual-session-1",
       sourceVersion: "visual-v1",
@@ -897,6 +966,9 @@ describe("Browser Review loopback client", () => {
         hostOpenStatus: "opened",
         snapshotRevision: 8,
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(
+        visualReviewProjection(null, initialVisualAnchorBatch()),
+      ))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         ok: true,
         savedArtifactRef: VISUAL_ANCHOR_BATCH_REF,
@@ -925,6 +997,7 @@ describe("Browser Review loopback client", () => {
         hostOpenStatus: "opened",
         snapshotRevision: 8,
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(visualReviewProjection()))
       .mockImplementationOnce((_url, init) => new Promise((_resolve, reject) => {
         const signal = init?.signal;
         signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
@@ -942,7 +1015,7 @@ describe("Browser Review loopback client", () => {
     }, { signal: controller.signal });
     await Promise.resolve();
 
-    expect(fetchMock.mock.calls[2][1]).toEqual(expect.objectContaining({ signal: controller.signal }));
+    expect(fetchMock.mock.calls[3][1]).toEqual(expect.objectContaining({ signal: controller.signal }));
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
@@ -955,7 +1028,8 @@ describe("Browser Review loopback client", () => {
         ok: true,
         hostOpenStatus: "opened",
         snapshotRevision: 8,
-      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(visualReviewProjection()));
     const client = createBrowserReviewClient();
     await client.connect();
     const base = {
@@ -974,7 +1048,7 @@ describe("Browser Review loopback client", () => {
       .rejects.toThrow("outside the connected review scope");
     await expect(client.callTool("save_visual_contract_review_marks", { ...base, expectedRevision: 7 }))
       .rejects.toThrow(/does not match current revision 8/);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("fails a visual connection closed on an unsafe host-open revision before any marks POST", async () => {
@@ -1072,6 +1146,7 @@ describe("Browser Review loopback client", () => {
         hostOpenStatus: "opened",
         snapshotRevision: 8,
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(visualReviewProjection()))
       .mockResolvedValueOnce(new Response(JSON.stringify(invalid), { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify(visualMarkResponse()), { status: 200, headers: { "Content-Type": "application/json" } }));
     const client = createBrowserReviewClient();
@@ -1089,12 +1164,12 @@ describe("Browser Review loopback client", () => {
       (error: unknown) => error,
     );
     expect(failure).toMatchObject({ code: "VISUAL_CONTRACT_MARK_RESULT_UNCLOSED" });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
 
     const result = await client.callTool("save_visual_contract_review_marks", input);
     expect(result.snapshot.revision).toBe(9);
     await expect(client.callTool("save_visual_contract_review_marks", input)).rejects.toThrow(/revision/i);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
   it("submits visual anchor feedback through its own scoped route", async () => {
@@ -1106,6 +1181,7 @@ describe("Browser Review loopback client", () => {
         hostOpenStatus: "opened",
         snapshotRevision: 8,
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(visualReviewProjection()))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         ok: true,
         snapshotRevision: 10,
@@ -1128,7 +1204,7 @@ describe("Browser Review loopback client", () => {
     expect(result.snapshot.revision).toBe(10);
     expect(result.batch.host_notification_status).toBe("sent");
     expect(result.batch.ai_receipt_status).toBe("unverified");
-    expect(fetchMock.mock.calls[2][0]).toBe("/api/visual/anchor-feedback");
+    expect(fetchMock.mock.calls[3][0]).toBe("/api/visual/anchor-feedback");
   });
 
   it("does not advance its revision when a real visual feedback response is malformed", async () => {
@@ -1140,6 +1216,7 @@ describe("Browser Review loopback client", () => {
         hostOpenStatus: "opened",
         snapshotRevision: 8,
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(visualReviewProjection()))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         ok: true,
         snapshotRevision: 9,
@@ -1172,7 +1249,7 @@ describe("Browser Review loopback client", () => {
     expect(result.snapshot.revision).toBe(9);
     await expect(client.callTool("submit_visual_anchor_feedback_batch", input))
       .rejects.toThrow(/revision/i);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
   it("does not advance its revision when a closed visual feedback response returns an unsafe next revision", async () => {
@@ -1184,6 +1261,7 @@ describe("Browser Review loopback client", () => {
         hostOpenStatus: "opened",
         snapshotRevision: 8,
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(visualReviewProjection()))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         ok: true,
         snapshotRevision: Number.MAX_SAFE_INTEGER + 1,
@@ -1215,12 +1293,12 @@ describe("Browser Review loopback client", () => {
       (error: unknown) => error,
     );
     expect(failure).toMatchObject({ code: "VISUAL_ANCHOR_FEEDBACK_RESULT_UNCLOSED" });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
 
     const result = await client.callTool("submit_visual_anchor_feedback_batch", input);
     expect(result.snapshot.revision).toBe(9);
     await expect(client.callTool("submit_visual_anchor_feedback_batch", input)).rejects.toThrow(/revision/i);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
   it("routes a content material asset through read_ai_ppt_project_asset", async () => {
@@ -1234,6 +1312,9 @@ describe("Browser Review loopback client", () => {
         hostOpenStatus: "opened",
         snapshotRevision: 8,
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(
+        contentReviewProjection("review-assets/content/S01-M01.png"),
+      ))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         ok: true,
         asset: {
@@ -1252,7 +1333,7 @@ describe("Browser Review loopback client", () => {
     });
 
     expect(result.asset.mimeType).toBe("image/png");
-    expect(fetchMock.mock.calls[2][0]).toBe(
+    expect(fetchMock.mock.calls[3][0]).toBe(
       "/api/asset?assetRef=review-assets%2Fcontent%2FS01-M01.png",
     );
   });
@@ -1269,7 +1350,8 @@ describe("Browser Review loopback client", () => {
         ok: true,
         hostOpenStatus: "opened",
         snapshotRevision: 8,
-      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(projection));
     for (const assetRef of assetRefs) {
       fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
         ok: true,
@@ -1287,7 +1369,7 @@ describe("Browser Review loopback client", () => {
       expect(result.asset.assetRef).toBe(assetRef);
     }
 
-    expect(fetchMock.mock.calls.slice(2).map(([url]) => url)).toEqual([
+    expect(fetchMock.mock.calls.slice(3).map(([url]) => url)).toEqual([
       "/api/asset?assetRef=renders%2FS01-current.png",
       "/api/asset?assetRef=renders%2FS01-previous.png",
     ]);
@@ -1301,7 +1383,8 @@ describe("Browser Review loopback client", () => {
         ok: true,
         hostOpenStatus: "opened",
         snapshotRevision: 8,
-      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(contentReviewProjection()));
     const client = createBrowserReviewClient();
     await client.connect();
 
@@ -1309,7 +1392,7 @@ describe("Browser Review loopback client", () => {
       projectRoot: "/another/project",
       assetRef: "review-assets/content/S01-M01.png",
     })).rejects.toThrow("outside the review scope");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("saves content decisions and submits the batch through separate scoped routes", async () => {
@@ -1321,6 +1404,7 @@ describe("Browser Review loopback client", () => {
         hostOpenStatus: "opened",
         snapshotRevision: 8,
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(contentReviewProjection()))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         ok: true,
         snapshotRevision: 9,
@@ -1345,8 +1429,8 @@ describe("Browser Review loopback client", () => {
     });
     expect(decision.snapshot.revision).toBe(9);
     expect(batch.snapshot.revision).toBe(10);
-    expect(fetchMock.mock.calls[2][0]).toBe("/api/content/decision");
-    expect(fetchMock.mock.calls[3][0]).toBe("/api/content/batch");
+    expect(fetchMock.mock.calls[3][0]).toBe("/api/content/decision");
+    expect(fetchMock.mock.calls[4][0]).toBe("/api/content/batch");
   });
 
   it("preserves the scoped ReviewSession expiry code when a content save is rejected", async () => {
@@ -1368,6 +1452,7 @@ describe("Browser Review loopback client", () => {
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
       )
+      .mockResolvedValueOnce(refreshedReviewResponse(contentReviewProjection()))
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -1406,6 +1491,7 @@ describe("Browser Review loopback client", () => {
         hostOpenStatus: "opened",
         snapshotRevision: 8,
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(refreshedReviewResponse(contentReviewProjection()))
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({

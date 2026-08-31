@@ -103,6 +103,38 @@ const review = {
   mark_set: { marks: [] },
 };
 
+function runtimeReviewSessionResponse({
+  projectRoot = "/runtime/project",
+  reviewType = "visual-professional",
+  reviewSessionId = "runtime-session",
+  sourceVersion = "runtime-source",
+  revision = 9,
+} = {}) {
+  return {
+    ok: true,
+    selected_project_root: projectRoot,
+    result: {
+      session_ref: "artifact://review-session/" + "a".repeat(64),
+      session: {
+        review_session_id: reviewSessionId,
+        review_type: reviewType,
+        source_version: sourceVersion,
+        revision,
+        status: "ready",
+        open_policy: "foreground-if-waiting",
+      },
+      snapshot: {
+        ...snapshot,
+        revision,
+        project: {
+          ...snapshot.project,
+          project_root: projectRoot,
+        },
+      },
+    },
+  };
+}
+
 async function connectedClient(options = {}) {
   const calls = [];
   const invokeBridge = async (request) => {
@@ -511,6 +543,228 @@ test("ReviewSession tools map source-bound requests and receipts to exact operat
         "artifact://visual-anchor-feedback-batch/" + "a".repeat(64),
       );
     }
+  } finally {
+    await client.close();
+  }
+});
+
+test("open_or_resume_review_session returns a Runtime-bound Agent Browser handoff", async () => {
+  const runtimeCalls = [];
+  let bridgeScope;
+  const runtimeResponse = runtimeReviewSessionResponse();
+  const { client } = await connectedClient({
+    invokeBridge: async (request) => {
+      runtimeCalls.push(request);
+      return runtimeResponse;
+    },
+    reviewBridgeFactory: (options) => {
+      bridgeScope = options;
+      return {
+        async start() {
+          return {
+            url: "http://127.0.0.1:43210/#token=scoped-token",
+            expiresAt: 123456,
+            bridgeSessionId: "bridge-session",
+          };
+        },
+        async stop() {},
+      };
+    },
+  });
+  try {
+    const result = await client.callTool({
+      name: "open_or_resume_review_session",
+      arguments: {
+        projectRoot: "/caller/project",
+        expectedRevision: 3,
+        reviewType: "content-full-deck",
+        targetArtifactRef: "artifact://reading-deck-blueprint/" + "b".repeat(64),
+        sourceVersion: "caller-source",
+        sourceRevision: 1,
+        openPolicy: "foreground-if-waiting",
+      },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent.status, "review-session-ready");
+    assert.equal(result.structuredContent.opened, false);
+    assert.equal(result.structuredContent.openMode, "agent-browser");
+    assert.equal(result.structuredContent.browserAction, "open-scoped-url");
+    assert.equal(
+      result.structuredContent.url,
+      "http://127.0.0.1:43210/#token=scoped-token",
+    );
+    assert.equal(result.structuredContent.bridgeSessionId, "bridge-session");
+    assert.deepEqual(
+      {
+        projectRoot: bridgeScope.projectRoot,
+        reviewType: bridgeScope.reviewType,
+        reviewSessionId: bridgeScope.reviewSessionId,
+        sourceVersion: bridgeScope.sourceVersion,
+        expectedRevision: bridgeScope.expectedRevision,
+      },
+      {
+        projectRoot: "/runtime/project",
+        reviewType: "visual-professional",
+        reviewSessionId: "runtime-session",
+        sourceVersion: "runtime-source",
+        expectedRevision: 9,
+      },
+    );
+    assert.equal(runtimeCalls.length, 1);
+    assert.equal(runtimeCalls[0].operation, "open-or-resume-review-session");
+  } finally {
+    await client.close();
+  }
+});
+
+test("open_or_resume_review_session uses a successful compatibility Browser adapter", async () => {
+  const openedUrls = [];
+  const { client } = await connectedClient({
+    invokeBridge: async () => runtimeReviewSessionResponse(),
+    browserSurfaceAdapter: {
+      canOpen: true,
+      async openUrl(url) {
+        openedUrls.push(url);
+        return { opened: true };
+      },
+    },
+    reviewBridgeFactory: () => ({
+      async start() {
+        return {
+          url: "http://127.0.0.1:43210/#token=adapter-token",
+          expiresAt: 123456,
+          bridgeSessionId: "adapter-bridge",
+        };
+      },
+      async stop() {},
+    }),
+  });
+  try {
+    const result = await client.callTool({
+      name: "open_or_resume_review_session",
+      arguments: {
+        projectRoot: "/caller/project",
+        expectedRevision: 3,
+        reviewType: "content-full-deck",
+        targetArtifactRef: "artifact://reading-deck-blueprint/" + "b".repeat(64),
+        sourceVersion: "caller-source",
+        sourceRevision: 1,
+        openPolicy: "foreground-if-waiting",
+      },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent.status, "opened");
+    assert.equal(result.structuredContent.opened, true);
+    assert.equal(result.structuredContent.openMode, "host-adapter");
+    assert.deepEqual(openedUrls, ["http://127.0.0.1:43210/#token=adapter-token"]);
+  } finally {
+    await client.close();
+  }
+});
+
+test("open_or_resume_review_session falls back to Agent Browser when the adapter cannot open", async () => {
+  const { client } = await connectedClient({
+    invokeBridge: async () => runtimeReviewSessionResponse(),
+    browserSurfaceAdapter: {
+      canOpen: true,
+      async openUrl() {
+        return { opened: false };
+      },
+    },
+    reviewBridgeFactory: () => ({
+      async start() {
+        return {
+          url: "http://127.0.0.1:43210/#token=fallback-token",
+          expiresAt: 123456,
+          bridgeSessionId: "fallback-bridge",
+        };
+      },
+      async stop() {},
+    }),
+  });
+  try {
+    const result = await client.callTool({
+      name: "open_or_resume_review_session",
+      arguments: {
+        projectRoot: "/caller/project",
+        expectedRevision: 3,
+        reviewType: "content-full-deck",
+        targetArtifactRef: "artifact://reading-deck-blueprint/" + "b".repeat(64),
+        sourceVersion: "caller-source",
+        sourceRevision: 1,
+        openPolicy: "foreground-if-waiting",
+      },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent.status, "review-session-ready");
+    assert.equal(result.structuredContent.opened, false);
+    assert.equal(result.structuredContent.openMode, "agent-browser");
+  } finally {
+    await client.close();
+  }
+});
+
+test("open_or_resume_review_session does not create a bridge after a stale Runtime result", async () => {
+  let factoryCalled = false;
+  const { client } = await connectedClient({
+    invokeBridge: async () => {
+      const error = new Error("requested review source is stale");
+      error.code = "REVIEW_SOURCE_STALE";
+      throw error;
+    },
+    reviewBridgeFactory: () => {
+      factoryCalled = true;
+      throw new Error("must not create a bridge");
+    },
+  });
+  try {
+    const result = await client.callTool({
+      name: "open_or_resume_review_session",
+      arguments: {
+        projectRoot: "/caller/project",
+        expectedRevision: 3,
+        reviewType: "content-full-deck",
+        targetArtifactRef: "artifact://reading-deck-blueprint/" + "b".repeat(64),
+        sourceVersion: "caller-source",
+        sourceRevision: 1,
+        openPolicy: "foreground-if-waiting",
+      },
+    });
+    assert.equal(result.isError, true);
+    assert.equal(result.structuredContent.error.code, "REVIEW_SOURCE_STALE");
+    assert.equal(factoryCalled, false);
+  } finally {
+    await client.close();
+  }
+});
+
+test("open_or_resume_review_session reports Review Bridge startup failure", async () => {
+  const { client } = await connectedClient({
+    invokeBridge: async () => runtimeReviewSessionResponse(),
+    reviewBridgeFactory: () => {
+      const error = new Error("loopback bridge unavailable");
+      error.code = "REVIEW_BRIDGE_UNAVAILABLE";
+      throw error;
+    },
+  });
+  try {
+    const result = await client.callTool({
+      name: "open_or_resume_review_session",
+      arguments: {
+        projectRoot: "/caller/project",
+        expectedRevision: 3,
+        reviewType: "content-full-deck",
+        targetArtifactRef: "artifact://reading-deck-blueprint/" + "b".repeat(64),
+        sourceVersion: "caller-source",
+        sourceRevision: 1,
+        openPolicy: "foreground-if-waiting",
+      },
+    });
+    assert.equal(result.isError, true);
+    assert.equal(
+      result.structuredContent.error.code,
+      "REVIEW_BRIDGE_UNAVAILABLE",
+    );
   } finally {
     await client.close();
   }

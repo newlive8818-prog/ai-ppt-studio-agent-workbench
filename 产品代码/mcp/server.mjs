@@ -10,6 +10,7 @@ import { z } from "zod";
 import { createOpenAIFormCompatibleTransport } from "./host-form-transport.mjs";
 import { readProjectAsset } from "./project-asset.mjs";
 import { invokePythonBridge } from "./runtime-bridge/python-runtime.mjs";
+import { createReviewBridge } from "./review-bridge.mjs";
 import {
   createHostConfirmationAuthority,
   HOST_CONFIRMATION_SECRET_ENV,
@@ -21,6 +22,7 @@ import { registerReviewTools } from "./tools/review-tools.mjs";
 import { registerVisualTools } from "./tools/visual-tools.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const BROWSER_REVIEW_HTML = path.join(ROOT, "widget", "dist", "index.html");
 const manifest = JSON.parse(
   readFileSync(path.join(ROOT, ".codex-plugin", "plugin.json"), "utf8"),
 );
@@ -324,6 +326,8 @@ export function createAiPptMcpServer(options = {}) {
       },
     }));
   const readProjectAssetFn = options.readProjectAsset || readProjectAsset;
+  const browserSurfaceAdapter = options.browserSurfaceAdapter || null;
+  const reviewBridgeFactory = options.reviewBridgeFactory || createReviewBridge;
   const confirmationVerifier = options.confirmationVerifier || null;
   const server = new McpServer(
     { name: manifest.name, version: manifest.version },
@@ -332,6 +336,169 @@ export function createAiPptMcpServer(options = {}) {
         "Use the revision-safe data tools for the managed AI PPT project. Codex chat is the only primary entry; professional review surfaces are opened on demand. Never edit state JSON directly and use Codex Presentations as the only PPTX route.",
     },
   );
+
+  async function startScopedReviewBridge(scope) {
+    let bridge;
+    try {
+      bridge = reviewBridgeFactory({
+        ...scope,
+        invokeBridge,
+        readReviewHtml: () => readFileSync(BROWSER_REVIEW_HTML, "utf8"),
+        readProjectAsset: readProjectAssetFn,
+        createReviewSession: createAuthoritativeReviewSession,
+        notifyHost: options.notifyHost,
+        verifyAiReceipt: options.verifyAiReceipt,
+      });
+      const session = await bridge.start();
+      if (
+        !session
+        || typeof session.url !== "string"
+        || !session.url
+        || typeof session.bridgeSessionId !== "string"
+        || !session.bridgeSessionId
+      ) {
+        const error = new Error("Review Bridge returned an invalid scoped session");
+        error.code = "REVIEW_BRIDGE_UNAVAILABLE";
+        throw error;
+      }
+      return { bridge, session };
+    } catch (error) {
+      if (bridge && typeof bridge.stop === "function") {
+        try {
+          await bridge.stop();
+        } catch (_stopError) {
+          // Preserve the original bridge startup error.
+        }
+      }
+      if (typeof error?.code === "string") throw error;
+      const wrapped = new Error(
+        error?.message || "Review Bridge could not start the scoped review session",
+      );
+      wrapped.code = "REVIEW_BRIDGE_UNAVAILABLE";
+      throw wrapped;
+    }
+  }
+
+  function scopeFromRuntimeSession(payload) {
+    const result = payload?.result;
+    const session = result?.session;
+    const snapshot = result?.snapshot;
+    const scope = {
+      projectRoot: String(payload?.selected_project_root || "").trim(),
+      reviewType: String(session?.review_type || "").trim(),
+      reviewSessionId: String(session?.review_session_id || "").trim(),
+      sourceVersion: String(session?.source_version || "").trim(),
+      expectedRevision: snapshot?.revision,
+    };
+    if (
+      !scope.projectRoot
+      || !["content-full-deck", "visual-professional"].includes(scope.reviewType)
+      || !scope.reviewSessionId
+      || !scope.sourceVersion
+      || !Number.isSafeInteger(scope.expectedRevision)
+      || scope.expectedRevision < 0
+    ) {
+      const error = new Error("Runtime did not return a complete ReviewSession scope");
+      error.code = "REVIEW_SOURCE_UNAVAILABLE";
+      throw error;
+    }
+    return scope;
+  }
+
+  async function createAuthoritativeReviewSession({ projectRoot, reviewType }) {
+    const requestedReviewType = String(reviewType || "").trim();
+    const formalReviewType = {
+      content: "content-full-deck",
+      visual: "visual-professional",
+    }[requestedReviewType] || requestedReviewType;
+    const outcome = await invokeForTool(invokeBridge, {
+      operation: "get-review-projection",
+      project_root: projectRoot,
+      review_type: formalReviewType,
+    });
+    if (!outcome.ok) {
+      const error = new Error(
+        outcome.result?.structuredContent?.error?.message
+          || "Target review projection is unavailable",
+      );
+      error.code = outcome.result?.structuredContent?.error?.code || "REVIEW_SOURCE_UNAVAILABLE";
+      throw error;
+    }
+    const payload = outcome.payload;
+    const scope = {
+      projectRoot: String(payload?.selected_project_root || projectRoot).trim(),
+      reviewType: formalReviewType,
+      reviewSessionId: String(payload?.review?.review_session_id || "").trim(),
+      sourceVersion: String(payload?.review?.source_version || "").trim(),
+      expectedRevision: payload?.snapshot_revision,
+    };
+    if (
+      !scope.projectRoot
+      || !["content-full-deck", "visual-professional"].includes(scope.reviewType)
+      || !scope.reviewSessionId
+      || !scope.sourceVersion
+      || !Number.isSafeInteger(scope.expectedRevision)
+      || scope.expectedRevision < 0
+    ) {
+      const error = new Error("Target review projection is unavailable");
+      error.code = "REVIEW_SOURCE_UNAVAILABLE";
+      throw error;
+    }
+    const { session } = await startScopedReviewBridge(scope);
+    return {
+      ...session,
+      reviewType: requestedReviewType || formalReviewType,
+    };
+  }
+
+  async function openOrResumeReviewSession(input, operation) {
+    const outcome = await invokeForTool(invokeBridge, genericRequest(operation, input));
+    if (!outcome.ok) return outcome.result;
+    let scope;
+    try {
+      scope = scopeFromRuntimeSession(outcome.payload);
+    } catch (error) {
+      return toolErrorResult(error);
+    }
+    let bridgeSession;
+    try {
+      bridgeSession = await startScopedReviewBridge(scope);
+    } catch (error) {
+      return toolErrorResult(error);
+    }
+    const { session } = bridgeSession;
+    let opened = false;
+    if (
+      browserSurfaceAdapter?.canOpen
+      && typeof browserSurfaceAdapter.openUrl === "function"
+    ) {
+      try {
+        opened = (await browserSurfaceAdapter.openUrl(session.url))?.opened === true;
+      } catch (_error) {
+        opened = false;
+      }
+    }
+    const structured = outcome.payload.result || outcome.payload;
+    const status = opened ? "opened" : "review-session-ready";
+    const message = opened
+      ? "已在兼容的宿主 Browser 打开专业审阅。"
+      : "专业审阅已准备，请立即使用 Codex 内置 Browser 打开 scoped URL。";
+    return textResult(message, {
+      ...structured,
+      status,
+      opened,
+      openMode: opened ? "host-adapter" : "agent-browser",
+      browserAction: "open-scoped-url",
+      url: session.url,
+      expiresAt: session.expiresAt,
+      bridgeSessionId: session.bridgeSessionId,
+      projectRoot: scope.projectRoot,
+      reviewType: scope.reviewType,
+      reviewSessionId: scope.reviewSessionId,
+      sourceVersion: scope.sourceVersion,
+      revision: scope.expectedRevision,
+    });
+  }
 
   const handlers = {
     createProject: async (input, operation) => {
@@ -639,7 +806,7 @@ export function createAiPptMcpServer(options = {}) {
     },
     createContentChangeSet: genericHandler(invokeBridge),
     openG0Review: genericHandler(invokeBridge),
-    openOrResumeReviewSession: genericHandler(invokeBridge),
+    openOrResumeReviewSession,
     recordReviewHostOpen: genericHandler(invokeBridge),
     recordReviewHostNotification: genericHandler(invokeBridge),
     recordReviewAiReceipt: genericHandler(invokeBridge),
