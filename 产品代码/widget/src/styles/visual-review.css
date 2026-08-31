@@ -36,7 +36,7 @@
 .anchor-review-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; margin-top: 22px; }
 .anchor-review-main { min-width: 0; border: 1px solid #bfc3cc; background: var(--vr-paper); box-shadow: 0 10px 30px rgba(38,46,70,.07); }
 .anchor-tabs { display: flex; max-width: 100%; overflow-x: auto; gap: 3px; padding: 8px 12px; border-bottom: 1px solid #d9dce4; background: #fff; scrollbar-width: thin; }
-.anchor-tabs button { min-height: 32px; border: 0; border-radius: 6px; padding: 0 13px; color: #6a6d69; background: transparent; font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.anchor-tabs button { min-width: 0; flex: 1 1 0; min-height: 32px; overflow: hidden; border: 0; border-radius: 6px; padding: 0 13px; color: #6a6d69; background: transparent; font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .anchor-tabs button[aria-selected="true"] { color: var(--vr-cobalt-dark); background: #f0f2f7; box-shadow: 0 1px 3px rgba(31,39,60,.12); }
 
 .region-feedback-editor { min-width: 0; background: #eef0f5; }
@@ -61,21 +61,29 @@
 .anchor-region.active { border-width: 3px; background: rgba(196,59,50,.15); }
 .anchor-region span { position: absolute; top: -13px; left: -13px; width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--vr-red); font: 750 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .region-editor-message { min-height: 22px; margin: 0; padding: 0 22px 16px; color: #5f635f; font-size: 11px; }
-.anchor-feedback-composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; margin-top: 0; padding: 16px; border-left: 4px solid var(--vr-red); background: var(--vr-paper); }
+.anchor-feedback-composer { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 0; padding: 12px 16px 14px; border-top: 1px solid #d9dce4; background: var(--vr-paper); }
+.anchor-feedback-composer.active { background: linear-gradient(180deg, rgba(21,89,214,.035), var(--vr-paper) 72%); }
+.anchor-feedback-composer .section-label { margin: 0; color: var(--vr-ink); font-size: 13px; }
+.anchor-feedback-composer .target-line { margin: 0; padding-bottom: 8px; border-bottom: 1px solid var(--vr-line); color: #667085; font-size: 11px; line-height: 1.55; }
+.anchor-feedback-composer > div { display: flex; justify-content: flex-end; gap: 8px; }
 .anchor-feedback-composer label { display: grid; gap: 7px; }
 .anchor-feedback-composer label span { color: #6d706d; font: 750 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .anchor-feedback-composer textarea, .contract-mark-composer textarea { width: 100%; min-height: 88px; resize: vertical; border: 1px solid #949993; padding: 11px 12px; color: var(--vr-ink); background: #fff; line-height: 1.6; }
-.anchor-feedback-composer button, .contract-mark-composer > button { min-height: 42px; border: 0; padding: 0 16px; color: #fff; background: var(--vr-red); font-weight: 700; }
+.anchor-feedback-composer button, .contract-mark-composer > button { min-height: 36px; border: 0; border-radius: 7px; padding: 0 14px; color: #fff; background: var(--vr-red); font-size: 11px; font-weight: 700; }
 
-.anchor-batch-panel { margin-top: 18px; padding: 20px; border-top: 2px solid var(--vr-ink); background: var(--vr-paper); }
+.anchor-batch-panel { min-width: 0; margin-top: 0; padding: 20px; border-left: 1px solid #bfc3cc; background: var(--vr-paper); }
 .anchor-batch-inline { box-shadow: 0 10px 30px rgba(38,46,70,.06); }
 .anchor-batch-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .anchor-batch-panel h2 { margin: 0; font-size: 20px; }
 .anchor-batch-panel header strong { color: var(--vr-cobalt); font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .anchor-draft-list { margin: 20px 0; padding: 0; list-style: none; border-top: 1px solid var(--vr-line); }
-.anchor-draft-list li { display: grid; grid-template-columns: 72px minmax(0,1fr) auto; align-items: center; gap: 12px; min-height: 58px; border-bottom: 1px solid var(--vr-line); }
+.anchor-draft-list li { min-width: 0; padding: 13px 0; border-bottom: 1px solid var(--vr-line); }
+.anchor-draft-item-head { min-width: 0; display: flex; align-items: flex-start; gap: 8px; }
+.anchor-draft-marker { width: 21px; height: 21px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--vr-cobalt); font: 750 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .anchor-draft-list button { border: 0; color: var(--vr-cobalt-dark); background: transparent; font-weight: 700; }
-.anchor-draft-list p { margin: 0; font-size: 13px; }
+.anchor-draft-target { min-width: 0; flex: 1 1 auto; padding: 2px 0; text-align: left; overflow-wrap: anywhere; line-height: 1.35; }
+.anchor-draft-remove { flex: 0 0 auto; min-height: 30px; padding: 0 6px; color: #6d706d !important; font-size: 10px; }
+.anchor-draft-list p { margin: 7px 0 0 29px; color: var(--vr-ink); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .visual-primary-action { min-height: 42px; border: 0; padding: 0 17px; color: #fff; background: var(--vr-cobalt); font-weight: 700; }
 .visual-primary-action:disabled { opacity: .42; cursor: not-allowed; }
 .visual-empty { color: #777c77; font-size: 12px; line-height: 1.7; }
@@ -157,9 +165,10 @@
 .visual-contract-list { display: grid; gap: 22px; }
 .visual-slide-contract { scroll-margin-top: 80px; border-top: 6px solid var(--vr-cobalt); background: #fffefb; box-shadow: 0 14px 34px rgba(32,36,46,.08); content-visibility: auto; contain-intrinsic-inline-size: none; contain-intrinsic-block-size: auto 860px; }
 .visual-slide-contract-head { padding: 26px 32px 22px; border-bottom: 1px solid #c9c9c4; display: grid; grid-template-columns: 72px minmax(0,1fr) auto; gap: 18px; align-items: start; }
-.visual-contract-page-id { padding-top: 3px; color: var(--vr-cobalt); font: 780 18px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.visual-contract-page-id { min-width: 0; padding-top: 3px; overflow: hidden; color: var(--vr-cobalt); font: 780 18px/1 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .visual-contract-page-title h3 { margin: 0; font: 700 22px/1.35 "Songti SC", STSong, serif; }
 .visual-contract-page-title p { margin: 7px 0 0; display: flex; flex-wrap: wrap; gap: 4px 14px; color: #686d76; font-size: 10px; line-height: 1.5; }
+.visual-contract-slide-key { min-width: 0; overflow-wrap: anywhere; }
 .visual-contract-page-state { padding: 5px 8px; border: 1px solid #b9c8e8; color: #174f9f; background: #edf4ff; font-size: 9px; font-weight: 680; white-space: nowrap; }
 .visual-contract-columns { display: grid; grid-template-columns: 43% 57%; }
 .visual-contract-column { min-width: 0; padding: 26px 32px 30px; }
@@ -204,7 +213,6 @@
 .contract-mark-list button:disabled { cursor: not-allowed; opacity: .45; }
 .saved-mark-summary { padding: 10px; color: #145f46; background: #f0f8f4; font-size: 11px; }
 
-.anchor-review-layout button { min-height: 42px; }
 .anchor-review-layout button:focus-visible, .anchor-comparison-dialog button:focus-visible { outline: 3px solid rgba(77,130,255,.5); outline-offset: 2px; }
 
 .anchor-comparison-layer { position: fixed; z-index: 120; inset: 0; display: grid; place-items: center; padding: clamp(8px, 2vw, 24px); }
@@ -232,7 +240,7 @@
   .visual-section-head { align-items: start; flex-direction: column; }
   .visual-section-head code { max-width: 100%; }
   .anchor-tabs { overflow-x: auto; }
-  .anchor-tabs button { flex: 0 0 auto; padding-inline: 14px; }
+  .anchor-tabs button { flex: 1 1 0; min-width: 0; padding-inline: 10px; }
   .visual-contract-columns { grid-template-columns: 1fr; }
   .visual-contract-column + .visual-contract-column { border-top: 1px solid #c9c9c4; border-left: 0; }
   .anchor-feedback-composer { grid-template-columns: 1fr; }
@@ -272,8 +280,8 @@
   .visual-contract-section, .visual-slide-contract { scroll-margin-top: 80px; }
   .visual-section-head h1 { font-size: 34px; }
   .anchor-toolbar > div:first-child > span { display: none; }
-  .anchor-draft-list li { grid-template-columns: 54px minmax(0,1fr); padding: 8px 0; }
-  .anchor-draft-list li > button:last-child { grid-column: 2; justify-self: start; }
+  .anchor-draft-list li { padding: 11px 0; }
+  .anchor-draft-list p { margin-left: 29px; }
   .visual-contract-document, .visual-contract-feedback-facts { width: calc(100% - 16px); }
   .visual-contract-title-page, .visual-contract-section { padding: 28px 18px 32px; }
   .visual-contract-title-page { padding-top: 32px; }

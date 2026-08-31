@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ReviewSurfaceRouter } from "./ReviewSurfaceRouter";
@@ -249,7 +249,8 @@ describe("on-demand professional-review routing", () => {
     expect(screen.getByRole("heading", { name: "p1" })).toBeInTheDocument();
     expect(screen.getByText("这一页的目标")).toBeInTheDocument();
     expect(screen.getByText("页面任务 1")).toBeInTheDocument();
-    expect(screen.getByText("希望客户形成的判断")).toBeInTheDocument();
+    expect(screen.getByText("客户决策事项")).toBeInTheDocument();
+    expect(screen.queryByText("希望客户形成的判断")).not.toBeInTheDocument();
     expect(screen.getByText("客户形成第 1 页的明确判断。")).toBeInTheDocument();
     expect(screen.getByText("页面实际文字")).toBeInTheDocument();
     expect(screen.getByText("第 1 页页面实际文字。")).toBeInTheDocument();
@@ -357,6 +358,36 @@ describe("on-demand professional-review routing", () => {
     expect(
       screen.queryByRole("navigation", { name: "五空间导航" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps long semantic anchor ids out of fixed-width visual review labels", () => {
+    const visual = visualReviewSurface();
+    const anchors = visual.review.anchors;
+    Object.assign(anchors[0], { slide_id: "oa-standardization-01-inventory" });
+    Object.assign(anchors[1], { slide_id: "oa-standardization-02-service-system" });
+    Object.assign(anchors[2], { slide_id: "oa-standardization-03-package-structure" });
+    Object.assign(visual.review.anchor_identity, { slide_ids: anchors.map((anchor) => anchor.slide_id) });
+    Object.assign(visual.review, { slide_visual_contracts: anchors.map((anchor, index) => visualSlideContract({
+      slide_id: anchor.slide_id,
+      order: index + 1,
+      neutral_title: `页面 ${index + 1}`,
+    })) });
+
+    const { container } = render(<ReviewSurfaceRouter data={visual} bridge={bridge} />);
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>(".anchor-tabs button"));
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "01 · inventory",
+      "02 · service-system",
+      "03 · package-structure",
+    ]);
+    expect(tabs[0]).toHaveAttribute("title", "oa-standardization-01-inventory 锚点页");
+    expect(tabs[0]).toHaveAccessibleName("oa-standardization-01-inventory 锚点页");
+
+    fireEvent.click(screen.getByRole("tab", { name: "完整视觉合同" }));
+    const pageIds = Array.from(container.querySelectorAll<HTMLElement>(".visual-contract-page-id"));
+    expect(pageIds.map((pageId) => pageId.textContent)).toEqual(["01", "02", "03"]);
+    expect(pageIds[0]).toHaveAttribute("title", "oa-standardization-01-inventory");
+    expect(container.querySelectorAll(".visual-contract-slide-key")).toHaveLength(3);
   });
 
   it("renders a ready notify-only visual session while host notification is pending", () => {

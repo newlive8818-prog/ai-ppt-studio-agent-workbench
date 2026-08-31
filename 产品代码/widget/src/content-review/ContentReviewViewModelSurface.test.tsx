@@ -158,7 +158,9 @@ it("renders the accepted continuous review contract from ViewModel fields only",
 
   expect(screen.getByRole("heading", { name: "经营一体化方案" })).toBeInTheDocument();
   expect(screen.getAllByText("这一页的目标")).toHaveLength(2);
-  expect(screen.getAllByText("希望客户形成的判断")).toHaveLength(2);
+  expect(screen.getAllByText("客户决策事项")).toHaveLength(2);
+  expect(screen.queryByText("希望客户形成的判断")).not.toBeInTheDocument();
+  expect(screen.getByText("逐页核对页面目标、客户决策事项、实际文字和页面画面，再完成本页审核判断。")).toBeInTheDocument();
   expect(screen.getAllByText("页面实际文字")).toHaveLength(2);
   expect(screen.getAllByText("文字与图片材料一起审核")).toHaveLength(1);
   expect(screen.queryByText("本页暂无可审核的页面画面。")).not.toBeInTheDocument();

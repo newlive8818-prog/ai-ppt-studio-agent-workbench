@@ -839,10 +839,17 @@ export function VisualContractView({
                   key={slideId}
                 >
                   <header className="visual-slide-contract-head">
-                    <div className="visual-contract-page-id">{slideId}</div>
+                    <div
+                      className="visual-contract-page-id"
+                      title={slideId}
+                      aria-label={slideId}
+                    >{String(index + 1).padStart(2, "0")}</div>
                     <div className="visual-contract-page-title">
                       <h3 id={titleId}>{title}</h3>
-                      <p><span>{String(slide.page_family || "页面家族待提供")} · 第 {String(slide.order || index + 1)} 页</span></p>
+                      <p>
+                        <span className="visual-contract-slide-key" title={slideId}>{slideId}</span>
+                        <span>{String(slide.page_family || "页面家族待提供")} · 第 {String(slide.order || index + 1)} 页</span>
+                      </p>
                     </div>
                   </header>
                   <div className="visual-contract-columns">

@@ -72,6 +72,14 @@ function isWritableRevision(value: unknown): value is number {
     && value < Number.MAX_SAFE_INTEGER;
 }
 
+function compactAnchorTabLabel(slideId: string, index: number): string {
+  const normalized = slideId.trim();
+  const semanticSuffix = /^.+?-\d{1,3}-(.+)$/.exec(normalized)?.[1];
+  const suffix = semanticSuffix || normalized.split("-").at(-1) || normalized;
+  const label = (suffix || "锚点").replace(/\s+\d+$/, "");
+  return `${String(index + 1).padStart(2, "0")} · ${label}`;
+}
+
 const invalidRevisionMessage = "当前 revision 无效，本地反馈已进入只读保护；请重新打开审核页后再提交。";
 
 export function AnchorResultsView({
@@ -369,8 +377,10 @@ export function AnchorResultsView({
                 tabIndex={active?.slide_id === anchor.slide_id ? 0 : -1}
                 onKeyDown={(event) => handleAnchorTabKeyDown(event, index)}
                 onClick={() => setActiveSlide(anchor.slide_id)}
+                title={`${anchor.slide_id} 锚点页`}
+                aria-label={`${anchor.slide_id} 锚点页`}
               >
-                {anchor.slide_id} 锚点页
+                {compactAnchorTabLabel(anchor.slide_id, index)}
               </button>
             ))}
           </div>
@@ -416,21 +426,30 @@ export function AnchorResultsView({
             {batch ? <p className="anchor-batch-id">{`反馈批次 ${batch.batch_id}`}</p> : null}
             {feedbackRecords.length ? (
               <ol className="anchor-draft-list">
-                {feedbackRecords.map((draft) => (
+                {feedbackRecords.map((draft, index) => (
                   <li key={draft.feedback_id}>
-                    <button type="button" onClick={() => setActiveSlide(draft.anchor_slide_id)}>{draft.anchor_slide_id}</button>
+                    <div className="anchor-draft-item-head">
+                      <span className="anchor-draft-marker" aria-hidden="true">{index + 1}</span>
+                      <button
+                        className="anchor-draft-target"
+                        type="button"
+                        title={draft.anchor_slide_id}
+                        onClick={() => setActiveSlide(draft.anchor_slide_id)}
+                      >{draft.anchor_slide_id}</button>
+                      {!batch ? <button
+                        className="anchor-draft-remove"
+                        type="button"
+                        disabled={draftsLocked}
+                        onClick={() => {
+                          if (mutationRef.current || retryRequestRef.current || recoveryRequired || !revisionIsWritable) return;
+                          onSliceChange(
+                            drafts.filter((item) => item.feedback_id !== draft.feedback_id),
+                            composer,
+                          );
+                        }}
+                      >移除</button> : null}
+                    </div>
                     <p>{draft.comment}</p>
-                    {!batch ? <button
-                      type="button"
-                      disabled={draftsLocked}
-                      onClick={() => {
-                        if (mutationRef.current || retryRequestRef.current || recoveryRequired || !revisionIsWritable) return;
-                        onSliceChange(
-                          drafts.filter((item) => item.feedback_id !== draft.feedback_id),
-                          composer,
-                        );
-                      }}
-                    >移除</button> : null}
                   </li>
                 ))}
               </ol>

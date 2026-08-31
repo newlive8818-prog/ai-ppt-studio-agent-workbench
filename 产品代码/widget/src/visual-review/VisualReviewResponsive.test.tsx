@@ -21,7 +21,7 @@ describe("visual anchor review responsive contracts", () => {
     expect(css).toMatch(/\.anchor-review-layout\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
     expect(css).toMatch(/\.anchor-review-main\s*\{[^}]*min-width:\s*0/s);
     expect(css).not.toMatch(/\.anchor-review-assistant\s*\{/s);
-    expect(css).toMatch(/\.anchor-review-layout button\s*\{[^}]*min-height:\s*42px/s);
+    expect(css).not.toMatch(/\.anchor-review-layout button\s*\{[^}]*min-height:\s*42px/s);
   });
 
   it("preserves the anchor tabs and canvas at 360px", () => {
@@ -29,6 +29,17 @@ describe("visual anchor review responsive contracts", () => {
     expect(css).toMatch(/@media\s*\(max-width:\s*480px\)[\s\S]*?\.visual-professional-header\.visual-review-topbar\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/s);
     expect(css).toMatch(/\.anchor-tabs\s*\{[^}]*max-width:\s*100%[^}]*overflow-x:\s*auto/s);
     expect(css).toMatch(/\.anchor-canvas\s*\{[^}]*max-width:\s*100%/s);
+  });
+
+  it("keeps compact tab labels and readable feedback rows without document overflow", () => {
+    expect(css).toMatch(/\.anchor-tabs button\s*\{[^}]*min-width:\s*0[^}]*flex:\s*1 1 0[^}]*overflow:\s*hidden/s);
+    expect(css).toMatch(/\.anchor-draft-list li\s*\{[^}]*min-width:\s*0[^}]*padding:/s);
+    expect(css).toMatch(/\.anchor-draft-item-head\s*\{[^}]*display:\s*flex/s);
+    expect(css).toMatch(/\.anchor-draft-marker\s*\{[^}]*flex:\s*0 0 auto/s);
+    expect(css).toMatch(/\.anchor-draft-target\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+    expect(css).toMatch(/\.visual-contract-page-id\s*\{[^}]*overflow:\s*hidden[^}]*text-overflow:\s*ellipsis/s);
+    expect(css).toMatch(/\.visual-contract-slide-key\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+    expect(css).not.toMatch(/\.anchor-review-layout button\s*\{[^}]*min-height:\s*42px/s);
   });
 
   it("keeps contract actions inside the topbar and collapses contract columns on narrow screens", () => {

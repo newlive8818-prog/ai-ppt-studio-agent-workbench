@@ -150,7 +150,7 @@ export function ContentReviewViewModelSurface({
         <section className="content-review-vm-deck-intro" aria-labelledby="content-review-vm-intro-title">
           <span>完整阅读稿</span>
           <h2 id="content-review-vm-intro-title">按最终页序连续阅读完整内容</h2>
-          <p>逐页核对页面目标、客户判断、实际文字和页面画面，再完成本页审核判断。</p>
+          <p>逐页核对页面目标、客户决策事项、实际文字和页面画面，再完成本页审核判断。</p>
           <div>
             <span>{viewModel.sections.length} 章</span>
             <span>{viewModel.slides.length} 页</span>
@@ -214,7 +214,7 @@ export function ContentReviewViewModelSurface({
                                 <p>{slide.pageGoal}</p>
                               </div>
                               <div>
-                                <span className="content-review-vm-label">希望客户形成的判断</span>
+                                <span className="content-review-vm-label">客户决策事项</span>
                                 <p>{slide.customerJudgment}</p>
                               </div>
                             </section>

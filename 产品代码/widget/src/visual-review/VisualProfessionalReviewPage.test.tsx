@@ -2345,7 +2345,7 @@ describe("visual professional review surface", () => {
     render(<VisualProfessionalReviewPage initialData={visualData()} bridge={bridge} />);
 
     const tabs = screen.getAllByRole("tab", { name: /S0[1-3]/ });
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["S01 锚点页", "S02 锚点页", "S03 锚点页"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["01 · S01", "02 · S02", "03 · S03"]);
     expect(await screen.findByRole("img", { name: "S01 锚点页成果" })).toBeInTheDocument();
     fireEvent.click(tabs[1]);
     expect(await screen.findByRole("img", { name: "S02 锚点页成果" })).toBeInTheDocument();
