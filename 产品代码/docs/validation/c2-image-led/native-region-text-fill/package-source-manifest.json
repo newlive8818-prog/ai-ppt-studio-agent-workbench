@@ -1,0 +1,23 @@
+{
+  "production": [
+    "src/ai_ppt_studio/domains/visual/image_led.py",
+    "scripts/image-led-native.mjs",
+    "src/ai_ppt_studio/application/image_led_results.py"
+  ],
+  "references": [
+    "skills/ai-ppt-studio/references/presentations-handoff.md"
+  ],
+  "tests": [
+    "tests/test_image_led_region_endpoints.py",
+    "tests/test_image_led_text_gradient.py"
+  ],
+  "files": {
+    "src/ai_ppt_studio/domains/visual/image_led.py": "04319fcc5030a422a01d34673aa6a42d65994a02ee0d6dd3724ceb297166765f",
+    "scripts/image-led-native.mjs": "0cfeb9f0ec2f562c654aacbe58e22d74b07f24b6932221065680b1767c0d2d58",
+    "src/ai_ppt_studio/application/image_led_results.py": "13055793c4c85aa19801762b1f1330d3b8df076ca1a9b14dc1e61c905bc79a2c",
+    "tests/test_image_led_region_endpoints.py": "efb8713827dc9f3a7c0fdced40b9d5a7da369818d470f6eb1a3b3c172940d7e4",
+    "tests/test_image_led_text_gradient.py": "ba563418e212de2a07b4fe5278e7f6b5e319f41defe6cef8bbe6b9e65eef89c0",
+    "skills/ai-ppt-studio/references/presentations-handoff.md": "eaa5a6c57da2dc6f11a5255c512f67f19885c7ec1678d6c2fd62e186517231b8"
+  },
+  "base_commit": "04dab1d4afc30e293bfabf8f45cab4858c2557d0"
+}

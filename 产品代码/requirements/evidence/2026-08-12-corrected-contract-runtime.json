@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "evidence_identity": "v1.6-corrected-schema3-runtime-contract-run",
+  "proof_eligible": true,
+  "simulation": false,
+  "uses_ephemeral_managed_projects": true,
+  "checked_at": "2026-08-12T17:21:44Z",
+  "commands": [
+    "python3 -m unittest discover -s tests -v",
+    "npm run test:node",
+    "npm run test:widget"
+  ],
+  "results": {
+    "python_runtime_tests": 136,
+    "node_runtime_and_bridge_tests": 32,
+    "widget_projection_and_interaction_tests": 38,
+    "failures": 0
+  },
+  "runtime_contracts_exercised": [
+    "immutable content-addressed artifacts and revision-safe idempotent transactions",
+    "MissionDraft, verifier-compatible or host-native MissionConfirmation, current material identity, and Python content readiness policy",
+    "mission-bound host-native elicitation exposes topic, primary audience, desired judgment or action, and material summary while proposal-only repeats the no-material identity",
+    "intent text never becomes user_action_ref or user_message_ref; only a server-generated host-elicitation action identity or verified host reference reaches Python",
+    "decline, cancel, confirmed=false, unavailable elicitation, and rejected verifier paths retain revision with zero business writes",
+    "material-backed and proposal-only content identities with hard rejection of fabricated evidence",
+    "five isolated content review roles, internal acceptance, repair, and G0 separation",
+    "strict-B visual contracts, native-first anchors, optional post-native non-semantic assets, and binary G1/G2 gates",
+    "four-target matrix completeness and same-hash blocking rules without claiming any real desktop row",
+    "review projection completeness, source-bound exact marks, conflict preservation, and save-not-Gate behavior",
+    "new authenticated content/visual session issuance without cross-reviewType token reuse",
+    "delivery package, chat receipt, G4 separation, last-valid build recovery, and stale evidence invalidation",
+    "feedback governance, F0-F3 routing, project-only constraints, experience intake, role slices, and governed evolution"
+  ],
+  "ephemeral_recovery_probe": {
+    "runtime_root": "/private/tmp/ai-ppt-installed-recovery-r52.I4Fhiu/runtime",
+    "project_id": "installed-recovery-probe",
+    "schema_version": "3.0",
+    "revision_before_reopen": 1,
+    "revision_after_reopen": 1,
+    "mission_status": "draft",
+    "material_mode": "unconfirmed",
+    "content_identity_mode": "blocked",
+    "gate_status": {
+      "G0": "open",
+      "G1": "locked",
+      "G2": "locked",
+      "G3": "locked",
+      "G4": "locked"
+    }
+  },
+  "exclusions": [
+    "real Codex host confirmation dialog or user acceptance",
+    "real Codex sidebar or Browser session",
+    "real customer materials or real sales project",
+    "real PPTX creation or modification",
+    "real chat delivery",
+    "real macOS/Windows PowerPoint/WPS execution"
+  ]
+}

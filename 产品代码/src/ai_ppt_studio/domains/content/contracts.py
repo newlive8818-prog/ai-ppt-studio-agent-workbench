@@ -1,0 +1,897 @@
+"""Evidence-first v2.2 content artifact contracts."""
+
+from __future__ import annotations
+
+import re
+from datetime import datetime
+from pathlib import PurePosixPath
+from typing import Any
+
+from ai_ppt_studio.errors import ContractValidationError
+
+
+def _text(payload: dict[str, Any], field: str) -> str:
+    value = payload.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ContractValidationError(f"{field} must be a non-empty string")
+    return value.strip()
+
+
+def _boundary_text(payload: dict[str, Any], field: str) -> str:
+    if field not in payload or not isinstance(payload[field], str):
+        raise ContractValidationError(f"{field} must be a string")
+    return payload[field].strip()
+
+
+def _require_exact_keys(
+    payload: dict[str, Any], fields: tuple[str, ...], contract: str
+) -> None:
+    expected, actual = set(fields), set(payload)
+    if actual != expected:
+        missing = sorted(expected - actual)
+        unknown = sorted(actual - expected)
+        raise ContractValidationError(
+            f"{contract} fields are not closed"
+            f"; missing={missing}; unknown={unknown}"
+        )
+
+
+MATERIAL_MODES = frozenset({"material-backed", "mixed-evidence", "proposal-led"})
+FORMAL_CONTENT_IDENTITIES = frozenset(
+    {
+        "来源事实",
+        "材料推断",
+        "用户已确认",
+        "诊断假设",
+        "方案建议",
+        "待联合验证",
+        "证据缺口",
+        "禁止使用",
+    }
+)
+INTERNAL_ANALYSIS_IDENTITY = "AI 分析"
+CONTENT_IDENTITIES = FORMAL_CONTENT_IDENTITIES | {INTERNAL_ANALYSIS_IDENTITY}
+EVIDENCE_BUCKET_IDENTITIES = {
+    "facts": frozenset({"来源事实"}),
+    "user_confirmed_facts": frozenset({"用户已确认"}),
+    "inferences": frozenset({"材料推断"}),
+    "conflicts": frozenset({"材料推断", "证据缺口"}),
+    "unknowns": frozenset({"证据缺口"}),
+    "evidence_gaps": frozenset({"证据缺口"}),
+    "forbidden_extrapolations": frozenset({"禁止使用"}),
+}
+LEGACY_OPINION_KEYS = frozenset(
+    {
+        "desiredCustomerJudgment",
+        "desired_customer_judgment",
+        "customer_judgment",
+        "coreClaim",
+        "core_claim",
+    }
+)
+STRONG_TITLE_PATTERN = re.compile(
+    r"必须|唯一|最佳|领先|必然|确保|保证|彻底解决|显著(?:提升|降低)|决定性"
+)
+URL_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+CONTROL_CHARACTER_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _reject_legacy_opinion_fields(value: Any) -> None:
+    if isinstance(value, dict):
+        forbidden = LEGACY_OPINION_KEYS.intersection(value)
+        if forbidden:
+            raise ContractValidationError(
+                f"Legacy opinion-first field is forbidden: {sorted(forbidden)[0]}"
+            )
+        for child in value.values():
+            _reject_legacy_opinion_fields(child)
+    elif isinstance(value, list):
+        for child in value:
+            _reject_legacy_opinion_fields(child)
+
+
+def _v22_array(
+    payload: dict[str, Any], field: str, *, non_empty: bool = False
+) -> list[Any]:
+    value = payload.get(field)
+    if not isinstance(value, list) or (non_empty and not value):
+        raise ContractValidationError(f"{field} must be an array")
+    return list(value)
+
+
+def _v22_strings(
+    payload: dict[str, Any], field: str, *, non_empty: bool = False
+) -> list[str]:
+    values = _v22_array(payload, field, non_empty=non_empty)
+    if any(not isinstance(value, str) or not value.strip() for value in values):
+        raise ContractValidationError(f"{field} must contain non-empty strings")
+    return [value.strip() for value in values]
+
+
+def _v22_objects(
+    payload: dict[str, Any], field: str, *, non_empty: bool = False
+) -> list[dict[str, Any]]:
+    values = _v22_array(payload, field, non_empty=non_empty)
+    if any(not isinstance(value, dict) for value in values):
+        raise ContractValidationError(f"{field} must contain objects")
+    return [dict(value) for value in values]
+
+
+def _material_mode(payload: dict[str, Any]) -> str:
+    mode = _text(payload, "material_mode")
+    if mode not in MATERIAL_MODES:
+        raise ContractValidationError(
+            "material_mode must be material-backed, mixed-evidence, or proposal-led"
+        )
+    return mode
+
+
+def _evidence_row(
+    row: dict[str, Any],
+    *,
+    source_required: bool,
+    allowed_identities: frozenset[str],
+) -> dict[str, Any]:
+    _require_exact_keys(
+        row,
+        (
+            "item_id",
+            "identity",
+            "statement",
+            "source_refs",
+            "location",
+            "version",
+            "usable_for",
+            "limitations",
+        ),
+        "Evidence row",
+    )
+    normalized = {
+        "item_id": _text(row, "item_id"),
+        "identity": _text(row, "identity"),
+        "statement": _text(row, "statement"),
+        "source_refs": _v22_strings(row, "source_refs", non_empty=source_required),
+        "location": _text(row, "location"),
+        "version": _text(row, "version"),
+        "usable_for": _v22_strings(row, "usable_for", non_empty=True),
+        "limitations": _v22_strings(row, "limitations"),
+    }
+    if normalized["identity"] not in allowed_identities:
+        raise ContractValidationError("Evidence row identity is invalid for its bucket")
+    return normalized
+
+
+def validate_presales_evidence_book(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ContractValidationError("PresalesEvidenceBook must be an object")
+    _require_exact_keys(
+        payload,
+        (
+            "source_version",
+            "material_mode",
+            "mission_confirmation_ref",
+            "material_inventory_ref",
+            "facts",
+            "user_confirmed_facts",
+            "inferences",
+            "conflicts",
+            "unknowns",
+            "evidence_gaps",
+            "forbidden_extrapolations",
+            "excluded_material_refs",
+            "source_refs",
+            "generated_by",
+            "generated_at",
+        ),
+        "PresalesEvidenceBook",
+    )
+    _reject_legacy_opinion_fields(payload)
+    mode = _material_mode(payload)
+    normalized = {
+        "source_version": _text(payload, "source_version"),
+        "material_mode": mode,
+        "mission_confirmation_ref": _text(payload, "mission_confirmation_ref"),
+        "material_inventory_ref": _boundary_text(payload, "material_inventory_ref"),
+    }
+    fields = (
+        "facts",
+        "user_confirmed_facts",
+        "inferences",
+        "conflicts",
+        "unknowns",
+        "evidence_gaps",
+        "forbidden_extrapolations",
+    )
+    for field in fields:
+        source_required = field in {"facts", "user_confirmed_facts"}
+        normalized[field] = [
+            _evidence_row(
+                row,
+                source_required=source_required,
+                allowed_identities=EVIDENCE_BUCKET_IDENTITIES[field],
+            )
+            for row in _v22_objects(payload, field)
+        ]
+    normalized.update(
+        {
+            "excluded_material_refs": _v22_strings(payload, "excluded_material_refs"),
+            "source_refs": _v22_strings(payload, "source_refs"),
+            "generated_by": _text(payload, "generated_by"),
+            "generated_at": _text(payload, "generated_at"),
+        }
+    )
+    declared = normalized["source_refs"]
+    excluded = normalized["excluded_material_refs"]
+    if len(set(declared)) != len(declared):
+        raise ContractValidationError("source_refs must be unique")
+    if len(set(excluded)) != len(excluded):
+        raise ContractValidationError("excluded_material_refs must be unique")
+    if set(declared).intersection(excluded):
+        raise ContractValidationError(
+            "source_refs and excluded_material_refs must be disjoint"
+        )
+    declared_set = set(declared)
+    excluded_set = set(excluded)
+    for field in fields:
+        for row in normalized[field]:
+            for source_ref in row["source_refs"]:
+                if source_ref not in declared_set or source_ref in excluded_set:
+                    raise ContractValidationError(
+                        "Evidence row source_refs must be declared and not excluded"
+                    )
+    if normalized["generated_by"] != "presales-solution-chief":
+        raise ContractValidationError("PresalesEvidenceBook must be generated by the chief")
+    if mode == "proposal-led":
+        if (
+            normalized["material_inventory_ref"]
+            or normalized["facts"]
+            or normalized["user_confirmed_facts"]
+            or normalized["source_refs"]
+        ):
+            raise ContractValidationError(
+                "proposal-led evidence cannot claim project materials or customer facts"
+            )
+    else:
+        if not normalized["material_inventory_ref"] or not normalized["source_refs"]:
+            raise ContractValidationError(f"{mode} requires current material sources")
+        if mode == "mixed-evidence" and not normalized["evidence_gaps"]:
+            raise ContractValidationError("mixed-evidence requires explicit evidence gaps")
+    return normalized
+
+
+def validate_customer_decision_context(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ContractValidationError("CustomerDecisionContext must be an object")
+    _require_exact_keys(
+        payload,
+        (
+            "audience_roles",
+            "decision_stage",
+            "current_business_matter",
+            "known_consensus",
+            "decision_questions",
+            "constraints",
+            "unresolved_questions",
+            "supported_next_actions",
+            "evidence_book_ref",
+        ),
+        "CustomerDecisionContext",
+    )
+    _reject_legacy_opinion_fields(payload)
+    return {
+        "audience_roles": _v22_strings(payload, "audience_roles", non_empty=True),
+        "decision_stage": _text(payload, "decision_stage"),
+        "current_business_matter": _text(payload, "current_business_matter"),
+        "known_consensus": _v22_strings(payload, "known_consensus"),
+        "decision_questions": _v22_strings(payload, "decision_questions", non_empty=True),
+        "constraints": _v22_strings(payload, "constraints"),
+        "unresolved_questions": _v22_strings(payload, "unresolved_questions"),
+        "supported_next_actions": _v22_strings(payload, "supported_next_actions", non_empty=True),
+        "evidence_book_ref": _text(payload, "evidence_book_ref"),
+    }
+
+
+def _fit_node(
+    row: dict[str, Any], *, allow_internal_analysis: bool = False
+) -> dict[str, Any]:
+    _require_exact_keys(
+        row,
+        ("id", "statement", "identity", "evidence_refs"),
+        "ProblemSolutionFit node",
+    )
+    normalized = {
+        "id": _text(row, "id"),
+        "statement": _text(row, "statement"),
+        "identity": _text(row, "identity"),
+        "evidence_refs": _v22_strings(row, "evidence_refs"),
+    }
+    allowed = (
+        CONTENT_IDENTITIES if allow_internal_analysis else FORMAL_CONTENT_IDENTITIES
+    )
+    if normalized["identity"] not in allowed:
+        raise ContractValidationError("ProblemSolutionFit node identity is unsupported")
+    if normalized["identity"] in {"来源事实", "用户已确认"} and not normalized["evidence_refs"]:
+        raise ContractValidationError("Factual fit nodes require evidence")
+    return normalized
+
+
+def validate_problem_solution_fit_map(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ContractValidationError("ProblemSolutionFitMap must be an object")
+    node_fields = (
+        "situations",
+        "symptoms",
+        "causes_or_hypotheses",
+        "impacts",
+        "constraints",
+        "unknowns",
+        "derived_requirements",
+        "solution_components",
+        "boundaries",
+        "alternatives",
+        "validation_items",
+    )
+    _require_exact_keys(
+        payload,
+        (
+            "evidence_book_ref",
+            "decision_context_ref",
+            *node_fields,
+            "mappings",
+        ),
+        "ProblemSolutionFitMap",
+    )
+    _reject_legacy_opinion_fields(payload)
+    normalized: dict[str, Any] = {
+        "evidence_book_ref": _text(payload, "evidence_book_ref"),
+        "decision_context_ref": _text(payload, "decision_context_ref"),
+    }
+    ids: set[str] = set()
+    problem_ids: set[str] = set()
+    requirement_ids: set[str] = set()
+    solution_ids: set[str] = set()
+    problem_fields = {
+        "situations",
+        "symptoms",
+        "causes_or_hypotheses",
+        "impacts",
+        "constraints",
+        "unknowns",
+    }
+    for field in node_fields:
+        rows = []
+        for raw_row in _v22_objects(payload, field):
+            row = _fit_node(
+                raw_row,
+                allow_internal_analysis=field == "derived_requirements",
+            )
+            if row["id"] in ids:
+                raise ContractValidationError(
+                    "ProblemSolutionFit node ids must be unique"
+                )
+            ids.add(row["id"])
+            rows.append(row)
+        field_ids = {row["id"] for row in rows}
+        if field in problem_fields:
+            problem_ids.update(field_ids)
+        elif field == "derived_requirements":
+            requirement_ids.update(field_ids)
+        elif field == "solution_components":
+            solution_ids.update(field_ids)
+        normalized[field] = rows
+    mappings = []
+    mapping_ids: set[str] = set()
+    for row in _v22_objects(payload, "mappings", non_empty=True):
+        _require_exact_keys(
+            row,
+            (
+                "mapping_id",
+                "problem_ref",
+                "requirement_ref",
+                "solution_component_ref",
+                "identity",
+                "evidence_refs",
+            ),
+            "ProblemSolutionFit mapping",
+        )
+        mapping = {
+            "mapping_id": _text(row, "mapping_id"),
+            "problem_ref": _text(row, "problem_ref"),
+            "requirement_ref": _text(row, "requirement_ref"),
+            "solution_component_ref": _text(row, "solution_component_ref"),
+            "identity": _text(row, "identity"),
+            "evidence_refs": _v22_strings(row, "evidence_refs"),
+        }
+        if mapping["identity"] not in FORMAL_CONTENT_IDENTITIES:
+            raise ContractValidationError("Mapping identity is unsupported")
+        if mapping["mapping_id"] in mapping_ids:
+            raise ContractValidationError("Mapping ids must be unique")
+        mapping_ids.add(mapping["mapping_id"])
+        if (
+            mapping["problem_ref"] not in problem_ids
+            or mapping["requirement_ref"] not in requirement_ids
+            or mapping["solution_component_ref"] not in solution_ids
+        ):
+            raise ContractValidationError("Mapping must reference current problem, requirement, and solution nodes")
+        mappings.append(mapping)
+    normalized["mappings"] = mappings
+    return normalized
+
+
+def _content_block(
+    row: dict[str, Any], *, allow_internal_analysis: bool = False
+) -> dict[str, str]:
+    _require_exact_keys(row, ("block_id", "text", "identity"), "ContentBlock")
+    normalized = {
+        "block_id": _text(row, "block_id"),
+        "text": _text(row, "text"),
+        "identity": _text(row, "identity"),
+    }
+    allowed = (
+        CONTENT_IDENTITIES if allow_internal_analysis else FORMAL_CONTENT_IDENTITIES
+    )
+    if normalized["identity"] not in allowed:
+        raise ContractValidationError("Content block identity is unsupported")
+    return normalized
+
+
+def _material_view(row: dict[str, Any]) -> dict[str, Any]:
+    _require_exact_keys(
+        row,
+        (
+            "material_view_id",
+            "source_ref",
+            "asset_ref",
+            "source_file_name",
+            "page_number",
+            "region_label",
+            "purpose",
+            "treatment",
+            "evidence_identity",
+        ),
+        "material_view",
+    )
+    raw_asset_ref = row.get("asset_ref")
+    asset_ref = _text(row, "asset_ref")
+    asset_path = PurePosixPath(asset_ref)
+    if (
+        CONTROL_CHARACTER_PATTERN.search(raw_asset_ref)
+        or URL_SCHEME_PATTERN.match(asset_ref)
+        or asset_path.is_absolute()
+        or not asset_path.parts
+        or ".." in asset_path.parts
+        or "\\" in asset_ref
+        or asset_ref != asset_path.as_posix()
+    ):
+        raise ContractValidationError(
+            "material_view asset_ref must be a project-relative POSIX path"
+        )
+    page_number = row.get("page_number")
+    if isinstance(page_number, bool) or not isinstance(page_number, int) or page_number < 1:
+        raise ContractValidationError("material_view page_number must be a positive integer")
+    evidence_identity = _text(row, "evidence_identity")
+    if evidence_identity not in FORMAL_CONTENT_IDENTITIES:
+        raise ContractValidationError("material_view evidence_identity is unsupported")
+    return {
+        "material_view_id": _text(row, "material_view_id"),
+        "source_ref": _text(row, "source_ref"),
+        "asset_ref": asset_ref,
+        "source_file_name": _text(row, "source_file_name"),
+        "page_number": page_number,
+        "region_label": _text(row, "region_label"),
+        "purpose": _text(row, "purpose"),
+        "treatment": _text(row, "treatment"),
+        "evidence_identity": evidence_identity,
+    }
+
+
+def _customer_decision_item(
+    row: Any, *, material_mode: str
+) -> dict[str, Any]:
+    if not isinstance(row, dict):
+        raise ContractValidationError(
+            "customer_decision_item must be an object"
+        )
+    _require_exact_keys(
+        row,
+        ("text", "identity", "evidence_refs"),
+        "customer_decision_item",
+    )
+    raw_text = row.get("text")
+    text = _text(row, "text")
+    if raw_text != text:
+        raise ContractValidationError(
+            "customer_decision_item text must be normalized"
+        )
+    if STRONG_TITLE_PATTERN.search(text):
+        raise ContractValidationError(
+            "customer_decision_item contains an unsupported conclusion"
+        )
+    identity = _text(row, "identity")
+    if identity not in FORMAL_CONTENT_IDENTITIES:
+        raise ContractValidationError(
+            "customer_decision_item identity is unsupported"
+        )
+    evidence_refs = _v22_strings(row, "evidence_refs")
+    if identity in {"来源事实", "用户已确认"} and not evidence_refs:
+        raise ContractValidationError(
+            "Factual customer_decision_item requires evidence"
+        )
+    if material_mode == "proposal-led" and (
+        identity in {"来源事实", "用户已确认"} or evidence_refs
+    ):
+        raise ContractValidationError(
+            "proposal-led customer_decision_item cannot claim customer facts or project evidence"
+        )
+    return {
+        "text": text,
+        "identity": identity,
+        "evidence_refs": evidence_refs,
+    }
+
+
+def validate_reading_deck_blueprint(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ContractValidationError("ReadingDeckBlueprint must be an object")
+    _require_exact_keys(
+        payload,
+        (
+            "project_id",
+            "source_version",
+            "material_mode",
+            "evidence_book_ref",
+            "decision_context_ref",
+            "problem_solution_fit_ref",
+            "section_flow",
+            "slides",
+            "hard_gate_refs",
+            "repair_history",
+        ),
+        "ReadingDeckBlueprint",
+    )
+    _reject_legacy_opinion_fields(payload)
+    mode = _material_mode(payload)
+    slides = []
+    for row in _v22_objects(payload, "slides", non_empty=True):
+        _require_exact_keys(
+            row,
+            (
+                "slide_id",
+                "order",
+                "section_id",
+                "page_task",
+                "reading_question",
+                "neutral_title",
+                "customer_decision_item",
+                "visible_copy_blocks",
+                "identity_labels",
+                "evidence_bindings",
+                "material_views",
+                "analysis_or_proposal_blocks",
+                "solution_mapping_refs",
+                "previous_relation",
+                "next_relation",
+                "speaker_notes",
+                "reading_quality",
+                "material_mode",
+            ),
+            "ReadingDeckBlueprint slide",
+        )
+        title = _text(row, "neutral_title")
+        if STRONG_TITLE_PATTERN.search(title):
+            raise ContractValidationError("neutral_title contains an unsupported conclusion")
+        order = row.get("order")
+        if isinstance(order, bool) or not isinstance(order, int) or order < 1:
+            raise ContractValidationError("slide order must be a positive integer")
+        slide_mode = _material_mode(row)
+        if slide_mode != mode:
+            raise ContractValidationError("slide material_mode must match the deck")
+        quality = row.get("reading_quality")
+        if not isinstance(quality, dict):
+            raise ContractValidationError("reading_quality must be an object")
+        _require_exact_keys(
+            quality,
+            ("independently_readable", "information_density", "review_note"),
+            "reading_quality",
+        )
+        visible_copy_blocks = [
+            _content_block(block, allow_internal_analysis=False)
+            for block in _v22_objects(
+                row, "visible_copy_blocks", non_empty=True
+            )
+        ]
+        analysis_or_proposal_blocks = [
+            _content_block(block, allow_internal_analysis=True)
+            for block in _v22_objects(row, "analysis_or_proposal_blocks")
+        ]
+        block_ids = [
+            block["block_id"]
+            for block in visible_copy_blocks + analysis_or_proposal_blocks
+        ]
+        if len(set(block_ids)) != len(block_ids):
+            raise ContractValidationError("Content block ids must be unique")
+        bindings = []
+        binding_refs: set[str] = set()
+        for binding in _v22_objects(row, "evidence_bindings"):
+            _require_exact_keys(
+                binding,
+                ("content_ref", "source_refs"),
+                "evidence_binding",
+            )
+            content_ref = _text(binding, "content_ref")
+            if content_ref not in block_ids:
+                raise ContractValidationError(
+                    "Evidence binding must reference a current content block"
+                )
+            if content_ref in binding_refs:
+                raise ContractValidationError(
+                    "Evidence binding content refs must be unique"
+                )
+            binding_refs.add(content_ref)
+            bindings.append(
+                {
+                    "content_ref": content_ref,
+                    "source_refs": _v22_strings(
+                        binding, "source_refs", non_empty=True
+                    ),
+                }
+            )
+        material_views = [
+            _material_view(material_view)
+            for material_view in _v22_objects(row, "material_views")
+        ]
+        slide = {
+            "slide_id": _text(row, "slide_id"),
+            "order": order,
+            "section_id": _text(row, "section_id"),
+            "page_task": _text(row, "page_task"),
+            "reading_question": _text(row, "reading_question"),
+            "neutral_title": title,
+            "customer_decision_item": _customer_decision_item(
+                row.get("customer_decision_item"), material_mode=slide_mode
+            ),
+            "visible_copy_blocks": visible_copy_blocks,
+            "identity_labels": _v22_strings(
+                row, "identity_labels", non_empty=True
+            ),
+            "evidence_bindings": bindings,
+            "material_views": material_views,
+            "analysis_or_proposal_blocks": analysis_or_proposal_blocks,
+            "solution_mapping_refs": _v22_strings(row, "solution_mapping_refs", non_empty=True),
+            "previous_relation": _text(row, "previous_relation"),
+            "next_relation": _text(row, "next_relation"),
+            "speaker_notes": _text(row, "speaker_notes"),
+            "reading_quality": {
+                "independently_readable": quality.get("independently_readable")
+                is True,
+                "information_density": _text(quality, "information_density"),
+                "review_note": _text(quality, "review_note"),
+            },
+            "material_mode": slide_mode,
+        }
+        if len(set(slide["identity_labels"])) != len(slide["identity_labels"]):
+            raise ContractValidationError("Slide identity_labels must be unique")
+        if not set(slide["identity_labels"]).issubset(FORMAL_CONTENT_IDENTITIES):
+            raise ContractValidationError("Slide identity_labels are unsupported")
+        if len(set(slide["solution_mapping_refs"])) != len(
+            slide["solution_mapping_refs"]
+        ):
+            raise ContractValidationError(
+                "Slide solution_mapping_refs must be unique"
+            )
+        quality = slide["reading_quality"]
+        if quality.get("independently_readable") is not True:
+            raise ContractValidationError("Slide must be independently readable")
+        _text(quality, "information_density")
+        _text(quality, "review_note")
+        if mode == "proposal-led":
+            required = {"诊断假设", "方案建议", "待联合验证"}
+            if not required.issubset(slide["identity_labels"]):
+                raise ContractValidationError("proposal-led slides require hypothesis, recommendation, and validation identities")
+            if slide["evidence_bindings"]:
+                raise ContractValidationError("proposal-led slides cannot cite project evidence")
+        elif not slide["evidence_bindings"]:
+            raise ContractValidationError(f"{mode} slides require evidence bindings")
+        slides.append(slide)
+    orders = [slide["order"] for slide in slides]
+    if sorted(orders) != list(range(1, len(slides) + 1)):
+        raise ContractValidationError("slide order must be unique and contiguous from 1")
+    if len({slide["slide_id"] for slide in slides}) != len(slides):
+        raise ContractValidationError("slide_id must be unique")
+    section_flow = _v22_strings(payload, "section_flow", non_empty=True)
+    if len(set(section_flow)) != len(section_flow):
+        raise ContractValidationError("section_flow entries must be unique")
+    return {
+        "project_id": _text(payload, "project_id"),
+        "source_version": _text(payload, "source_version"),
+        "material_mode": mode,
+        "evidence_book_ref": _text(payload, "evidence_book_ref"),
+        "decision_context_ref": _text(payload, "decision_context_ref"),
+        "problem_solution_fit_ref": _text(payload, "problem_solution_fit_ref"),
+        "section_flow": section_flow,
+        "slides": slides,
+        "hard_gate_refs": _v22_strings(payload, "hard_gate_refs"),
+        "repair_history": _v22_objects(payload, "repair_history"),
+    }
+
+
+def _hard_gate_checks(payload: dict[str, Any], field: str) -> list[dict[str, Any]]:
+    checks = []
+    for row in _v22_objects(payload, field):
+        _require_exact_keys(
+            row,
+            (
+                "check_id",
+                "applicability",
+                "result",
+                "hard",
+                "evidence_refs",
+                "failure_reason",
+            ),
+            "Content hard-gate check",
+        )
+        applicability = _text(row, "applicability")
+        result = _text(row, "result")
+        if applicability not in {"applicable", "not-applicable"}:
+            raise ContractValidationError("Hard-gate applicability is invalid")
+        if result not in {"passed", "failed", "not-applicable"}:
+            raise ContractValidationError("Hard-gate result is invalid")
+        if applicability == "not-applicable" and result != "not-applicable":
+            raise ContractValidationError("Non-applicable checks must be not-applicable")
+        if applicability == "applicable" and result == "not-applicable":
+            raise ContractValidationError("Applicable checks must pass or fail")
+        if row.get("hard") is not True:
+            raise ContractValidationError("Content hard-gate checks must be hard")
+        failure_reason = _boundary_text(row, "failure_reason")
+        if applicability == "applicable" and result == "failed" and not failure_reason:
+            raise ContractValidationError("Failed hard-gate checks require a reason")
+        if result != "failed" and failure_reason:
+            raise ContractValidationError("Only failed hard-gate checks may have a reason")
+        evidence_refs = _v22_strings(
+            row,
+            "evidence_refs",
+            non_empty=applicability == "applicable",
+        )
+        if applicability == "not-applicable" and evidence_refs:
+            raise ContractValidationError(
+                "Non-applicable hard-gate checks cannot cite evidence"
+            )
+        if len(set(evidence_refs)) != len(evidence_refs):
+            raise ContractValidationError(
+                "Hard-gate check evidence refs must be unique"
+            )
+        checks.append(
+            {
+                "check_id": _text(row, "check_id"),
+                "applicability": applicability,
+                "result": result,
+                "hard": True,
+                "evidence_refs": evidence_refs,
+                "failure_reason": failure_reason,
+            }
+        )
+    return checks
+
+
+def validate_content_hard_gate_record(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ContractValidationError("ContentHardGateRecord must be an object")
+    _require_exact_keys(
+        payload,
+        (
+            "gate_type",
+            "input_source_version",
+            "input_hash",
+            "reviewer_mode",
+            "independent_agent_instance_id",
+            "context_pack_ref",
+            "context_pack_hash",
+            "output_ref",
+            "deterministic_check_results",
+            "semantic_check_results",
+            "overall_result",
+            "repair_requirements",
+            "reviewer_cannot_edit",
+            "created_at",
+        ),
+        "ContentHardGateRecord",
+    )
+    gate_type = _text(payload, "gate_type")
+    if gate_type not in {"evidence", "presales-reading"}:
+        raise ContractValidationError("gate_type is invalid")
+    reviewer_mode = _text(payload, "reviewer_mode")
+    if reviewer_mode not in {"independent-agent", "isolated-review-task"}:
+        raise ContractValidationError("reviewer_mode is invalid")
+    input_hash = _text(payload, "input_hash")
+    context_pack_hash = _text(payload, "context_pack_hash")
+    if not re.fullmatch(r"[0-9a-f]{64}", input_hash):
+        raise ContractValidationError("input_hash must be a lowercase SHA-256")
+    if not re.fullmatch(r"[0-9a-f]{64}", context_pack_hash):
+        raise ContractValidationError(
+            "context_pack_hash must be a lowercase SHA-256"
+        )
+    context_pack_ref = _text(payload, "context_pack_ref")
+    if not re.fullmatch(
+        r"artifact://context-pack/[0-9a-f]{64}", context_pack_ref
+    ):
+        raise ContractValidationError("context_pack_ref must reference a context-pack")
+    created_at = _text(payload, "created_at")
+    try:
+        timestamp = datetime.fromisoformat(created_at)
+    except ValueError as error:
+        raise ContractValidationError("created_at must be ISO-8601") from error
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        raise ContractValidationError("created_at must include a timezone")
+    independent_id = _boundary_text(payload, "independent_agent_instance_id")
+    output_ref = _boundary_text(payload, "output_ref")
+    normalized = {
+        "gate_type": gate_type,
+        "input_source_version": _text(payload, "input_source_version"),
+        "input_hash": input_hash,
+        "reviewer_mode": reviewer_mode,
+        "independent_agent_instance_id": independent_id,
+        "context_pack_ref": context_pack_ref,
+        "context_pack_hash": context_pack_hash,
+        "output_ref": output_ref,
+        "deterministic_check_results": _hard_gate_checks(
+            payload, "deterministic_check_results"
+        ),
+        "semantic_check_results": _hard_gate_checks(
+            payload, "semantic_check_results"
+        ),
+        "repair_requirements": [],
+        "reviewer_cannot_edit": payload.get("reviewer_cannot_edit") is True,
+        "created_at": created_at,
+    }
+    if not normalized["reviewer_cannot_edit"]:
+        raise ContractValidationError("reviewer_cannot_edit must be true")
+    if reviewer_mode == "independent-agent":
+        if not independent_id or not re.fullmatch(
+            r"artifact://agent-output/[0-9a-f]{64}", output_ref
+        ):
+            raise ContractValidationError(
+                "independent-agent requires instance and agent-output evidence"
+            )
+    elif independent_id or output_ref:
+        raise ContractValidationError(
+            "isolated-review-task cannot claim independent-agent evidence"
+        )
+    all_checks = (
+        normalized["deterministic_check_results"]
+        + normalized["semantic_check_results"]
+    )
+    check_ids = [check["check_id"] for check in all_checks]
+    if len(set(check_ids)) != len(check_ids):
+        raise ContractValidationError("Content hard-gate check ids must be unique")
+    failures = [
+        check
+        for check in all_checks
+        if check["applicability"] == "applicable"
+        and check["hard"]
+        and check["result"] == "failed"
+    ]
+    computed = "failed" if failures else "passed"
+    if payload.get("overall_result") != computed:
+        raise ContractValidationError(f"overall_result must be {computed}")
+    repair_requirements = []
+    for row in _v22_objects(payload, "repair_requirements"):
+        _require_exact_keys(
+            row,
+            ("check_id", "instruction"),
+            "Content hard-gate repair requirement",
+        )
+        repair_requirements.append(
+            {
+                "check_id": _text(row, "check_id"),
+                "instruction": _text(row, "instruction"),
+            }
+        )
+    failed_ids = [check["check_id"] for check in failures]
+    requirement_ids = [row["check_id"] for row in repair_requirements]
+    if requirement_ids != failed_ids:
+        raise ContractValidationError(
+            "Repair requirements must exactly cover failed hard-gate checks"
+        )
+    normalized["repair_requirements"] = repair_requirements
+    normalized["overall_result"] = computed
+    return normalized

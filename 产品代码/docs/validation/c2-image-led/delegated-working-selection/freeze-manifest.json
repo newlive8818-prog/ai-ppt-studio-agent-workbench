@@ -1,0 +1,28 @@
+{
+  "files": [
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/src/ai_ppt_studio/application/image_led_selection.py",
+      "sha256": "4c465b81fcf2d94ee3375fb30d41849f01987a5260a178fb62dc252a396921f2"
+    },
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/src/ai_ppt_studio/context_compiler.py",
+      "sha256": "103f2a5423517be4f40b5c288ad4316744377c1977beb81e673e06394e9028fe"
+    },
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/src/ai_ppt_studio/application/image_led_service.py",
+      "sha256": "a781a5e1bcfb9865bfe46361f0ccafb9e64a3f7c628c0db17f3f06473783981e"
+    },
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/tests/test_image_led_working_selection.py",
+      "sha256": "6e5c8707998cd95f836333f59876cfb2f191bc134865a6cbfac6365a8dc91334"
+    },
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/docs/superpowers/specs/2026-09-11-c2-delegated-working-selection-design.md",
+      "sha256": "561821f9962a13aef74a818e73dc806f22a0e017c319358bb77d4d5076c37519"
+    },
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/docs/superpowers/plans/2026-09-11-c2-delegated-working-selection.md",
+      "sha256": "2e21960e8acbec507621734e61c337e1891e3f9d8e9aa06c38d6ad71ac9b6924"
+    }
+  ]
+}

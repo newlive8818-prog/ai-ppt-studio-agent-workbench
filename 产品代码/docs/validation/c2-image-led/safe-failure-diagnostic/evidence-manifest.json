@@ -1,0 +1,13 @@
+{
+  "command-path-receipt.json": "7a92bb8e80507c675d9836dfc57619dec4224d6f9c773f01432ccf0da49e013b",
+  "doc-checks.json": "169c5d68e394e9acd8874300dafc71f6e0dc839acab103be0af4afaad16c5311",
+  "focused.log": "3baeae7ba6f3b5daa0bed193a60db2e4adf8b30c8886778a74be22c52650dd9b",
+  "independent-check.log": "043b7e3223325e2fd57e3dd398c16e2238eca30a0becc9ef843857afd6b58d71",
+  "independent-check.py": "b1b17b404b681c0898fa4ca54938c9617318e69a3f0665eceeab6a5e87b42b3f",
+  "independent-review-manifest.json": "d45bd5f77e70e520af4b5ace3fe18d7f1fae8acc8e817f18d6a3c0aabfe22f69",
+  "independent-review.md": "9bcfdb8d06bcc234a55a43f251c3bae57d04c5e04eb84f44fe836ad1d340ad66",
+  "red.log": "a8af0c935293ee156000ed33bf4a6bba2ef406ec44e15cda1744d4e8d3036d43",
+  "reviewed-production-python-manifest.json": "b2901c8d4bb66cdbae98cb7f3dca276a25c34dd8a1fd3dfc6670516a6ae44062",
+  "snapshot-ledger-rerun.log": "793b19d2f42abdae4bdbf7a13f441ccccb459053d2ca330792e23dba7f1220ae",
+  "snapshot-python-all.log": "78cefeb9577f68d7ab92da5e2f91d4f4863fbcd192d7ff4c59f9f8867a080500"
+}

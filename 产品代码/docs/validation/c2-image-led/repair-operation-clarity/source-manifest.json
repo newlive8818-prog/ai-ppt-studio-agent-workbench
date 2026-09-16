@@ -1,0 +1,14 @@
+{
+  "base_commit": "92cb155c47f3b2964e96fcbb44cead8203a2d4fb",
+  "production": [
+    "src/ai_ppt_studio/adapters/image2_crs.py"
+  ],
+  "tests": [
+    "tests/test_image2_repair_transport.py"
+  ],
+  "references": [],
+  "files": {
+    "src/ai_ppt_studio/adapters/image2_crs.py": "475baf9fc4991702fc6ea60ec8a68a792ea4ebedeccb5c86b8ba2c7b06e0a766",
+    "tests/test_image2_repair_transport.py": "3195bcc29f9e1456a33eb19352989f5cfd11b70bed5c56fea8f0cceee9b66908"
+  }
+}

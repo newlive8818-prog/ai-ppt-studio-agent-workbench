@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+node_modules/
+output/
+.playwright-cli/
+产品代码/widget/dist/
+产品代码/widget/.dist-raw-*/

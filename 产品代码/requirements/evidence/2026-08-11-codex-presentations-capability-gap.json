@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "evidence_kind": "capability-gap",
+  "capability_gap_id": "CAP-2026-08-11-01",
+  "recorded_at": "2026-08-11T18:37:33+08:00",
+  "status": "pending-new-task-load",
+  "project_root": "/Users/defei/Documents/AI-PPT-Workspace/projects/v16-真实售前验收-经营一体化方案",
+  "project_revision": 41,
+  "gate_state": {
+    "G0": "passed",
+    "G1": "passed",
+    "G2": "open",
+    "G3": "locked",
+    "G4": "locked"
+  },
+  "capability": "Codex Presentations callable production surface",
+  "observation": "The current Codex task exposes the AI PPT Studio schema 3 MCP tools and reports presentations=true during runtime preflight, but it was created before the genuine OpenAI Presentations plugin was installed and therefore does not expose that plugin's bundled skill for PPTX read, create, edit, render, or inspection.",
+  "installation_resolution": {
+    "installed_at": "2026-08-11T18:51:59+08:00",
+    "plugin_id": "presentations@openai-primary-runtime",
+    "version": "26.805.11740",
+    "marketplace_root": "/Users/defei/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime",
+    "installed_path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/plugins/cache/openai-primary-runtime/presentations/26.805.11740",
+    "manifest_sha256": "6095433306daa22c6dcc8a6052843622831979b783ca8a757893402c7df3c217",
+    "cli_status": "installed, enabled",
+    "official_loading_rule": "Bundled skills become available in a new chat or CLI session after installation.",
+    "official_documentation": "https://developers.openai.com/codex/plugins"
+  },
+  "impact": [
+    "Strict route B native-first anchor production cannot start.",
+    "No native-anchor-set may be committed.",
+    "G2 aesthetic, engineering, and four-target same-hash desktop evidence cannot be produced.",
+    "G3 and G4 remain locked by the authoritative runtime."
+  ],
+  "prohibited_substitutes": [
+    "workspace dependency libraries",
+    "PptxGenJS",
+    "python-pptx",
+    "LibreOffice",
+    "PowerPoint or WPS scripting",
+    "a self-built PPTX compiler",
+    "browser or developer renders presented as desktop target evidence"
+  ],
+  "evidence_boundary": {
+    "g1_recorded": true,
+    "native_pptx_created": false,
+    "native_anchor_set_created": false,
+    "g2_target_evidence_created": false,
+    "desktop_evidence_fabricated": false
+  },
+  "resolution_condition": "Start a new Codex task after the verified Presentations installation, verify that the genuine Presentations bundled skill is loaded before any PPTX write, then resume from project revision 41 without replacing the accepted visual contracts.",
+  "separate_pending_host_evidence": [
+    "real compact Widget screenshot in the reloaded Codex host",
+    "real professional visual-review screenshot in the reloaded Codex host"
+  ]
+}

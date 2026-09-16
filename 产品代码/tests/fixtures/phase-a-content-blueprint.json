@@ -1,0 +1,44 @@
+{
+  "title": "AI PPT Studio 原生工作台验收",
+  "audience": "售前解决方案负责人",
+  "goal": "确认内容蓝图主线，并进入视觉构想阶段",
+  "narrative_thesis": "让 Agent 在结构化认知地图约束下持续推进，让人只处理高价值判断。",
+  "chapters": [
+    {
+      "title": "从动态对话到可控交付",
+      "slide_ids": ["S01", "S02", "S03"]
+    }
+  ],
+  "slides": [
+    {
+      "slide_id": "S01",
+      "title": "聊天负责探索，认知地图负责沉淀",
+      "purpose": "建立产品共识",
+      "claim": "动态推理与结构化项目状态必须同时存在",
+      "visible_content": ["对话动态生成", "项目状态可追溯", "关键判断可回写"],
+      "speaker_notes": "解释 Agent 原生工作台并非传统固定表单。",
+      "source_refs": [],
+      "material_refs": []
+    },
+    {
+      "slide_id": "S02",
+      "title": "AI 主导执行，人类提供判断",
+      "purpose": "明确人机分工",
+      "claim": "用户不需要管理过程细节，只需要在高影响节点作出选择",
+      "visible_content": ["AI 当前判断", "不确定性", "建议动作", "用户反馈"],
+      "speaker_notes": "强调结果满意度才是产品价值核心。",
+      "source_refs": [],
+      "material_refs": []
+    },
+    {
+      "slide_id": "S03",
+      "title": "一次判断产生新的项目 revision",
+      "purpose": "说明双向回写闭环",
+      "claim": "页面不是静态前端，而是 Agent 可读取、可继续执行的业务上下文",
+      "visible_content": ["读取快照", "保存判断", "刷新状态", "继续 Codex 对话"],
+      "speaker_notes": "说明并发冲突会被显式拦截。",
+      "source_refs": [],
+      "material_refs": []
+    }
+  ]
+}

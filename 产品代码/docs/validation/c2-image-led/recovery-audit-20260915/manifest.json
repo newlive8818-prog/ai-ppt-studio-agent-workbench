@@ -1,0 +1,22 @@
+{
+  "created_at_utc": "2026-09-15T03:26:55.421216+00:00",
+  "author_thread": "01a0a2c6-57d7-7670-9b04-9b8d1788351a",
+  "ledger_before_sha256": "8efceefe5d3dc7fd8106e33c98e34c6a6f04f4bec9bc5e19a27cabf9650e0306",
+  "ledger_before_bytes": 268185,
+  "runtime_state_sha256": "e7b2042c0a279084540a449fb272054905104f606bf345ebb6d64655e5729e2d",
+  "files": {
+    "c2-spec-review.md": "aae64def9d2ab409f31d8ccaff0524f232d968a7e3b6f6c3c1cc7639e122aad9",
+    "c2-engineering-review.md": "e80ab23b17c209a726817df6e514fd509514829e416846fafc14ee96a6105b66",
+    "upstream-diagnosis.json": "d93ede8fbe6df95537a9b220651a7ff738e745e2f0c9b634d203763a8173107c",
+    "runtime-replay.json": "63840d95056d2b88239168f80cba0fb77ae22e66da9a3129305954380dede34b",
+    "runtime-replay-user-fonts.json": "e6092981e1187aad3094611d001d0f00cefc732282cbba59c3d72cfe788a72be",
+    "runtime-replay-native-host.json": "99fedc6dc735f0cfa4d35f72488f69720366ce560f41a731f985bde5d0fee997",
+    "verify-current.py": "86c173ee1ba756b26cd20745f969b2ae4f1009dfdc7d5408f673dba8041e93c5",
+    "ledger-appendix.md": "ccdf5594787e0943e5ae7402a8e0a425ed0e7cb5ad56933f8f47e80c2a01c4dd",
+    "verification-report.before.md": "8efceefe5d3dc7fd8106e33c98e34c6a6f04f4bec9bc5e19a27cabf9650e0306"
+  },
+  "ledger_after_sha256": "eb2ec58c1b90a71ba3e28ca893ea3558245a82e5bca1a81cdc0edbd10b4b8764",
+  "ledger_after_bytes": 277658,
+  "appendix_start_line": 1306,
+  "prefix_preserved": true
+}

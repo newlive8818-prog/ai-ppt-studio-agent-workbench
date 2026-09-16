@@ -1,0 +1,244 @@
+"""Public runtime exceptions."""
+
+
+class AiPptError(Exception):
+    """Base error for user-recoverable AI PPT runtime failures."""
+
+
+class ConfigurationError(AiPptError):
+    """Raised when workspace configuration is invalid."""
+
+
+class ProtectedPathError(AiPptError):
+    """Raised before a write can touch a protected location."""
+
+
+class ProjectNotFoundError(AiPptError):
+    """Raised when a managed project cannot be found."""
+
+
+class InvalidTransitionError(AiPptError):
+    """Raised when a project attempts to skip a state gate."""
+
+
+class MaterialImportError(AiPptError):
+    """Raised when user-provided source material cannot be imported safely."""
+
+
+class ArtifactValidationError(AiPptError):
+    """Raised when a project artifact lacks required semantic content."""
+
+
+class ArtifactReferenceError(AiPptError):
+    """Raised when an immutable artifact reference cannot be resolved safely."""
+
+
+class ProjectIdentityError(AiPptError):
+    """Raised when a kernel is opened with the wrong project identity."""
+
+
+class GateMutationError(AiPptError):
+    """Raised when code attempts to forge or corrupt a gate transition."""
+
+
+class ContractValidationError(AiPptError):
+    """Raised when a schema 3.0 domain contract is invalid."""
+
+
+G2_DIAGNOSTIC_CODES = frozenset(
+    {
+        "reference-resolution-failed",
+        "canonical-anchor-derivation-failed",
+        "legacy-render-assets-fallback-failed",
+        "file-or-lineage-identity-changed",
+        "capability-gap",
+        "deadline-exceeded",
+        "duplicate-json-property",
+        "contract-validation",
+    }
+)
+
+
+class G2EvidenceError(ContractValidationError):
+    """A safe, structured cause for an internal G2 evidence failure."""
+
+    def __init__(self, message: str, *, cause_code: str) -> None:
+        if cause_code not in G2_DIAGNOSTIC_CODES:
+            raise ValueError(f"Unsupported G2 diagnostic code: {cause_code}")
+        self.cause_code = cause_code
+        super().__init__(message)
+
+
+class TransactionRollbackError(AiPptError):
+    """Raised when a failed transaction cannot be rolled back completely."""
+
+    def __init__(
+        self,
+        *,
+        rollback_errors: tuple[dict[str, str], ...],
+        state_restored: bool,
+        preserved_exposed_transaction: bool,
+    ) -> None:
+        self.code = "TRANSACTION_ROLLBACK_FAILED"
+        self.rollback_errors = rollback_errors
+        self.state_restored = state_restored
+        self.preserved_exposed_transaction = preserved_exposed_transaction
+        super().__init__(
+            "Transaction rollback was incomplete; inspect rollback_errors "
+            "and the chained original failure"
+        )
+
+
+class MissionNotConfirmedError(AiPptError):
+    """Raised before formal content work without a current user confirmation."""
+
+
+class MaterialModeUnconfirmedError(AiPptError):
+    """Raised when neither current materials nor an explicit empty mode is bound."""
+
+
+class FeedbackGovernanceError(AiPptError):
+    """Raised when feedback bypasses its required governance state."""
+
+
+class ContentWorkflowError(AiPptError):
+    """Raised when the content-review workflow cannot safely advance."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        self.code = code
+        self.details = dict(details or {})
+        super().__init__(message)
+
+
+class ConfirmationTransactionError(AiPptError):
+    """Reject an untrusted, stale, replayed, or corrupt confirmation commit."""
+
+    def __init__(self, code: str, message: str) -> None:
+        self.code = code
+        super().__init__(message)
+
+
+class ExperienceValidationError(AiPptError):
+    """Raised when personal experience data or an evolution action is invalid."""
+
+
+class WorkbenchValidationError(AiPptError):
+    """Raised when a workbench request is structurally invalid."""
+
+
+class RevisionConflictError(AiPptError):
+    """Raised when a workbench write targets an obsolete project revision."""
+
+    def __init__(self, expected_revision: int, actual_revision: int) -> None:
+        self.expected_revision = expected_revision
+        self.actual_revision = actual_revision
+        super().__init__(
+            f"Expected revision {expected_revision}, current revision is {actual_revision}"
+        )
+
+
+class ReviewSourceStaleError(AiPptError):
+    """Raised when marks target a professional-review source that has changed."""
+
+    def __init__(self, expected_source: str, actual_source: str) -> None:
+        self.expected_source = expected_source
+        self.actual_source = actual_source
+        super().__init__(
+            f"Review source {expected_source} is stale; current source is {actual_source}"
+        )
+
+
+class ReviewSessionStaleError(ReviewSourceStaleError):
+    """Raised when a ReviewSession source or identity is stale."""
+
+    def __init__(self, expected: str, actual: str) -> None:
+        self.code = "REVIEW_SESSION_STALE"
+        self.expected = expected
+        self.actual = actual
+        self.expected_source = expected
+        self.actual_source = actual
+        AiPptError.__init__(
+            self,
+            f"ReviewSession source {expected} is stale; current source is {actual}"
+        )
+
+
+class ReviewSessionAlreadyCurrentError(AiPptError):
+    """Raised when the current session identity already exists with another policy."""
+
+    code = "REVIEW_SESSION_ALREADY_CURRENT"
+
+    def __init__(self, review_type: str, review_session_id: str) -> None:
+        self.review_type = review_type
+        self.review_session_id = review_session_id
+        self.details = {
+            "review_type": review_type,
+            "review_session_id": review_session_id,
+        }
+        super().__init__("A compatible current ReviewSession already exists")
+
+
+class ReviewHostOpenUnavailableError(AiPptError):
+    code = "REVIEW_HOST_OPEN_UNAVAILABLE"
+
+    def __init__(self, session_ref: str, session: dict[str, object], revision: int) -> None:
+        self.details = {
+            "session_ref": session_ref,
+            "session": session,
+            "revision": revision,
+        }
+        super().__init__("Review host open capability is unavailable")
+
+
+class ReviewHostOpenFailedError(AiPptError):
+    code = "REVIEW_HOST_OPEN_FAILED"
+
+    def __init__(self, session_ref: str, session: dict[str, object], revision: int) -> None:
+        self.details = {
+            "session_ref": session_ref,
+            "session": session,
+            "revision": revision,
+        }
+        super().__init__("Review host open failed")
+
+
+class ReviewAiReceiptUnverifiedError(AiPptError):
+    code = "REVIEW_AI_RECEIPT_UNVERIFIED"
+
+    def __init__(self, session_ref: str, session: dict[str, object], revision: int) -> None:
+        self.details = {
+            "session_ref": session_ref,
+            "session": session,
+            "revision": revision,
+        }
+        super().__init__("Review AI receipt could not be verified")
+
+
+class ReviewMarkSaveError(AiPptError):
+    """Raised when a valid review-mark write fails at the persistence boundary."""
+
+
+class ChatDeliveryError(AiPptError):
+    """Raised when a valid chat-delivery receipt cannot be persisted."""
+
+
+class GateBlockedError(AiPptError):
+    """Raised when a user tries to pass a quality gate without its evidence."""
+
+    def __init__(
+        self,
+        gate: str,
+        missing_evidence: tuple[str, ...],
+        diagnostics: tuple[dict[str, str], ...] = (),
+    ) -> None:
+        self.gate = gate
+        self.missing_evidence = missing_evidence
+        self.diagnostics = diagnostics
+        super().__init__(
+            f"{gate} is missing required evidence: {', '.join(missing_evidence)}"
+        )

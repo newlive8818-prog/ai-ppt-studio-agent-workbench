@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "evidence_identity": "v1.6-corrected-automated-regression-run",
+  "proof_eligible": true,
+  "simulation": false,
+  "uses_deterministic_fixtures": true,
+  "checked_at": "2026-08-12T17:21:44Z",
+  "branch": "codex/mvp-skill-app-design",
+  "results": [
+    {
+      "command": "python3 -m unittest discover -s tests -v",
+      "result": "passed",
+      "test_count": 136
+    },
+    {
+      "command": "npm run test:node",
+      "result": "passed",
+      "test_count": 32,
+      "environment_note": "Run with local permission because seven Review Bridge tests bind a random 127.0.0.1 port; all seven assertions passed."
+    },
+    {
+      "command": "npm run test:widget",
+      "result": "passed",
+      "test_count": 38
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    },
+    {
+      "command": "npm run accept:v16-ui",
+      "result": "passed",
+      "scenario_count": 15,
+      "screenshot_count": 15,
+      "long_document_cases": 2
+    }
+  ],
+  "verified_contracts": [
+    "MissionDraft becomes confirmable but never self-confirms",
+    "Python blocks formal content until a current host-verified MissionConfirmation and material identity exist",
+    "OK, 确认, 采纳, 继续 and clear equivalents remain confirmation intent only in the current confirmable mission-card context and never become evidence",
+    "production startup requests host-native form elicitation when no verified sidebar or message adapter exists, and only host accept plus confirmed=true reaches Python",
+    "host-native decline, cancel, confirmed=false, unavailable capability, and verifier rejection make zero business writes",
+    "no-materials-confirmed routes to proposal-only and rejects invented facts, numbers, cases, capabilities, results, or promises",
+    "content producer/reviewer and visual producer/reviewer contexts remain isolated",
+    "G1/G2/G4 and target matrices use binary hard gates without numeric aesthetic scores",
+    "ReviewMarkSet is sourceVersion/revision bound and stale saves preserve the previous head and drafts",
+    "professional review keeps content/visual controls and switches by issuing a new server-resolved single-reviewType session",
+    "feedback governance precedes change sets and F2/F3 require user decision",
+    "experience intake, role slices, promotion, demotion, disable, and rollback retain governance boundaries",
+    "strict route B and Codex Presentations-only PPTX routing remain enforced by source contracts"
+  ],
+  "scope": "Fresh automated contract, component, build, loopback security, UI, packaging, and release execution for the corrected v1.6 worktree.",
+  "exclusions": [
+    "real Codex sidebar interaction",
+    "real Codex built-in Browser open/save interaction",
+    "real Codex host-native MissionConfirmation dialog and acceptance",
+    "real sales project completion",
+    "Codex Presentations production in this correction run",
+    "G0/G3/G4 real chat confirmation or delivery",
+    "macOS or Windows PowerPoint/WPS desktop evidence"
+  ]
+}

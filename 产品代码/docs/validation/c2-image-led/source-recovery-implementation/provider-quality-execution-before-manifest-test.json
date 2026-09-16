@@ -1,0 +1,61 @@
+[
+  {
+    "command": [
+      "/Users/defei/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "node_modules/typescript/bin/tsc",
+      "-p",
+      "widget/tsconfig.json",
+      "--noEmit"
+    ],
+    "cwd": "/private/tmp/c2-provider-preparation-validation-ztxhptxc/repo/产品代码",
+    "started_at": 1789015237.307425,
+    "elapsed_seconds": 2.496,
+    "exit_code": 0,
+    "log": "/private/tmp/c2-provider-preparation-validation-ztxhptxc/quality-0.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "command": [
+      "/Users/defei/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "scripts/build-widget.mjs"
+    ],
+    "cwd": "/private/tmp/c2-provider-preparation-validation-ztxhptxc/repo/产品代码",
+    "started_at": 1789015239.805664,
+    "elapsed_seconds": 3.732,
+    "exit_code": 0,
+    "log": "/private/tmp/c2-provider-preparation-validation-ztxhptxc/quality-1.log",
+    "log_sha256": "a13770ed7c9f36c2525ea2ce616cfa049fdfce90e671d410b28f03e33a1fa71f"
+  },
+  {
+    "command": [
+      "/Users/defei/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "--test",
+      "tests/host-confirmation-recovery.test.mjs",
+      "tests/host-form-transport.test.mjs",
+      "tests/image-led-confirmation.test.mjs",
+      "tests/image-led-execution.test.mjs",
+      "tests/image-led-generation-recovery.test.mjs",
+      "tests/image-led-mcp-e2e.test.mjs",
+      "tests/image-led-native.test.mjs",
+      "tests/image2-provider-preflight.test.mjs",
+      "tests/material-finding-mcp.test.mjs",
+      "tests/mcp-runtime-bridge.test.mjs",
+      "tests/mcp-server.test.mjs",
+      "tests/plugin-release.test.mjs",
+      "tests/plugin-shape.test.mjs",
+      "tests/project-asset.test.mjs",
+      "tests/review-bridge.test.mjs",
+      "tests/review-preview-assets.test.mjs",
+      "tests/tool-catalog-consistency.test.mjs",
+      "tests/v22-prototype-fidelity.test.mjs",
+      "tests/v22-ui-acceptance-evidence.test.mjs",
+      "tests/widget-bundle.test.mjs"
+    ],
+    "cwd": "/private/tmp/c2-provider-preparation-validation-ztxhptxc/repo/产品代码",
+    "started_at": 1789015243.5381188,
+    "elapsed_seconds": 15.991,
+    "exit_code": 1,
+    "log": "/private/tmp/c2-provider-preparation-validation-ztxhptxc/quality-2.log",
+    "log_sha256": "cbd5840f220ed4340acf5408c13ebeb1382ccedcb4c1093b4bf755436a714b92"
+  }
+]

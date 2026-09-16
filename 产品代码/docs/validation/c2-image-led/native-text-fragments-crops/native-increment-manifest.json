@@ -1,0 +1,40 @@
+{
+  "execution_base": "92cb155c47f3b2964e96fcbb44cead8203a2d4fb",
+  "observed_head": "4cab684fee73e394075a3800742f9f706cb5e190",
+  "frozen": true,
+  "files": [
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/src/ai_ppt_studio/domains/visual/image_led.py",
+      "sha256": "7cb3857f3bbc2ce90de49ffdf6c6135f1aafe54be80208a03173cf4b01ad0883",
+      "initial_sha256": "04319fcc5030a422a01d34673aa6a42d65994a02ee0d6dd3724ceb297166765f"
+    },
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/src/ai_ppt_studio/application/image_led_results.py",
+      "sha256": "46f4c61bc7ce425541f0b59feb38cf9664660cb0ea07506dfaee22935eed704d",
+      "initial_sha256": "13055793c4c85aa19801762b1f1330d3b8df076ca1a9b14dc1e61c905bc79a2c"
+    },
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/scripts/image-led-native.mjs",
+      "sha256": "2e377306f43f55b59a73fd95cfc671eae9d2987c61d3a34207fe1cd8f7a2687a",
+      "initial_sha256": "0cfeb9f0ec2f562c654aacbe58e22d74b07f24b6932221065680b1767c0d2d58"
+    },
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/tests/test_image_led_text_fragments.py",
+      "sha256": "3487fc713127bc54a7b6c5182faff8dc5d12aafc9c23d8c32e86ce05e3fc7e55",
+      "initial_sha256": null
+    },
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/tests/test_image_led_text_fragments_sdk.py",
+      "sha256": "49750af9295a2c17d86de5fc551242355a4cac2b6307cb44d5c2e50fff43861f",
+      "initial_sha256": null
+    }
+  ],
+  "verification": {
+    "focused_suite": "green-focused-suite.log: 102 PASS on current production files; before final whitespace test addition",
+    "final_new_tests": "green-whitespace-and-sdk.log: 24 PASS including added pure whitespace span and final SDK fixture",
+    "node_renderer": "green-node-renderer.log: 7 PASS",
+    "sdk_report": "sdk-evidence-report.json",
+    "diff_check": "PASS",
+    "independent_review": "Pending"
+  }
+}

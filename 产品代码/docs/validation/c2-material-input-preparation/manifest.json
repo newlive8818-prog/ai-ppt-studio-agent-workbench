@@ -1,0 +1,30 @@
+{
+  "kind": "preserved-controller-draft-not-production",
+  "base_commit": "0b58ca5dfe8913645b55296c32c0bfeb453cf94e",
+  "source_worktree": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/2a66/PPT-codex-app",
+  "patch_sha256": "131ccf69ccf154a61154021b9797d6c7bcadb611870719d695c633c79a903275",
+  "files": [
+    {
+      "path": "产品代码/src/ai_ppt_studio/domains/materials/__init__.py",
+      "before_sha256": "40cfc7d2c7808ef0a1d2d792de7274f9c7e92f8dae75538992c46c3fbdf764ee",
+      "draft_sha256": "9be204aeb03a64042c747cceda694006d3be6f7ce78725650ee6b30bd6614b34"
+    },
+    {
+      "path": "产品代码/src/ai_ppt_studio/domains/materials/image_input_contracts.py",
+      "before_sha256": null,
+      "draft_sha256": "50e022d623b57ed3e6e9d02d10fe081059ae1d53dd4d9b3c6bb9165f63ae45e2"
+    },
+    {
+      "path": "产品代码/tests/test_image_input_contracts.py",
+      "before_sha256": null,
+      "draft_sha256": "a0f203e2fc31e5c24a1764e4456ec07d5fd36a78c2fbd04230ca9798e7582ca6"
+    }
+  ],
+  "verification_scope": "Archive integrity and patch replay only; no production enforcement proof",
+  "recorded_prior_tests": {
+    "focused": 6,
+    "combined": 44,
+    "rerun_in_this_archive_step": false
+  },
+  "apply_option": "--unidiff-zero"
+}

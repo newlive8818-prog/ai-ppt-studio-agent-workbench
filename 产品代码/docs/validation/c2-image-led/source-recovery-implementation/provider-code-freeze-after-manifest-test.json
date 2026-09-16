@@ -1,0 +1,128 @@
+{
+  "schema": "c2-provider-b-code-freeze/v1",
+  "created_at": "2026-09-10T04:43:18.692552+00:00",
+  "git_root": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app",
+  "branch": "codex/image-led-native-anchors",
+  "base_commit": "7b0a24a1ac1e568ccb0a9af18a018fbf052dec93",
+  "status": "SourceAndFocusedTestsFrozenAfterExactManifestTestUpdate; full Node rerun pending",
+  "files": {
+    "产品代码/.mcp.json": "06b5e80b1dd8a9902e974319fc60c3fd97f8fa812e4264f9548ad033c3b72774",
+    "产品代码/mcp/server.mjs": "a31b90585f868ac8cfeee699d24ce4b6eb231a124df246e21963b3918618cee6",
+    "产品代码/mcp/tools/project-tools.mjs": "558e6140c6dd5249cea65cc1e21d193c1a729ff0f577d55e640bf75038ffd695",
+    "产品代码/src/ai_ppt_studio/adapters/image2_command.py": "ebc87aa4e7fde72da1d40221c7ead07a2683b0af6db03c95e80cafe0acc60ddc",
+    "产品代码/src/ai_ppt_studio/adapters/image2_crs.py": "855fbb788400c0586b7d669560f048d19ccb0f4048e3606c7e67f686ad66ac20",
+    "产品代码/src/ai_ppt_studio/application/bridge/project.py": "7d69b730c8982b13ee26cd2ff1c24139297f8a8c6bc28055186aff2cf3cd55f4",
+    "产品代码/tests/mcp-server.test.mjs": "b854eea4154a52ab358477c9f38d5767d146586369e5bf93bb13507883f0f95d",
+    "产品代码/tests/image2-provider-preflight.test.mjs": "7116e0b64f4ee1a71a293d7d894961576d8177a6143b963b546f9196e1e3653c",
+    "产品代码/tests/test_image2_crs_provider.py": "c757ccc6b0e0920418dc5f1dcb6b8ebe9ff3af054d6e3c5cf9bd61452ed8b6ad",
+    "产品代码/tests/test_image2_preflight.py": "d6844b270a55ec396e2fcee175f0c5a30aec99894cad39cf95591424d504e7f8",
+    "产品代码/tests/plugin-shape.test.mjs": "d381a2c28006fad0db4f439db190ba1a4d5a0f1e5c7798f1c960aa1658d4a7b9"
+  },
+  "checks": [
+    {
+      "check": "python-final",
+      "exit_code": 0,
+      "elapsed_seconds": 9.382,
+      "log": "/private/tmp/c2-provider-b-python-final.log",
+      "log_sha256": "27db4f0c2bd88de414bf24acb4df92d3e07d672ca29c9a11b9151e4220f36517",
+      "command": [
+        "/Users/defei/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "-m",
+        "unittest",
+        "tests.test_image2_crs_provider",
+        "tests.test_image2_preflight",
+        "tests.test_image_led_execution_entrypoint",
+        "tests.test_image_led_generation_recovery",
+        "tests.test_image_led_requests",
+        "tests.test_image2_input_boundary"
+      ],
+      "cwd": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码"
+    },
+    {
+      "check": "node-final",
+      "exit_code": 0,
+      "elapsed_seconds": 12.166,
+      "log": "/private/tmp/c2-provider-b-node-final.log",
+      "log_sha256": "cad9443e32f73854bae630fb5ffce1dc9abc275d340220836769e5bac303a87e",
+      "command": [
+        "/Users/defei/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+        "--test",
+        "tests/image2-provider-preflight.test.mjs",
+        "tests/mcp-server.test.mjs",
+        "tests/image-led-generation-recovery.test.mjs",
+        "tests/tool-catalog-consistency.test.mjs"
+      ],
+      "cwd": "/private/tmp/c2-provider-b-node-source"
+    },
+    {
+      "check": "plugin-shape-exact-manifest",
+      "exit_code": 0,
+      "test_count": 2,
+      "command": [
+        "/Users/defei/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+        "--test",
+        "tests/plugin-shape.test.mjs"
+      ],
+      "cwd": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码",
+      "log": "/private/tmp/c2-provider-b-plugin-shape-green.log",
+      "log_sha256": "44ea3af6b9c1192abb9a71d6e4a67dfdbc3c2402cc9f65c3c2256ad463c8a738"
+    }
+  ],
+  "diff_check_log": "/private/tmp/c2-provider-b-diff-check.log",
+  "diff_check_log_sha256": "88910dc93fa3af305e0e59e7aa0a45a1bfbf3c770815c40445545c3ea9d8e86f",
+  "red_logs": [
+    "/private/tmp/c2-provider-b-wrapper-red.log",
+    "/private/tmp/c2-provider-b-preflight-red.log",
+    "/private/tmp/c2-provider-b-node-red.log",
+    "/private/tmp/c2-provider-b-schema-red.log",
+    "/private/tmp/c2-provider-b-unicode-red.log"
+  ],
+  "test_counts": {
+    "new_python": 23,
+    "focused_python": 56,
+    "focused_node": 52,
+    "new_node": 3
+  },
+  "scope": {
+    "real_auth_helper_runs": 0,
+    "real_provider_requests": 0,
+    "customer_runtime_reads": 0,
+    "customer_runtime_writes": 0,
+    "host_config_writes": 0,
+    "installed_or_loaded": false,
+    "commit_created": false
+  },
+  "limits": [
+    "Only temporary synthetic fixtures; generation helper/HTTP mocked except one temporary synthetic direct-child timeout fixture.",
+    "Stat-only preflight executed in an isolated actual packaged MCP-to-Python child; current desktop loaded MCP not tested.",
+    "New package tests use fake npm and remove their temporary Skill/Plugin outputs; no real installation.",
+    "Original shared node_modules imports were slow; focused Node checks used private snapshot with approved private dependencies.",
+    "Full suites/build, independent review, retained release package identity and commit belong to the controller."
+  ],
+  "prior_freeze": {
+    "path": "/private/tmp/c2-provider-b-freeze.json",
+    "sha256": "0f18f9cfadfd6bdca75cafa7c97afbfc181b1eebf8b25bc79b82cc15e2cffb8c",
+    "original_ten_files_unchanged": true
+  },
+  "followup": {
+    "changed_files": [
+      "产品代码/tests/plugin-shape.test.mjs"
+    ],
+    "reason": "Approved four-key Image 2 forwarding declaration was absent from the old exact manifest test expectation.",
+    "production_source_changed": false,
+    "assertion_weakened": false,
+    "full_node_red_preserved": "/private/tmp/c2-provider-b-manifest-full-red.log",
+    "full_node_red_sha256": "cbd5840f220ed4340acf5408c13ebeb1382ccedcb4c1093b4bf755436a714b92",
+    "focused_red": "/private/tmp/c2-provider-b-plugin-shape-red.log",
+    "focused_green": "/private/tmp/c2-provider-b-plugin-shape-green.log",
+    "focused_green_sha256": "44ea3af6b9c1192abb9a71d6e4a67dfdbc3c2402cc9f65c3c2256ad463c8a738",
+    "focused_count": 2,
+    "focused_exit_code": 0,
+    "command": [
+      "/Users/defei/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "--test",
+      "tests/plugin-shape.test.mjs"
+    ],
+    "diff_check_exit_code": 0
+  }
+}

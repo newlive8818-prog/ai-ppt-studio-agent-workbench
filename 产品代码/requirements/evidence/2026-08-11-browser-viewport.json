@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "evidence_identity": "v1.6-automated-browser-viewport-run",
+  "proof_eligible": true,
+  "simulation": false,
+  "uses_deterministic_schema3_project": true,
+  "checked_at": "2026-08-11T08:55:53.351Z",
+  "command": "npm run accept:v16-ui",
+  "result": "passed",
+  "acceptance_script_sha256": "22841279502ba74bf640bc9670d91ceec6b53c6710e8fc38eb360998546daf83",
+  "raw_report_sha256": "ff09e169e3487d79482fc383656f626c156e24ee7de5552aa4aceac0f8528590",
+  "widget_html_sha256": "a7af3534eb9bf974c8f0a85b8e9da8854d4bdcf96994d048ca3c62007da8de5b",
+  "workbench": {
+    "widths": [360, 420, 480],
+    "primary_action_count_each": 1,
+    "navigation_pointer_target_minimum_px": 40,
+    "four_binary_gates_present": true,
+    "four_desktop_targets_present": true,
+    "same_hash_projection_present": true,
+    "forbidden_full_workspace_and_delivery_controls_absent": true
+  },
+  "professional_review": {
+    "types": ["content", "visual"],
+    "widths": [760, 1000, 1440],
+    "zoom_percentages": [100, 200],
+    "header_height_px": 64,
+    "outline_initially_closed": true,
+    "outline_and_marks_drawers_mutually_exclusive": true,
+    "document_geometry_stable_when_drawer_opens": true,
+    "complete_page_anchors_present": true,
+    "speaker_notes_present": true,
+    "forbidden_gate_download_history_gallery_and_return_controls_absent": true
+  },
+  "long_documents": [
+    {
+      "review_type": "content",
+      "page_count": 60,
+      "mount_ms": 114.8,
+      "horizontal_overflow": false,
+      "console_error_count": 0
+    },
+    {
+      "review_type": "visual",
+      "page_count": 120,
+      "mount_ms": 227.8,
+      "horizontal_overflow": false,
+      "console_error_count": 0
+    }
+  ],
+  "screenshot_count": 15,
+  "console_error_count": 0,
+  "scope": "Real Chromium execution of deterministic schema 3 Widget and professional-review projections. It proves browser layout and interaction contracts only.",
+  "exclusions": [
+    "actual Codex sidebar or fullscreen host capability",
+    "chat delivery or user Gate confirmation",
+    "Codex Presentations output",
+    "desktop PowerPoint or WPS evidence"
+  ]
+}

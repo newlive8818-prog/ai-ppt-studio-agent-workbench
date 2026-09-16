@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "evidence_identity": "real-local-plugin-install",
+  "proof_eligible": true,
+  "simulation": false,
+  "checked_at": "2026-08-12T17:29:10Z",
+  "marketplace": "defei-ai-ppt-studio-040",
+  "plugin_name": "ai-ppt-studio",
+  "plugin_version": "0.4.0+codex.20260813010800",
+  "installed_cache_root": "/Users/defei/Library/Application Support/Codex API Client/codex-home/plugins/cache/defei-ai-ppt-studio-040/ai-ppt-studio/0.4.0+codex.20260813010800",
+  "installed_release_manifest_sha256": "bc7d9d1edda247a3b789397f33c269ad6944ff95d8f39cf7dd84df00d4baadea",
+  "installed_mcp_server_sha256": "cdf90baef5ecb4a47f4bc146ee4caa3324f81f1ab8c85e92de2ad4b4f979946c",
+  "installed_skill_sha256": "94bdafbb548846a1b05c15f5be4747aa032fd8e0bb810d80b6eb4d780f0aea7c",
+  "release_file_count": 3703,
+  "official_plugin_validation": "passed",
+  "official_skill_validation": "passed",
+  "runtime_recovery_test": "passed",
+  "installed_probe": {
+    "status": "passed",
+    "source_repository_pythonpath": false,
+    "tool_count": 17,
+    "chat_ui_template_count": 0,
+    "ordinary_tools_data_only": true,
+    "host_native_mission_confirmation_fallback": true,
+    "mission_summary_exposed": true,
+    "mission_confirmation_chat_ui_template": false,
+    "sidebar_capability_code": "HOST_SIDEBAR_UNAVAILABLE",
+    "browser_capability_code": "BROWSER_REVIEW_UNAVAILABLE",
+    "sidebar_real_host_evidence": false,
+    "browser_real_host_evidence": false
+  },
+  "verified_contracts": [
+    "the installed release manifest exactly matches all shipped files",
+    "the installed cache exposes 17 pure-data tools and zero chat UI templates",
+    "the installed confirm_ai_ppt_mission schema exposes the four-field mission summary and host-native fallback contract",
+    "the personal plugin source and Codex cache have identical installed manifest, MCP server, and Skill hashes",
+    "the installed runtime creates and reopens one schema 3 project without changing revision",
+    "missing sidebar and Browser adapters are reported honestly and do not fall back to chat UI"
+  ],
+  "exclusions": [
+    "real sidebar availability",
+    "real Browser availability or reliable save",
+    "real Codex host-native MissionConfirmation dialog or acceptance",
+    "real project MissionConfirmation, Gates, PPTX, or delivery",
+    "desktop target-render evidence"
+  ]
+}

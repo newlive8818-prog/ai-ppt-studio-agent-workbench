@@ -1,0 +1,529 @@
+{
+  "scope": "read-only current C2 evidence replay; no gate or business writes",
+  "started_utc": "2026-09-15T03:11:27Z",
+  "runtime_revision": 142,
+  "gate_status": {
+    "G0": "passed",
+    "G1": "passed",
+    "G2": "passed",
+    "G3": "passed",
+    "G4": "open"
+  },
+  "python": {
+    "path": "/Users/defei/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+    "version": "3.12.14",
+    "machine": "arm64"
+  },
+  "package": "/Users/defei/Library/Application Support/Codex API Client/codex-home/plugins/cache/defei-ai-ppt-studio-040/ai-ppt-studio/0.4.0+codex.c2.chat-confirm.20260914",
+  "package_manifest_sha256": "9dc42870cfd2ea535bdad2869f9a4071fa12b8a6f27b1ba5ae6a2a4d2e304804",
+  "fonts": [
+    {
+      "path": "/Applications/Microsoft PowerPoint.app/Contents/Resources/DFonts/msyh.ttc",
+      "sha256": "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577"
+    },
+    {
+      "path": "/Applications/Microsoft PowerPoint.app/Contents/Resources/DFonts/msyhbd.ttc",
+      "sha256": "519309b7ab0479c4dc3ace5e291de5a8702175be5586e165bc810267bd4619a5"
+    },
+    {
+      "path": "/Applications/Microsoft PowerPoint.app/Contents/Resources/DFonts/msyhl.ttc",
+      "sha256": "f25f39a6d56ec6d1b356254dd776219d71b7e6f3584b3ec1b83aab0ceb08881a"
+    }
+  ],
+  "before": {
+    "file_count": 378,
+    "sha256": "965badcd3a60cf2121022b2a5e58a38a5028fa0a6f964508d592ec40397cdfd6",
+    "state_sha256": "e7b2042c0a279084540a449fb272054905104f606bf345ebb6d64655e5729e2d"
+  },
+  "checks": {
+    "current_authority": {
+      "status": "passed",
+      "elapsed_seconds": 0.401,
+      "result": null
+    },
+    "current_anchors": {
+      "status": "passed",
+      "elapsed_seconds": 19.084,
+      "result": {
+        "slide_ids": [
+          "C2-S04",
+          "C2-S05",
+          "C2-S06"
+        ],
+        "pptx_sha256": "bc8df49178b1ae9e3831caf6a81bab5bfaa2c029aff056291d60bfc1421be5e5",
+        "image_led": {
+          "build_result_ref": "artifact://image-led-build-result/61dde151936737d38139338dee0f53c135d06e1b233a7ea6320445d865840ddc",
+          "four_dimension_review_ref": "artifact://image-led-result-review/bd7b1ab8dd292ce3385a8215f9c2c7501b290f69376a89a3b13974017d693ba4",
+          "plan_ref": "artifact://visual-compilation-plan/4cea28378cd3dac328a028279f7fdebdb34e95cf06783290ebc8f181410a3431",
+          "pptx_sha256": "bc8df49178b1ae9e3831caf6a81bab5bfaa2c029aff056291d60bfc1421be5e5",
+          "region_inventory_ref": "artifact://image-led-region-inventory/1764231174a2a36e86f7b7c95bd56b53c10d116b78a34b8e3494dd461d6983a3",
+          "selection_ref": "artifact://image-led-selection/0deb8a26780fba4cf51c5cdc675a7c46c9b930bc1dbd1762a5edbeb6d849488f"
+        }
+      }
+    },
+    "current_g2_evidence": {
+      "status": "passed",
+      "elapsed_seconds": 20.863,
+      "result": {
+        "validated": true,
+        "keys": [
+          "policy_ref",
+          "compilation_plan_ref",
+          "policy",
+          "refs",
+          "target_evidence_refs",
+          "target_evidence_ref_by_id",
+          "target_evidence_payloads",
+          "target_evidence_identities",
+          "internal_review_refs",
+          "design_system",
+          "visual_contract_set",
+          "anchor_slide_set"
+        ],
+        "evidence_refs": []
+      }
+    },
+    "visual_review_projection": {
+      "status": "passed",
+      "elapsed_seconds": 42.316,
+      "result": {
+        "review_session": {
+          "ai_receipt_status": "pending",
+          "created_at": "2026-09-13T07:29:10.264758+00:00",
+          "host_notification_status": "not-requested",
+          "host_open_receipt_ref": "artifact://review-host-open-receipt/a95bde69f5f9aadfcd781841bae85ab0569795874c3d1cab8fb06a5c7c29c9d4",
+          "host_open_status": "opened",
+          "last_opened_at": "2026-09-14T10:31:01.838Z",
+          "open_policy": "foreground-if-waiting",
+          "persistence_status": "saved",
+          "project_id": "c2-image-led-native-anchors-20260909",
+          "review_session_id": "visual-professional-c24c85b250a883d18ae0",
+          "review_type": "visual-professional",
+          "revision": 132,
+          "source_version": "c2-content-source-migration-v2-20260910",
+          "status": "opened",
+          "submitted_at": null,
+          "target_artifact_ref": "artifact://visual-contract/ac26cf54bac125f4c61779fe91c008f43dff776ad8c8f61a5aab844e2235ee35",
+          "review_status": {
+            "gate": "G3",
+            "status": "passed"
+          }
+        },
+        "revision": 132,
+        "authoritative_revision": 142,
+        "anchor_count": 3,
+        "contract_count": 3,
+        "projection_keys": [
+          "project_id",
+          "project_name",
+          "review_type",
+          "review_session_id",
+          "review_session",
+          "source_version",
+          "revision",
+          "authoritative_revision",
+          "visual_contract_ref",
+          "visual_brief_ref",
+          "visual_brief",
+          "deck_design_system_ref",
+          "deck_design_system",
+          "anchor_slide_set_ref",
+          "anchors",
+          "anchor_identity",
+          "slide_visual_contracts",
+          "anchor_feedback_batch",
+          "anchor_feedback_batch_ref",
+          "contract_review_marks",
+          "contract_review_marks_ref",
+          "host_submission_capability",
+          "ai_receipt_capability"
+        ]
+      }
+    }
+  },
+  "font_configuration": "system host discovery; listed fonts are comparison metadata, not explicit registration",
+  "gate/G3/confirmation": {
+    "ref": "artifact://g3-confirmation/0f24ca092952ebe5bd136cf5db8568a3390dbae12965e5aa129acba74bbace68",
+    "payload": {
+      "challenge_id": "d20b0767d4bac09e309cbef72c3b45181c505b00d90e7a448176497e9dad88bb",
+      "challenge_revision": 139,
+      "confirmation_identity_type": "verified-message",
+      "confirmed_at": "2026-09-14T16:02:38.593711+00:00",
+      "evidence_refs": [
+        "artifact://visual-contract/ac26cf54bac125f4c61779fe91c008f43dff776ad8c8f61a5aab844e2235ee35",
+        "artifact://release-target-policy/ca4a2a3af0c13f4366aeb6f039c8064abe6fbbae570a31d65f11e57e329dd250",
+        "artifact://reading-deck-blueprint/1e7f1f86261882d495ed138fe225bc7219809c240aca983557378a12718da4da",
+        "artifact://deck-design-system/335ac1bfcd7681d003497b2f135438f2dc168f8c8ff263f435d975fe923c6aac",
+        "artifact://visual-contract-set/ba1fe7b5792f043c3a7b04f6d849a497da84fa9fac0742f562017216629e709b",
+        "artifact://visual-compilation-plan/4cea28378cd3dac328a028279f7fdebdb34e95cf06783290ebc8f181410a3431",
+        "artifact://anchor-slide-set/421181c482027911884ff7adc2032b99c32cafdeaff709373320ee061beade15"
+      ],
+      "gate": "G3",
+      "host_assertion_sha256": "595afd196c8c4ad7e31649a5243820d5bfcd6bc8ae41ed1b9cf5af33f33cd8b4",
+      "project_id": "c2-image-led-native-anchors-20260909",
+      "release_target_policy_ref": "artifact://release-target-policy/ca4a2a3af0c13f4366aeb6f039c8064abe6fbbae570a31d65f11e57e329dd250",
+      "scope_id": "G3",
+      "scope_kind": "gate",
+      "source_version": "artifact://visual-contract/ac26cf54bac125f4c61779fe91c008f43dff776ad8c8f61a5aab844e2235ee35",
+      "user_action_ref": "",
+      "user_message_ref": "chat://message/msg_01a09f7d-1a86-7e81-903c-1633d735368f",
+      "visual_contract_ref": "artifact://visual-contract/ac26cf54bac125f4c61779fe91c008f43dff776ad8c8f61a5aab844e2235ee35"
+    }
+  },
+  "review/session/visual-professional": {
+    "ref": "artifact://review-session/97a43efae40012678b76c62c15f7316e4cf2addb7b5b1496e537d0ea6051d802",
+    "payload": {
+      "ai_receipt_status": "pending",
+      "created_at": "2026-09-13T07:29:10.264758+00:00",
+      "host_notification_status": "not-requested",
+      "host_open_receipt_ref": "artifact://review-host-open-receipt/a95bde69f5f9aadfcd781841bae85ab0569795874c3d1cab8fb06a5c7c29c9d4",
+      "host_open_status": "opened",
+      "last_opened_at": "2026-09-14T10:31:01.838Z",
+      "open_policy": "foreground-if-waiting",
+      "persistence_status": "saved",
+      "project_id": "c2-image-led-native-anchors-20260909",
+      "review_session_id": "visual-professional-c24c85b250a883d18ae0",
+      "review_type": "visual-professional",
+      "revision": 132,
+      "source_version": "c2-content-source-migration-v2-20260910",
+      "status": "opened",
+      "submitted_at": null,
+      "target_artifact_ref": "artifact://visual-contract/ac26cf54bac125f4c61779fe91c008f43dff776ad8c8f61a5aab844e2235ee35"
+    }
+  },
+  "release/target-policy": {
+    "ref": "artifact://release-target-policy/ca4a2a3af0c13f4366aeb6f039c8064abe6fbbae570a31d65f11e57e329dd250",
+    "payload": {
+      "compatibility_claim_scope": [
+        "macos-powerpoint"
+      ],
+      "decision_source": "explicit-user-confirmation",
+      "deferred_target_ids": [
+        "macos-wps",
+        "windows-powerpoint",
+        "windows-wps"
+      ],
+      "effective_at": "2026-08-13T00:00:00+08:00",
+      "policy_id": "v1.6-macos-powerpoint",
+      "policy_version": "1.0",
+      "rationale": "当前先保证 macOS Microsoft PowerPoint；WPS 和 Windows 延期。",
+      "required_target_ids": [
+        "macos-powerpoint"
+      ],
+      "status": "active"
+    }
+  },
+  "visual/target-evidence/G2/macos-powerpoint": {
+    "ref": "artifact://target-render-evidence/f40655d95a7d4843b4f3a483450097eba4328fe117356eb4da6aeb15dfdc9515",
+    "payload": {
+      "anchor_slide_set_ref": "artifact://anchor-slide-set/421181c482027911884ff7adc2032b99c32cafdeaff709373320ee061beade15",
+      "application": "Microsoft PowerPoint",
+      "application_check_result": "passed",
+      "application_version": "current PowerPoint instance; version not surfaced by UI",
+      "evidence_identity": "formal-target-render",
+      "evidence_ref": "artifact://target-render-capture/140b5e0d7426bf9f329dbca07c735712f8abb6122c99dbf45588fcf2bf200f07",
+      "executor": "c2-native-execution-session",
+      "export_refs": [
+        "artifact://target-export/1b508b5ceb5444f3cb76de7a3daa4eaa94d50ab8e7aa8ffef855bde34bbe91f1"
+      ],
+      "exported_at": "2026-09-12T20:35:56.031038+00:00",
+      "font_check_result": "passed",
+      "font_inventory_ref": "artifact://font-inventory/a05f257fb546ca9e3ec965b4b682ee1ce26d5580d10995ba7704dd0ff8678610",
+      "font_substitution_plan_ref": "artifact://font-plan/b935b09e5503bc27069a54b72e0b726d267c510f00310d6822bdca9152465cc1",
+      "operating_system": "macOS",
+      "operating_system_version": "26.6.2",
+      "overall_result": "passed",
+      "page_image_refs": [
+        "artifact://target-page-image/381ba6943d8190794f4f540712920bf100e37d58b1fe526cd8bdf902b3dd0772"
+      ],
+      "pptx_sha256": "bc8df49178b1ae9e3831caf6a81bab5bfaa2c029aff056291d60bfc1421be5e5",
+      "reviewer_attestation_ref": "artifact://desktop-review-attestation/054c7f3f4c9430252006b7875376f8afa60b5569c42907f5f340b53ec83a5cfc",
+      "sha256_after": "bc8df49178b1ae9e3831caf6a81bab5bfaa2c029aff056291d60bfc1421be5e5",
+      "sha256_before": "bc8df49178b1ae9e3831caf6a81bab5bfaa2c029aff056291d60bfc1421be5e5",
+      "slide_checks": [
+        {
+          "aesthetic_result": "passed",
+          "engineering_result": "passed",
+          "evidence_refs": [
+            "artifact://slide-check/da931e4d4be52aaea70525a1e5b0746002bd49862eb3b34f5bd11789aa65b28a"
+          ],
+          "semantic_result": "passed",
+          "slide_id": "C2-S04",
+          "target_render_result": "passed"
+        },
+        {
+          "aesthetic_result": "passed",
+          "engineering_result": "passed",
+          "evidence_refs": [
+            "artifact://slide-check/160dfce41f49d4af70b2b829cf3c4dae58ff23fff6768521cc9a12ec91124036"
+          ],
+          "semantic_result": "passed",
+          "slide_id": "C2-S05",
+          "target_render_result": "passed"
+        },
+        {
+          "aesthetic_result": "passed",
+          "engineering_result": "passed",
+          "evidence_refs": [
+            "artifact://slide-check/af6a65b90fab407bb55c551a6391a9368658b9c9c0b9be7671f8ec3f579a3781"
+          ],
+          "semantic_result": "passed",
+          "slide_id": "C2-S06",
+          "target_render_result": "passed"
+        }
+      ],
+      "source_pptx_ref": "artifact://native-pptx/f5c56b4d11e307ba7b24eb66f621dd46632e71df00d3f94bd67d8a91febbf1fa",
+      "stage": "G2",
+      "target_id": "macos-powerpoint",
+      "tool_version": "macos-powerpoint-live-ui/1.0"
+    }
+  },
+  "g2_reviews": [
+    {
+      "slot": "visual/review/G2/aesthetic",
+      "ref": "artifact://visual-review-record/c7e1ea98f34dbda9464ff4cd7199e587868597a996f80cd51295314123e29940",
+      "overall_result": "passed",
+      "reviewer_role": "visual-aesthetic-reviewer",
+      "retained_failed_reference_checks": [
+        {
+          "applicability": "applicable",
+          "criterion_id": "cross-slide-rhythm-risk",
+          "evidence_refs": [
+            "artifact://anchor-slide-set/421181c482027911884ff7adc2032b99c32cafdeaff709373320ee061beade15"
+          ],
+          "failure_reason": "The three-page anchor subset contains three consecutive high or very-high-density pages and exceeds the Design System consecutive-density limit of two; this is non-blocking for the isolated G2 anchor review but remains a full-deck rhythm risk.",
+          "level": "reference-implementation",
+          "result": "failed"
+        },
+        {
+          "applicability": "applicable",
+          "criterion_id": "s05-fill-provenance",
+          "evidence_refs": [
+            "artifact://anchor-slide-set/421181c482027911884ff7adc2032b99c32cafdeaff709373320ee061beade15"
+          ],
+          "failure_reason": "S05-header-field and S05-strategy-left-field current fills differ from the old handoff and are not covered by accepted_deviations; acceptance of the old accepted PPTX must not transfer to the current artifacts.",
+          "finding": "S05-header-field current fill uses angle 136 and stops beginning #0052C8, #0052C8, #074193; old handoff uses angle 0 and stops #063A7D, #073C7B, #005BE7. S05-strategy-left-field current fill uses angle 57 and stops beginning #31A0E9, #31A0E9, #2C8BDD; old handoff uses angle 0 and stops #30B7EE, #087CE0, #094DB7.",
+          "level": "reference-implementation",
+          "result": "failed"
+        },
+        {
+          "applicability": "applicable",
+          "criterion_id": "strict-render-replay-history",
+          "evidence_refs": [
+            "artifact://anchor-slide-set/421181c482027911884ff7adc2032b99c32cafdeaff709373320ee061beade15"
+          ],
+          "failure_reason": "Historical strict render replay failure remains unresolved and is not normalized to a pass by this aesthetic review.",
+          "level": "reference-implementation",
+          "result": "failed"
+        },
+        {
+          "applicability": "applicable",
+          "criterion_id": "human-approval-boundary",
+          "evidence_refs": [
+            "artifact://anchor-slide-set/421181c482027911884ff7adc2032b99c32cafdeaff709373320ee061beade15"
+          ],
+          "failure_reason": "human_image_approval and final_human_acceptance remain NotEstablished; this independent review cannot sign a user visual decision.",
+          "level": "reference-implementation",
+          "result": "failed"
+        }
+      ]
+    },
+    {
+      "slot": "visual/review/G2/engineering",
+      "ref": "artifact://visual-review-record/6cd143ca1e7af971c2c39cb012a2216cce9761d911d3f7b1e5913a3ae40f2159",
+      "overall_result": "passed",
+      "reviewer_role": "visual-engineering-reviewer",
+      "retained_failed_reference_checks": [
+        {
+          "applicability": "applicable",
+          "criterion_id": "engineering-cross-slide-density-risk",
+          "evidence_refs": [
+            "artifact://anchor-slide-set/421181c482027911884ff7adc2032b99c32cafdeaff709373320ee061beade15"
+          ],
+          "failure_reason": "The isolated three-anchor subset contains three consecutive high or very-high-density pages, exceeding the current Design System consecutive-density limit of two. This remains a full-deck rhythm risk and must be rechecked after the full deck is assembled.",
+          "level": "reference-implementation",
+          "result": "failed"
+        },
+        {
+          "applicability": "applicable",
+          "criterion_id": "engineering-s05-fill-provenance",
+          "evidence_refs": [
+            "artifact://anchor-slide-set/421181c482027911884ff7adc2032b99c32cafdeaff709373320ee061beade15"
+          ],
+          "failure_reason": "S05-header-field and S05-strategy-left-field current fills differ from the older accepted handoff and are not listed as accepted_deviations. Current exact values remain: S05-header-field angle 136, stops beginning #0052C8/#0052C8/#074193 versus old angle 0, #063A7D/#073C7B/#005BE7; S05-strategy-left-field angle 57, stops beginning #31A0E9/#31A0E9/#2C8BDD versus old angle 0, #30B7EE/#087CE0/#094DB7. No old acceptance is transferred to the current artifacts.",
+          "level": "reference-implementation",
+          "result": "failed"
+        },
+        {
+          "applicability": "applicable",
+          "criterion_id": "engineering-strict-render-replay-history",
+          "evidence_refs": [
+            "artifact://anchor-slide-set/421181c482027911884ff7adc2032b99c32cafdeaff709373320ee061beade15"
+          ],
+          "failure_reason": "The historical strict render replay failure remains unresolved. Current direct OOXML, mapping, reimport, target-render, and byte-identity checks pass, but this review does not normalize the historical replay failure to passed.",
+          "level": "reference-implementation",
+          "result": "failed"
+        },
+        {
+          "applicability": "applicable",
+          "criterion_id": "engineering-review-bridge-routing",
+          "evidence_refs": [
+            "artifact://anchor-slide-set/421181c482027911884ff7adc2032b99c32cafdeaff709373320ee061beade15"
+          ],
+          "failure_reason": "The authorized C2 review record was created through the formal Python bridge. The broader claimed host review-bridge routing path remains not independently re-established in this review, so no generic routing claim is made.",
+          "level": "reference-implementation",
+          "result": "failed"
+        },
+        {
+          "applicability": "applicable",
+          "criterion_id": "engineering-formal-entry-generalization",
+          "evidence_refs": [
+            "artifact://anchor-slide-set/421181c482027911884ff7adc2032b99c32cafdeaff709373320ee061beade15"
+          ],
+          "failure_reason": "The complete formal-entry generalization matrix is not closed by this real three-page task. This engineering result proves the current project lineage and output only; it is not a universal entrypoint or route-compatibility claim.",
+          "level": "reference-implementation",
+          "result": "failed"
+        },
+        {
+          "applicability": "applicable",
+          "criterion_id": "engineering-human-approval-boundary",
+          "evidence_refs": [
+            "artifact://anchor-slide-set/421181c482027911884ff7adc2032b99c32cafdeaff709373320ee061beade15"
+          ],
+          "failure_reason": "human_image_approval, G3, and final_human_acceptance remain NotEstablished. This internal engineering review cannot sign a user visual or delivery decision.",
+          "level": "reference-implementation",
+          "result": "failed"
+        }
+      ]
+    }
+  ],
+  "build_files": [
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/compare-1-overlay.png",
+      "expected_sha256": "36c9c1a684725a1c17c0bed947be54720d0bd58d646c785ac6e8965fa4325ff0",
+      "actual_sha256": "36c9c1a684725a1c17c0bed947be54720d0bd58d646c785ac6e8965fa4325ff0",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/compare-1-regions.json",
+      "expected_sha256": "4a7d5b316fea1a90409f191d6506b7b6240607a6294e0dd7f73d2ad63b7a6bb8",
+      "actual_sha256": "4a7d5b316fea1a90409f191d6506b7b6240607a6294e0dd7f73d2ad63b7a6bb8",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/compare-1-side-by-side.png",
+      "expected_sha256": "14c15e83221223c570917339a64da34b94556156018540daca11f8ffb5a5773f",
+      "actual_sha256": "14c15e83221223c570917339a64da34b94556156018540daca11f8ffb5a5773f",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/compare-2-overlay.png",
+      "expected_sha256": "f89f55f877700da4c3738b6ee725d77342492d23424507be26fd4a5fc43dac0d",
+      "actual_sha256": "f89f55f877700da4c3738b6ee725d77342492d23424507be26fd4a5fc43dac0d",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/compare-2-regions.json",
+      "expected_sha256": "d34d048721e06fbaed8bc4279474b9e07659f7315d5545429982c16408ab7808",
+      "actual_sha256": "d34d048721e06fbaed8bc4279474b9e07659f7315d5545429982c16408ab7808",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/compare-2-side-by-side.png",
+      "expected_sha256": "4fb55996220ca85f3adedb767dc4fff93239f5b3905cd462ff3b3a05975566f8",
+      "actual_sha256": "4fb55996220ca85f3adedb767dc4fff93239f5b3905cd462ff3b3a05975566f8",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/compare-3-overlay.png",
+      "expected_sha256": "065b3b71ceb6f799a2139520b489bc0284cf1901ebe9cefa177d593a7e8e9649",
+      "actual_sha256": "065b3b71ceb6f799a2139520b489bc0284cf1901ebe9cefa177d593a7e8e9649",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/compare-3-regions.json",
+      "expected_sha256": "63c1d5416f49cac5d7ef7d1d9542eee4e26747e805a38b7604396efc75171d29",
+      "actual_sha256": "63c1d5416f49cac5d7ef7d1d9542eee4e26747e805a38b7604396efc75171d29",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/compare-3-side-by-side.png",
+      "expected_sha256": "c0dd2573c2ef8686036d28d9ff36802c53f1179e903acd4dc1bb7ce6c0c3877e",
+      "actual_sha256": "c0dd2573c2ef8686036d28d9ff36802c53f1179e903acd4dc1bb7ce6c0c3877e",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/authoring.proto.json",
+      "expected_sha256": "aaedb7154312b30eed38bcd071146e8086ee732d1c173a42fa3a8c28208e238d",
+      "actual_sha256": "aaedb7154312b30eed38bcd071146e8086ee732d1c173a42fa3a8c28208e238d",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/handoff.json",
+      "expected_sha256": "ddf22f5ec3d36507d3e13a4c668c54ca301aa41b66608dd73817360970281f3d",
+      "actual_sha256": "ddf22f5ec3d36507d3e13a4c668c54ca301aa41b66608dd73817360970281f3d",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/inspect.ndjson",
+      "expected_sha256": "d3483e98b93d4ab37d9ff45e0ab19e21210618df231031bae7dfa1bc486d2dd3",
+      "actual_sha256": "d3483e98b93d4ab37d9ff45e0ab19e21210618df231031bae7dfa1bc486d2dd3",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/mapping.json",
+      "expected_sha256": "24b7838f7b2a7e39f4937153d1c634627d198723c516fe946cf31177aac580e3",
+      "actual_sha256": "24b7838f7b2a7e39f4937153d1c634627d198723c516fe946cf31177aac580e3",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/reimport.proto.json",
+      "expected_sha256": "0ac9b77b04d131bdde8c5090fc6d8a66efab5d8cf56ce5003b21553eb151feb2",
+      "actual_sha256": "0ac9b77b04d131bdde8c5090fc6d8a66efab5d8cf56ce5003b21553eb151feb2",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/slide-1.layout.json",
+      "expected_sha256": "5989ded15ee07583d65dac8fdb11d541a56ac80ee7b5444dc96c02f97f124b04",
+      "actual_sha256": "5989ded15ee07583d65dac8fdb11d541a56ac80ee7b5444dc96c02f97f124b04",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/slide-2.layout.json",
+      "expected_sha256": "cf3c0eeb8c4cca81d7c0008d583c6226fe9c0a15bc7332ce0d70c5f8d6239f72",
+      "actual_sha256": "cf3c0eeb8c4cca81d7c0008d583c6226fe9c0a15bc7332ce0d70c5f8d6239f72",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/slide-3.layout.json",
+      "expected_sha256": "4560a70049003dc431c98ceeef81734291fd3b6c591ca8fcc4488234f7e79704",
+      "actual_sha256": "4560a70049003dc431c98ceeef81734291fd3b6c591ca8fcc4488234f7e79704",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/slide-1.png",
+      "expected_sha256": "8f9e06d2ac1d7b1011491f4dc2b20822b5ebcbdce9e3fc03d63d63e23c74c455",
+      "actual_sha256": "8f9e06d2ac1d7b1011491f4dc2b20822b5ebcbdce9e3fc03d63d63e23c74c455",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/slide-2.png",
+      "expected_sha256": "1e7f72fcfa18d6c2eed18e978f5edd8b5d9183392fc91351c0e2924d759d155c",
+      "actual_sha256": "1e7f72fcfa18d6c2eed18e978f5edd8b5d9183392fc91351c0e2924d759d155c",
+      "matches": true
+    },
+    {
+      "path": "/Users/defei/Documents/AI-PPT-Workspace/projects/c2-image-led-native-anchors-20260909/979c61472fe84801cee593610c867614e9b75d14080e8ddcf0bb8c340971a722/slide-3.png",
+      "expected_sha256": "ee21692c15081fab2fed2340f0e20d85f718be773c69c8544ebff88a1938e0e8",
+      "actual_sha256": "ee21692c15081fab2fed2340f0e20d85f718be773c69c8544ebff88a1938e0e8",
+      "matches": true
+    }
+  ],
+  "after": {
+    "file_count": 378,
+    "sha256": "965badcd3a60cf2121022b2a5e58a38a5028fa0a6f964508d592ec40397cdfd6",
+    "state_sha256": "e7b2042c0a279084540a449fb272054905104f606bf345ebb6d64655e5729e2d"
+  },
+  "zero_authority_write": true,
+  "finished_utc": "2026-09-15T03:12:50Z"
+}

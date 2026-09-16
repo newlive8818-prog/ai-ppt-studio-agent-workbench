@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0",
+  "proofs": [
+    {
+      "proof_ref": "proof://automated-test/25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+      "kind": "automated-test",
+      "path": "evidence/2026-08-12-corrected-automated-regression.json",
+      "sha256": "25725aacb67690fc2ae6cc10732963b9a9f5d4c50ad34bd269d6cbfc71c2c3e1",
+      "requirement_ids": [
+        "PRD-17.1-01", "PRD-17.1-02", "PRD-17.1-03", "PRD-17.1-05", "PRD-17.1-06", "PRD-17.1-07",
+        "PRD-17.2-01", "PRD-17.2-02",
+        "PRD-17.3-01", "PRD-17.3-02", "PRD-17.3-03", "PRD-17.3-04", "PRD-17.3-05", "PRD-17.3-06", "PRD-17.3-07", "PRD-17.3-08", "PRD-17.3-09", "PRD-17.3-10", "PRD-17.3-11", "PRD-17.3-12", "PRD-17.3-13", "PRD-17.3-14", "PRD-17.3-15",
+        "PRD-17.4-01", "PRD-17.4-02", "PRD-17.4-03", "PRD-17.4-04", "PRD-17.4-05", "PRD-17.4-06", "PRD-17.4-07", "PRD-17.4-08", "PRD-17.4-09",
+        "PRD-17.5-02", "PRD-17.5-03", "PRD-17.5-06",
+        "SDD-21.3-01", "SDD-21.3-02", "SDD-21.3-03", "SDD-21.3-05", "SDD-21.3-06", "SDD-21.3-07", "SDD-21.3-08", "SDD-21.3-10", "SDD-21.3-11", "SDD-21.3-12", "SDD-21.3-13", "SDD-21.3-14", "SDD-21.3-15", "SDD-21.3-16", "SDD-21.3-17", "SDD-21.3-18", "SDD-21.3-19", "SDD-21.3-20", "SDD-21.3-21", "SDD-21.3-22", "SDD-21.3-23", "SDD-21.3-24", "SDD-21.3-25", "SDD-21.3-26", "SDD-21.3-27",
+        "UI-23.1-01", "UI-23.1-02", "UI-23.1-03", "UI-23.1-04",
+        "UI-23.2-01", "UI-23.2-02", "UI-23.2-03", "UI-23.2-04", "UI-23.2-06", "UI-23.2-11", "UI-23.2-12", "UI-23.2-15", "UI-23.2-16", "UI-23.2-18", "UI-23.2-19", "UI-23.2-25"
+      ]
+    },
+    {
+      "proof_ref": "proof://runtime-evidence/58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002",
+      "kind": "runtime-evidence",
+      "path": "evidence/2026-08-12-corrected-contract-runtime.json",
+      "sha256": "58ddf092533a9e83ca898c16e2fea5530f6addcb83c9965e1e3993ceff454002",
+      "requirement_ids": [
+        "PRD-17.2-01", "PRD-17.2-02",
+        "PRD-17.3-01", "PRD-17.3-02", "PRD-17.3-03", "PRD-17.3-10", "PRD-17.3-11", "PRD-17.3-12", "PRD-17.3-14",
+        "PRD-17.4-01", "PRD-17.4-02", "PRD-17.4-03", "PRD-17.4-04", "PRD-17.4-05", "PRD-17.4-06", "PRD-17.4-07", "PRD-17.4-08", "PRD-17.4-09",
+        "PRD-17.5-01", "PRD-17.5-02", "PRD-17.5-03", "PRD-17.5-06",
+        "SDD-21.3-03", "SDD-21.3-05", "SDD-21.3-06", "SDD-21.3-07", "SDD-21.3-10", "SDD-21.3-11", "SDD-21.3-12", "SDD-21.3-13", "SDD-21.3-14", "SDD-21.3-15", "SDD-21.3-16", "SDD-21.3-17", "SDD-21.3-18", "SDD-21.3-19", "SDD-21.3-20", "SDD-21.3-21", "SDD-21.3-22", "SDD-21.3-23", "SDD-21.3-24", "SDD-21.3-25", "SDD-21.3-26", "SDD-21.3-27",
+        "UI-23.1-01", "UI-23.1-02", "UI-23.1-03", "UI-23.1-04",
+        "UI-23.2-03", "UI-23.2-12", "UI-23.2-15", "UI-23.2-18"
+      ]
+    },
+    {
+      "proof_ref": "proof://runtime-evidence/51d5ac34dd3c8bc894ff7e57cec515fc0406c75c8512918d6d6a49d989302fa8",
+      "kind": "runtime-evidence",
+      "path": "evidence/2026-08-12-corrected-runtime-install.json",
+      "sha256": "51d5ac34dd3c8bc894ff7e57cec515fc0406c75c8512918d6d6a49d989302fa8",
+      "requirement_ids": [
+        "SDD-21.3-01", "SDD-21.3-02", "SDD-21.3-08"
+      ]
+    },
+    {
+      "proof_ref": "proof://viewport-evidence/4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431",
+      "kind": "viewport-evidence",
+      "path": "evidence/2026-08-12-corrected-browser-viewport.json",
+      "sha256": "4f1afd16a1cb15baa262846311a0a381f5479a7620ce5587a7e44c89f8a03431",
+      "requirement_ids": [
+        "UI-23.1-01", "UI-23.1-02", "UI-23.1-03", "UI-23.1-04",
+        "UI-23.2-01", "UI-23.2-02", "UI-23.2-03", "UI-23.2-04", "UI-23.2-06", "UI-23.2-11", "UI-23.2-12", "UI-23.2-15", "UI-23.2-18", "UI-23.2-25"
+      ]
+    }
+  ]
+}

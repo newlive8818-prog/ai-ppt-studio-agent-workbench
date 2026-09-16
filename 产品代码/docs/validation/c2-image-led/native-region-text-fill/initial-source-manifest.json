@@ -1,0 +1,17 @@
+{
+  "declared_baseline": "6df9251",
+  "files": {
+    "src/ai_ppt_studio/domains/visual/image_led.py": {
+      "sha256": "4732229e2bfed4db374458b7e666b07111de4af442db98f845ac31f77e0c0e6a",
+      "snapshot": "/private/tmp/c2-region-endpoints/before-image_led.py"
+    },
+    "scripts/image-led-native.mjs": {
+      "sha256": "34a25c63ccb33c2deceddd593568f492c0162deff1e4b0fff8984d0b393d388f",
+      "snapshot": "/private/tmp/c2-region-endpoints/before-image-led-native.mjs"
+    },
+    "src/ai_ppt_studio/application/image_led_results.py": {
+      "sha256": "ed985a2d4ad3a62a715b5e427c2cacb0a829eb81ca514873752d9493a8cdc45a",
+      "snapshot": "/private/tmp/c2-region-endpoints/before-image_led_results.py"
+    }
+  }
+}

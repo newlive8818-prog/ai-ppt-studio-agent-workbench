@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI PPT Studio Visual Contract",
+  "type": "object",
+  "required": [
+    "design_thesis",
+    "palette",
+    "typography",
+    "layout_rules",
+    "image_language",
+    "editability_rules"
+  ]
+}

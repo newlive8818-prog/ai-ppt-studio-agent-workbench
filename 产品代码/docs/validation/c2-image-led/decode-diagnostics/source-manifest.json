@@ -1,0 +1,7 @@
+{
+  "src/ai_ppt_studio/adapters/image2_crs.py": "62813b4899eee62e86aa30635c21ebc7ffd3c4adfba07dccf9937f171848d977",
+  "src/ai_ppt_studio/adapters/image2_diagnostics.py": "f77fb238a826cdf0977cc4af381cbfe9d63d358297f068c42fe31fc2af84e96f",
+  "tests/test_image2_decode_diagnostics.py": "9301d46ab7829a7d9a9b6a760dbd7eb579b32c0a05cefb85f4ae1aa68d6411f8",
+  "tests/test_image2_failure_diagnostics.py": "07aec629bacf84e723daf251c46fb967d7afd46ed95295722843147bce274c1b",
+  "tests/test_image2_sse.py": "33093e3c8fbc4d04b1b5b40a42876073d5007ff779e2747f785a2ade1179cf72"
+}

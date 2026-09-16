@@ -1,0 +1,46 @@
+{
+  "declared_baseline": "6df9251",
+  "scope": "same-C2 native region endpoints and editable run fill",
+  "files": [
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/src/ai_ppt_studio/domains/visual/image_led.py",
+      "sha256": "04319fcc5030a422a01d34673aa6a42d65994a02ee0d6dd3724ceb297166765f",
+      "initial_sha256": "4732229e2bfed4db374458b7e666b07111de4af442db98f845ac31f77e0c0e6a"
+    },
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/scripts/image-led-native.mjs",
+      "sha256": "0cfeb9f0ec2f562c654aacbe58e22d74b07f24b6932221065680b1767c0d2d58",
+      "initial_sha256": "34a25c63ccb33c2deceddd593568f492c0162deff1e4b0fff8984d0b393d388f"
+    },
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/src/ai_ppt_studio/application/image_led_results.py",
+      "sha256": "13055793c4c85aa19801762b1f1330d3b8df076ca1a9b14dc1e61c905bc79a2c",
+      "initial_sha256": "ed985a2d4ad3a62a715b5e427c2cacb0a829eb81ca514873752d9493a8cdc45a"
+    },
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/tests/test_image_led_region_endpoints.py",
+      "sha256": "efb8713827dc9f3a7c0fdced40b9d5a7da369818d470f6eb1a3b3c172940d7e4",
+      "initial_sha256": null
+    },
+    {
+      "path": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码/tests/test_image_led_text_gradient.py",
+      "sha256": "ba563418e212de2a07b4fe5278e7f6b5e319f41defe6cef8bbe6b9e65eef89c0",
+      "initial_sha256": null
+    }
+  ],
+  "verified_head": "6df9251f2fb8a50ac8a0591a1e87ae1e579d7e8a",
+  "frozen": true,
+  "validation": {
+    "python": {
+      "passed": 79,
+      "log": "green-sdk-runtime-results.log"
+    },
+    "node": {
+      "passed": 7,
+      "log": "green-node-renderer.log"
+    },
+    "git_diff_check": "PASS",
+    "sdk_evidence": "sdk-evidence-report.json",
+    "independent_review": "Pending"
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "schema": "c2-loading-migration-preparation-freeze/v1",
+  "source_parent_commit": "fe3fb613673c0c70e7633a384252939365d9b7fa",
+  "purpose": "Exact doc-only handoff; no source repair, installation or migration",
+  "files": [
+    {
+      "path": "产品代码/docs/superpowers/plans/2026-09-10-c2-controlled-loading-and-source-migration-plan.md",
+      "sha256": "447c26749a22a3e06ad5dd83ae05d08738c161d591c9d076318adce040e0ba9c",
+      "size_bytes": 27508
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/verification-report.md",
+      "sha256": "8f2d3840c43a2cf26eef6f799f059d78965664c03406c4df7dfe10ce5aa7306e",
+      "size_bytes": 88422
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/author-check.json",
+      "sha256": "8d73d416760585bfef56628259baaf514046553d9f7c89afcaaa8ea46caaa17a",
+      "size_bytes": 1088
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/final-validation.json",
+      "sha256": "eb889f4ab7d1a212e67e03594c2381bfa4d931b05d09382cdae50b09bb12f91a",
+      "size_bytes": 1695
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/host-files-and-processes.json",
+      "sha256": "91790443281ae12ad6698f117f3b92b580bd66a7c5ab0351ffe032fe82ee40d3",
+      "size_bytes": 3048
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/host-snapshot-process-correlation.json",
+      "sha256": "f7966452127a9a51f9052283c5dbf917aaa3499efa23675640a5a3806cdbbdbb",
+      "size_bytes": 1293
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/independent-review-initial.json",
+      "sha256": "3ba7b0765ab5e15d5ddfb7e427fcd8172ee40f2419f456ac3e3c04860e46b12c",
+      "size_bytes": 17958
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/independent-review.json",
+      "sha256": "a482cbf08989e044b3353c0f91fdc259d7ddbd4b0b016ead19bebc4bfea6d74c",
+      "size_bytes": 18028
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/native-snapshot.json",
+      "sha256": "0753a78776e00be43597b381a2b72d204c9f525eb59d1809f0ff14faa253f167",
+      "size_bytes": 3235
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/packaging-audit.json",
+      "sha256": "e3c35a293d67e28b646fc0b2e4ade969e851f67eb9198395956aa80a4867cc12",
+      "size_bytes": 39218
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/pre-review-validation.json",
+      "sha256": "2d0b203d9df1deccd57a7ad8c54b8ad3232b53a99c4895bc72b17bd23f949dd2",
+      "size_bytes": 1993
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/python312-bundled-lookup.json",
+      "sha256": "30c050ae466b98e89661f442aecd9178f32cb3af910ba2f2cf5fa894f9679053",
+      "size_bytes": 313
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/python314-default-lookup.json",
+      "sha256": "a58645a086cd29574a19f13fea3893bcc52697aa2084c7bebb96103423bd3165",
+      "size_bytes": 259
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/python314-isolated-lookup.json",
+      "sha256": "120dd7ece1e92ca845d46ed88c1161dd24d8a1db5d4628e49f99684a6ac88868",
+      "size_bytes": 537
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/readonly-boundary-before.json",
+      "sha256": "77b9fc64fcb7f6b2e196033d0f440fcc19d8fce3635f6b8eff78ea70ef1c34d3",
+      "size_bytes": 319
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/review-input.json",
+      "sha256": "063ea67ffb5b53a529b1ce71a410b77f3abd2963aa6ad45775e190d6501e9c00",
+      "size_bytes": 2363
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/loading-migration-preparation/source-migration-audit.json",
+      "sha256": "b290d48dc0acda31b6cca58cfeaa3935bd8ed54157addab60e3f56641c779ffd",
+      "size_bytes": 241231
+    }
+  ],
+  "self_excluded": "manifest.json; actual commit and manifest hash captured in postcommit handoff"
+}

@@ -1,0 +1,17 @@
+{
+  "00-唯一研发基线索引-v1.0.md": "9f9cb41d6af49b4b8ce32bdda9578721740b0bb8cdaae4b9ec74cb676c53ee1c",
+  "01-产品需求基线-v1.0.md": "00922cb502c93e46a93cf2e2d5acfa257091904ee21536e17a99e0b2f4aaebe9",
+  "02-系统详细设计-v1.0.md": "e40c64de5ff3396ed37277088f8eea043a80fd7b328112017155dfbd007fee86",
+  "03-UI设计与交互规范-v1.0.md": "e6d4ca8604e4cd0fe961f8226b254c42daa852a282d0f6a89aa552dd306418bf",
+  "产品代码/docs/superpowers/specs/2026-09-10-c2-image-led-input-v2-design.md": "070cd3c747ddf4bafb91ae3acadbb628f3e61aa9917137fc31bdcad4a304e7e2",
+  "产品代码/docs/superpowers/specs/2026-09-10-c2-image2-provider-preparation-design.md": "5ae1330438f5335fa83322149cd28e626d0701eb09f7f24f123130b390bfc25b",
+  "产品代码/skills/ai-ppt-studio/SKILL.md": "b9629d7292deedb8a67ee47fddf23eaa20e9bfd9e6aba87d331cd7f324f90551",
+  "产品代码/skills/ai-ppt-studio/references/runtime-workflow.md": "858fa0cbf0fdbc4fa075fac2dcb3da2781917a0189b65d23ba058e2c8af12a64",
+  "产品代码/src/ai_ppt_studio/adapters/image2_command.py": "67596266dca62af52c5a4730e3cbba0132d1bbbd12fdd8fe2a6b1380cc2a1a5b",
+  "产品代码/src/ai_ppt_studio/adapters/image2_crs.py": "dd4573307c31d7299ca5ed8b5d5fed58d723e661cdbeb72f15e5189360c951fd",
+  "产品代码/tests/image2-provider-preflight.test.mjs": "355ff80e1fe63cdf0f3275a753ad0a55eb46cabd36d8d4ea6b9e7a94eeb33bf9",
+  "产品代码/tests/test_image2_crs_provider.py": "852b515ddeb8a9293624a4142b8b7d73e7ed9df40279615377212ff1fe45fad8",
+  "产品代码/tests/test_image2_preflight.py": "a025005f11e2f710c73ede729306e9ec9caa6aca167886083c1160748eef2212",
+  "产品代码/tests/test_image_led_v2_runtime.py": "6850a5ccc6a0854607e495c2f79a6648407d2b27103bbc6d4874d1195d20b494",
+  "产品代码/docs/superpowers/plans/2026-09-11-c2-sunburst-exact-model-adaptation.md": "aee02f309e5d26679d999a5ec1bbd0956d156bb796063536c13102d2a37141ae"
+}

@@ -1,0 +1,18 @@
+{
+  "reviewed_at_utc": "2026-09-10T19:47:24.741147+00:00",
+  "baseline": "50ad9f7bdb1ac3f757be7ceb8e552d1b6b33f6a7",
+  "root": "/Users/defei/Library/Application Support/Codex API Client/codex-home/worktrees/28a9/PPT-codex-app/产品代码",
+  "files": {
+    "src/ai_ppt_studio/adapters/image2_diagnostics.py": "ec0fbfb0515317e6e51646793be67edea9d4cc02ee880732a090361e33deb75b",
+    "src/ai_ppt_studio/adapters/image2_crs.py": "d3f07c3a4008e2deb2ed0a127b65dc47a3cecbfc125cdccd1930fd84ab09c585",
+    "src/ai_ppt_studio/adapters/image2_command.py": "c3c34126a357cb7f307d904e5efc2977dc821ff0410d3a2a0526992100ed013e",
+    "src/ai_ppt_studio/application/image_led_service.py": "1eda9fa9e2cfcafe3ba98fe39b03db6f2d09dc702fa8a828c8a3ce472200ec1a",
+    "tests/test_image2_failure_diagnostics.py": "6184a68be37cfe7b0381323178f2ffc8a3f8d8abd9f31c63524e20093c663427",
+    "tests/test_image2_crs_provider.py": "56e27414b7e4c4f03328b8b49580a1806092753ad30d5e8b1beb9901db33251a",
+    "tests/test_image_led_v2_runtime.py": "27ca7d4c3ae68619d397f936e5b2e322617aa3dae9884a0280943697f73407c8"
+  },
+  "harness": {
+    "path": "/private/tmp/c2-command-path-live-20260911/verify_command_path.py",
+    "sha256": "b2b11dcb70d1566ff13faf19eec95917142ec97132d8c763562a7c308d0b6262"
+  }
+}

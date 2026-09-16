@@ -1,0 +1,319 @@
+{
+  "schema": "c2-l1-closure-code-phase-manifest/v1",
+  "parent_commit": "e01b98bdd1ae280bccb1e765b5252d169be638f1",
+  "scope": "three production/test files, one approved plan clarification, unique ledger, inherited candidate failure receipts and closure evidence; excludes itself",
+  "files": [
+    {
+      "path": "产品代码/docs/superpowers/plans/2026-09-10-c2-controlled-loading-and-source-migration-plan.md",
+      "sha256": "cb8caea759e7e2767d00f4ad58c1f03a030bd5fa5be205c2582271bf05ad5425"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/code-postcommit.json",
+      "sha256": "189e5f032fd50c4f98ebf566ad30190ae02d2a6f4741fad92bdae531c3a256d1"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/archive-portability-diagnostic.json",
+      "sha256": "25383e87895e66c8f27f9b06765beb3b8aae96cea996ad7ba0c10e190b4322a1"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/archive.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/archive.raw.json",
+      "sha256": "476cb16850a14915e1dfa36cf13c407291b67a41a3ebb847588f736e9d156f4a"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/build.log",
+      "sha256": "68533b47611af8a23885db0b49fcf6e982011e4452cc77b8f1598133dc918236"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/build.raw.json",
+      "sha256": "507c1f56c3fa46d926238646b4c05656bd33cb0706a0cf7ab8667eb403bf176b"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/candidate-build-runner.py",
+      "sha256": "d3816a2f16ada78f2428db1899e68f1b9d8558bf3882a3e89f8d6e076bccdef7"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/candidate.json",
+      "sha256": "3eceee49b7b829e473dc7726ac0a08eee3edbc7af7247ed29f8fbfe27b69aaca"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/execution.json",
+      "sha256": "2352b18a409027426a7d6681e1335183fba94b8f19fe5a39262c8c9bce7f036b"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/harness/image-led-synthetic.mjs",
+      "sha256": "2402146828ee4bfacceec41399f763b970fafcd2de799b514fe711491f204551"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/harness/packaged-native.mjs",
+      "sha256": "d73079fb6e0a5765080a561229f37f612c7eae7e0e3afbacae4ce42c79649a94"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/independent-package-readonly-audit.json",
+      "sha256": "42c8448ef3a9bf2296b01e6f687c01b649f4df30deac3da58bd08468b4e6b432"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/independent-package-review.json",
+      "sha256": "e48ec7ecfb6884f0c937253172e9c2c4dba25992b684a31180f18ce2c7771de6"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/initial-attempt/attempt-result.json",
+      "sha256": "bc2457f63d8ed406e904779d428f6d2e94fb8957583fdb7c9064e38e89e99cdb"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/initial-attempt/build.log",
+      "sha256": "ade56e4a377efd90d4dfe2b4d8b58e0ad5f73d336fa47e16e232159729ee1312"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/initial-attempt/build.raw.json",
+      "sha256": "9b8fe73ca2677ec6e5272cd1894e2ea4f028a089377a8b950319f8aae91c5c08"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/initial-attempt/candidate-runner-initial.py",
+      "sha256": "e395df7a776035524d42a50d29fc09f646ad30e9284c4c3d88c6f6a02be94bd9"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/initial-attempt/execution.json",
+      "sha256": "f78a57120e6c91c25bc0cfc47fae5703e69286264d3ee02b596dcb125775b4ff"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/initial-attempt/refresh-manifest.log",
+      "sha256": "9f3e908fdb4d31343d56a630b94e80a3bb668bdccfd9c2014d996af85588f736"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/initial-attempt/refresh-manifest.raw.json",
+      "sha256": "08f52a752775003599b1ef56d7e2caa5e385591d19d081ce20e5f1a66b934f89"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/initial-attempt/verify-before.log",
+      "sha256": "bed9411dc885cd70708309ec8fd128622e7164164384b9a650841f1346b8d8b8"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/initial-attempt/verify-before.raw.json",
+      "sha256": "2c84a08a60c589fddadb1cdb70757e9543d5b4e521cb77fc780d554eb951d81c"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/log-index.json",
+      "sha256": "ef5a13d6a48b93a63f076958498e3bbaeb0863d601a65776e081d9e6f6adf3ae"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/native-positive-and-negatives.log",
+      "sha256": "2a68024a33f13725ce93e9b2c13d06bcce02263865ebb19e10ca7e97c23cf658"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/native-positive-and-negatives.raw.json",
+      "sha256": "db530635564b613c8eeaf142bd3311ff33905a40399a8ad60c8d383f04e7f74a"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/packaged-native-result.json",
+      "sha256": "feefa0f06254e038813fc83f202c5d5d935c77701edd61f1c5a59c13df502fe7"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/packaged-python-origin.log",
+      "sha256": "da10fdb97e2e10aebbb56d7d555098544df7e753be2fe1160b9dccd092ce1f3c"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/packaged-python-origin.raw.json",
+      "sha256": "d37fd358c35a35e8a3ffcc32a9c3c8f61de471c43322778aafca7b5c23b2fb59"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/refresh-manifest.log",
+      "sha256": "defd6d8175d1269c066da0efc193787130d810cba1fa19ba60933d2cf38d3faa"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/refresh-manifest.raw.json",
+      "sha256": "5b5b24fb01365748bb35e7510e433e826d8155decd2e4eb584525671a3948dd5"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/release-manifest.json",
+      "sha256": "61cfd45de45f16482483d512bccd674a53b31d7f14183eeba6ea8f8b57124d51"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/required-file-negative-result.json",
+      "sha256": "58371c7d8ec59048408e968cc457563a6b957d82f464e093c8c4704a52f115d1"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/required-file-negatives.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/required-file-negatives.mjs",
+      "sha256": "443e22a6763d059622e93e75147066515508e17c6152692890610750dcc7e967"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/required-file-negatives.raw.json",
+      "sha256": "94cc4b13c1632c64416712780753f13fefc1979f478e730d5a4570b6a363028a"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/verify-before.log",
+      "sha256": "32c456c97b24821225a62f485f56569c7b9cd99da30bd64df850eae48472b7d1"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/verify-before.raw.json",
+      "sha256": "aec684a997bc38d4396e4542d21492d9d5773074218c6627376d978076cb3544"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/verify-final.log",
+      "sha256": "1910b2b3c8cd24c7045ce01f2a872c8629c598deee2c5ec42ba3b504216b2d14"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/fixed-candidate-e01b98b/verify-final.raw.json",
+      "sha256": "952f7925d27d64d35c7daba51bee27af7d5d3ce385ef05ff2348f0e8baeecbb2"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/archive-guard-diagnostic.json",
+      "sha256": "3a07844f980f7d9e84ce0463358db42ba91d422ce7375fef5e25c1293ea4f484"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/archive-guard.py",
+      "sha256": "5d37ff0d51f09d411dc9cd190a3517a18f58bb8a12d540126a9ef1212c1c6100"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/archive-negative-diagnostic.json",
+      "sha256": "2e98c22400a1002f1be76b9bc37ca1041f5295864552782ccee54462a56ac756"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/archive-negative-probes.py",
+      "sha256": "ab2f2fe7f24ea306de0521579ddb3c7bd2ee25b2e0eaf2ec3fa8924043a74be6"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/candidate-build-runner.py",
+      "sha256": "900f0a1288ae0501c3dd9c26d46530bfae6aafb88c0d989131c646b957c6c59b"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/code-freeze.json",
+      "sha256": "8524adb4349e4b15a105c002c8cd6be5f8e67cf32c0dee0f850c3f8a60bdf260"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/code-phase-validation.json",
+      "sha256": "f2bff75a9926dc7d05dadfbb15dbcbd1af8d1392de3a071e5488617017812a9a"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/code-quality-review.json",
+      "sha256": "426b7531fc4c3c6442b3863a63a3f03a4f91545dd02024347faca0bbd82bd5bc"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/default-macos-tmp-execution.json",
+      "sha256": "0f3fbcc7f81f982e9ef8dafe3e445dd5bb28c2b495884b80dda03cc9c574247d"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/default-macos-tmp.log",
+      "sha256": "aaed2f4301c6e683c44a3790f272ed5f386f27d84ec54532ca38998f3b2fdeb0"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/default-macos-tmp.raw.json",
+      "sha256": "b20a653695871a7c390e5705f8037a26fb2c254135af22ef1836b43c2251d86e"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/diff-check.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/diff-check.raw.json",
+      "sha256": "9f717b13c9c34ae50caf6014fadca5dd88b5c9f13c0e2bfb4d32b2393ec3fbd5"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/green-execution.json",
+      "sha256": "9e86b0a35ac93be006eb88470650bda9f6d1344d3623fbe06655a79c52ffb73f"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/green.log",
+      "sha256": "d8a1e611f586bb1326bbedcb39f35bcb08d62fbe0b796b8bdf670b5443161769"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/green.raw.json",
+      "sha256": "f0e80787371b80933846b8262a2afec8c09b246342af952fb57d7175db866572"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/implementation-report.json",
+      "sha256": "8f4b47397fca44f65cb2cab919d36632a90baf8a09008f8e215ecd0ba5a3efde"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/log-index.json",
+      "sha256": "ab0fe0322d2380b91b3d9020510fe2bcfaf59a8435e7ed135f2d0c543e3317a8"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/node-full-closure-r2.log",
+      "sha256": "b60fae41d68476701dea2905df63c29344085cdbf93f753cb27151305500bddc"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/node-full-closure-r2.raw.json",
+      "sha256": "e09c645e1f459508628a58695477eeda5ac4fc5eddc224018dde78922a1c7d5d"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/node-full-closure.log",
+      "sha256": "d1594194998ce061f8a11921a6ad81e48ae61fc40116a0f36d22862968c49972"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/node-full-closure.raw.json",
+      "sha256": "edfb9549b059be8b7da0f0929aba0fab303a9a8adcd3042bed711fcbf642445c"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/node-full-execution.json",
+      "sha256": "379727cfcc7bc8de08433a5c1df3770d561cb36f24ad55417fa7448da9df6085"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/node-full-sandbox-failure.json",
+      "sha256": "75e2bda6a6f620a3cdd31a7fd5736945aced5df66fc763e7e84087b9174b603b"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/pre-review-validation.json",
+      "sha256": "daedd52ea83e3ec1480eeabc2f17d8babc79a3b033c9f4ca749a4f479485bf79"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/red-execution.json",
+      "sha256": "9283289562e008b43c0a4a895f79271bd3222036b197410fd2e2e4d9e1b06c90"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/red.log",
+      "sha256": "ba00d374cb44fe15be839f6a2998d461c858bdc3fcc4f9ca3a5d2bbf90e4ac11"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/red.raw.json",
+      "sha256": "5eb4b26e24d09a8d416a43b2a6545ad3654a2be1e8814d1a2f310e6aea994f54"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/source-mcp-test-preserved-execution.json",
+      "sha256": "b8ce2cf6933154f78b2d9b1f1735fd0124009e77d50fbb176527df53a6ab26ac"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/source-mcp-test-preserved.log",
+      "sha256": "259b3b5aba2e44f6dddcb5b10785cb5f75bc20cea06d0f40e6d69eb89c7cdedd"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/source-mcp-test-preserved.raw.json",
+      "sha256": "1d47c72b0b835b85e4c132012ffeb5e40456920949fc06125373341650d84dc7"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/spec-audit.json",
+      "sha256": "a37a58245f43930466b9a04dc2b944a52fa2b3c4c15d800d84d02d9cdd773a9a"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/spec-review.json",
+      "sha256": "d9c78d55ff7fad58a933792648d39e97f0de09392983aeba3fa36f48e41afe52"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/tested-source-manifest.json",
+      "sha256": "7ee1efa0f536b9da391a130651590746483b0e7518598de9c25a883464938935"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/verification-report.md",
+      "sha256": "8f9900216aab7490df468d2869c125329823ea370ccde26248d8fa861f5d1b64"
+    },
+    {
+      "path": "产品代码/scripts/build-plugin-release.mjs",
+      "sha256": "217ca2eef5ff9fffb3b68cd9f17621f6d71c0c22e8e43267134f78ba4020d1df"
+    },
+    {
+      "path": "产品代码/scripts/verify-plugin-release.mjs",
+      "sha256": "b547d013f232e96f2cffd35028c482dc62335963ebbef981816a431aea9d2ea1"
+    },
+    {
+      "path": "产品代码/tests/plugin-release.test.mjs",
+      "sha256": "d8cd5d488c74c8c9e0d8b7814e2871e1655e7bcd24d79201a1940a18de5a8726"
+    }
+  ]
+}

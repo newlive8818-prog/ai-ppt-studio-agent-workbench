@@ -1,0 +1,273 @@
+{
+  "ok": true,
+  "projectRoot": "/managed/project",
+  "reviewType": "visual-professional",
+  "sourceVersion": "visual-v23-canonical",
+  "expectedRevision": 12,
+  "bridgeSessionId": "bridge-session-v23-canonical",
+  "review": {
+    "project_id": "v23-canonical-project",
+    "project_name": "v2.3 视觉语义审核样例",
+    "review_type": "visual-professional",
+    "review_session_id": "visual-session-v23-canonical",
+    "review_session": {
+      "review_session_id": "visual-session-v23-canonical",
+      "review_type": "visual-professional",
+      "project_id": "v23-canonical-project",
+      "target_artifact_ref": "artifact://visual-contract/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "source_version": "visual-v23-canonical",
+      "revision": 11,
+      "status": "ready",
+      "open_policy": "foreground-if-waiting",
+      "host_open_status": "not-requested",
+      "persistence_status": "saved",
+      "host_notification_status": "not-requested",
+      "ai_receipt_status": "pending",
+      "created_at": "2026-09-03T08:00:00Z",
+      "last_opened_at": null,
+      "submitted_at": null
+    },
+    "source_version": "visual-v23-canonical",
+    "revision": 11,
+    "authoritative_revision": 12,
+    "visual_contract_ref": "artifact://visual-contract/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "visual_brief_ref": "artifact://visual-brief/9999999999999999999999999999999999999999999999999999999999999999",
+    "visual_brief": {
+      "design_proposition": "可信、克制、有清晰视觉焦点",
+      "audience_fit": "面向经营与数字化决策者的阅读优先汇报",
+      "decision_task": "判断是否进入一期联合验证",
+      "design_stance": "证据优先，关系驱动，不用装饰制造专业感",
+      "emotional_boundary": "冷静、可信，不煽情",
+      "brand_boundary": "尊重客户品牌，不使用泛科技蓝紫模板",
+      "density_strategy": "关键结论疏，证据页中密度",
+      "narrative_rhythm": "章节聚焦—证据展开—方案收束",
+      "imagery_strategy": "图片必须承担证据或语境任务",
+      "diagram_strategy": "关系语义决定图示，不套固定图形",
+      "powerpoint_constraints": "事实文字、关系和数字保持原生可编辑",
+      "forbidden_patterns": [
+        "平均卡片墙",
+        "无意义科技装饰"
+      ],
+      "five_second_test_contract": {
+        "prompt": "五秒后隐藏页面并记录第一判断",
+        "expected_judgment": "读者形成与页面合同一致的核心判断",
+        "record_fields": [
+          "first_noticed_object",
+          "perceived_message",
+          "perceived_relationship",
+          "next_reading_step",
+          "misdirection"
+        ]
+      },
+      "design_philosophy_refs": []
+    },
+    "deck_design_system_ref": "artifact://deck-design-system/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "deck_design_system": {
+      "theme_proposition": "克制、可信、阅读优先",
+      "composition_grammar": "关系和证据决定页面构图",
+      "color_tokens": {
+        "ink": "#1D2421",
+        "accent": "#234B3D"
+      },
+      "typography_tokens": {
+        "title": "32pt",
+        "body": "16pt"
+      },
+      "page_families": [
+        "问题诊断页",
+        "方案设计页",
+        "证据页"
+      ],
+      "density_rhythm": [
+        "low",
+        "medium",
+        "pause"
+      ],
+      "cross_slide_rhythm_rules": [
+        "相邻页面避免重复同一轮廓"
+      ],
+      "emphasis_budget": {
+        "max_primary_focal_points_per_slide": 1,
+        "max_accent_color_roles": 2,
+        "consecutive_high_density_slide_limit": 2
+      },
+      "imagery_strategy": "证据和语境优先",
+      "image_language": "只使用承担证据、解释或语境任务的图片",
+      "diagram_strategy": "原生关系图优先",
+      "diagram_language": "连接器必须表达明确业务语义",
+      "table_strategy": "只保留支持判断的关键列",
+      "editability_rules": [
+        "正文、数字、图形和连接器原生可编辑"
+      ],
+      "accessibility_rules": [
+        "保持正文与背景对比度"
+      ],
+      "forbidden_patterns": [
+        "平均卡片阵列",
+        "装饰性发光"
+      ],
+      "five_second_test_rules": [
+        "第一眼能识别页面主关系"
+      ],
+      "anchor_specification": "三页锚点覆盖问题、方案和证据家族",
+      "production_route": "strict-B",
+      "fallback_fonts": {
+        "macOS": "PingFang SC",
+        "Windows": "Microsoft YaHei"
+      }
+    },
+    "anchor_slide_set_ref": "artifact://anchor-slide-set/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "anchors": [
+      {
+        "slide_id": "S01",
+        "current_asset_ref": "review-assets/anchors/S01-current.png",
+        "previous_asset_ref": ""
+      },
+      {
+        "slide_id": "S02",
+        "current_asset_ref": "review-assets/anchors/S02-current.png",
+        "previous_asset_ref": ""
+      },
+      {
+        "slide_id": "S03",
+        "current_asset_ref": "review-assets/anchors/S03-current.png",
+        "previous_asset_ref": ""
+      }
+    ],
+    "anchor_identity": {
+      "slide_ids": [
+        "S01",
+        "S02",
+        "S03"
+      ],
+      "selection_reason": "覆盖问题、方案和证据页面家族",
+      "native_first_frozen": true
+    },
+    "slide_visual_contracts": [
+      {
+        "slide_id": "S01",
+        "order": 1,
+        "neutral_title": "经营协同现状与断点",
+        "page_family": "问题诊断页",
+        "anchor_title": "经营协同现状与断点",
+        "validation_purpose": "验证事实证据与因果关系能否形成清晰焦点",
+        "core_claim": "当前经营协同存在需要联合验证的断点",
+        "visible_copy": [
+          "当前系统与流程现状",
+          "关键经营断点",
+          "待联合验证范围"
+        ],
+        "speaker_notes": "只解释材料已支持的事实和待验证边界。",
+        "source_refs": [
+          "artifact://material-inventory/1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        "communication_goal": "建立问题共识",
+        "composition_intent": "左侧事实对象，右侧因果关系，中心断点形成焦点",
+        "information_hierarchy": "断点—事实—影响边界",
+        "reading_order": [
+          "经营断点",
+          "支持事实",
+          "验证边界"
+        ],
+        "regions": [
+          "标题区",
+          "事实区",
+          "关系区"
+        ],
+        "object_relationships": [
+          "事实支持断点判断",
+          "断点约束验证范围"
+        ],
+        "diagram_chart_table_treatment": "使用原生对象与语义连接器表达因果",
+        "image_selection_and_crop": "本页不使用装饰图片",
+        "color_application": "强调色只用于经营断点",
+        "typography_application": "章节和标题保持结构焦点，正文按证据层级组织",
+        "native_bitmap_routing": "事实文字、关系和连接器全部原生",
+        "editability_requirements": "文字、形状和连接器可独立编辑",
+        "fallbacks": [
+          "目标字体缺失时使用已批准中文回退字体"
+        ],
+        "acceptance_criteria": [
+          {
+            "criterion_id": "S01-MUST-01",
+            "level": "must-follow",
+            "expected_outcome": "五秒内识别经营断点和事实支持关系"
+          }
+        ],
+        "reader_judgment": "当前经营协同存在需要联合验证的断点",
+        "primary_relationship": "causality",
+        "secondary_relationship": "system-boundary",
+        "visual_mechanism": "证据对象与因果链形成主次对照",
+        "focal_point": "经营断点",
+        "asset_roles": [
+          {
+            "asset_id": "fact-evidence",
+            "role": "evidence",
+            "source_ref": "artifact://material-inventory/1111111111111111111111111111111111111111111111111111111111111111",
+            "narrative_task": "用事实数据支持经营断点判断",
+            "replaceable": false
+          }
+        ],
+        "forbidden_patterns": [
+          "平均卡片阵列",
+          "无意义图标"
+        ],
+        "previous_rhythm_relation": "承接章节聚焦，进入中密度证据",
+        "next_rhythm_relation": "为方案收束建立问题依据",
+        "text_density_budget": {
+          "max_body_lines": 8,
+          "max_text_blocks": 3,
+          "reduction_strategy": "先删解释性重复句"
+        },
+        "powerpoint_implementation_requirements": {
+          "object_plan": [
+            {
+              "role": "primary-subject",
+              "object_type": "native-shape",
+              "layer": "foreground",
+              "editability": "native-editable"
+            }
+          ],
+          "connector_semantics": [
+            {
+              "from_role": "facts",
+              "to_role": "judgment",
+              "meaning": "事实支持问题判断",
+              "direction": "forward",
+              "crossing_forbidden": true
+            }
+          ],
+          "layout_constraints": {
+            "entry_region": "left",
+            "focal_region": "center-right",
+            "minimum_clear_space": "one-body-line"
+          },
+          "native_bitmap_routing": "事实、标签与关系原生",
+          "degradation_strategy": "复杂图像失败时保留原生主体与边界关系"
+        },
+        "acceptance_evidence_plan": {
+          "automated_checks": [
+            "native-object-routing",
+            "overflow"
+          ],
+          "human_review_checks": [
+            "five-second-judgment",
+            "anti-pattern-review"
+          ],
+          "target_powerpoint_checks": [
+            "font",
+            "connector",
+            "editability"
+          ],
+          "user_review_question": "五秒内是否先看到经营断点与事实支持关系？"
+        }
+      }
+    ],
+    "anchor_feedback_batch_ref": null,
+    "anchor_feedback_batch": null,
+    "contract_review_marks_ref": null,
+    "contract_review_marks": null,
+    "host_submission_capability": "unavailable",
+    "ai_receipt_capability": "unavailable"
+  }
+}

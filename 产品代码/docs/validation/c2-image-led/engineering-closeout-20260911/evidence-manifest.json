@@ -1,0 +1,24 @@
+{
+  "files": {
+    "source-verification.json": "398ea29f3686d8050e1befae4d7b257ef861018af2672805f20702875855255d",
+    "two-group-proof.json": "2ca41f79bc01fa957075f3ef8ecd1a5e95320d8a61cee1aa9e16ebd571d3e216",
+    "schema-audit.json": "589d961bafcada68dfc95ae402c012eeab112a2b8d1722efc07f43d8a507fb2b",
+    "accepted-preflight.json": "58c9854ab5684345e3428431ec422b45a9f45d9fe4af4c9bf272b2945ba55649",
+    "quality.json": "af8e2e67eae926c0cbecbea5dc13f7b63fd3982c967510e4ff8aaa19a02c8f1f",
+    "accepted-structure.json": "6f38c08631aac17015df46ef28cca1a6a0ad7c1805d1ee5f0fdc7fae11d93368",
+    "package-verification.json": "c907f86f51b6df516c1e319caa7c36f7e5dd00c9673caf61a4b59b6315bede09",
+    "region-diff-paths.json": "60d8991c21140a2b2f95d69353a73d1a99ed42ba0514145492ce3afa6720914c",
+    "quality.log": "67314b2fae57bd73585dac7562a4fee588d07f0375c4baee143ecad25ab0c165",
+    "runtime-identity.json": "fcb7d42eaa6a98903204891fe7c986c526902e675a04ca3b48eb59267065e4e1",
+    "accepted-render-diff.json": "3c75dd350239279d899e1b94da146cca7376e133bc47de65524d3b63a6a2eaba",
+    "static-audit.json": "0534e51a782d9185a87c3195b0b5bd74ed6b24a2fb504037ffa87e8ffa81a8f6",
+    "initial-failures.json": "130ba30be04efac0806113e54e3999f71b6dc870bcb6081338811814d0025c4d",
+    "python.log": "8262b55a6cf8ee438fa638e9fd02bf6124bdaed622ac3a7669c8a4b8021a7a97",
+    "python.json": "c55b5c49818336417e4afd1d1bd3827a116b3dd0315ee334641e7c7f239c07f1",
+    "package-initial-drift.json": "de33453375872ceb5ee636edac122202cab4d592c5933d06e2e4c5b00ea832bf",
+    "reproduce-render-statistics.mjs": "51a77a2cd56cbec303302fe8a5f41779efaaaa4fb7efd9b8d95183ec888eeca5",
+    "render-statistics-verification.json": "6b421485fb76dfdf542d6eb806e83f24db2d76b5cfd630b47ab6cd188621434f"
+  },
+  "raw_logs": "Successful full logs included; initial raw logs remain at paths in initial-failures.json",
+  "no_customer_content_or_credentials": true
+}

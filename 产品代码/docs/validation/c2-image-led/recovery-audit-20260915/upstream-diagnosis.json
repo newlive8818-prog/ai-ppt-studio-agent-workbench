@@ -1,0 +1,63 @@
+{
+  "observed_at_utc": "2026-09-15T03:05:26.805Z",
+  "symptom": "Upstream request failed",
+  "failed_thread_id": "01a09953-ce03-7ab2-8da2-6dbf6e8012c2",
+  "delegating_thread_id": "01a09326-dc3d-74c3-b931-fef75847ccd7",
+  "recovery_thread_id": "01a0a2c6-57d7-7670-9b04-9b8d1788351a",
+  "source_rollout": "/Users/defei/Library/Application Support/Codex API Client/codex-home/sessions/2026/09/13/rollout-2026-09-13T13-53-21-01a09953-ce03-7ab2-8da2-6dbf6e8012c2.jsonl",
+  "failed_turns": [
+    {
+      "turn_id": "01a0a2a2-db3b-71e0-aa13-5e31f3bd50b1",
+      "start_utc": "2026-09-15T01:16:17.094Z",
+      "tool_calls": [],
+      "end_utc": "2026-09-15T01:16:23.695Z",
+      "raw_line": 26696,
+      "raw_line_sha256": "eafc10126b3f3126d2ded434dae00e5642350d05a5add048378403a4e00fd227",
+      "error": {
+        "message": "{\"error\":{\"message\":\"Upstream request failed\",\"type\":\"upstream_error\"}}",
+        "codex_error_info": "other"
+      }
+    },
+    {
+      "turn_id": "01a0a2a3-3c3c-7e20-b751-0b72a3f28387",
+      "start_utc": "2026-09-15T01:16:41.928Z",
+      "tool_calls": [],
+      "end_utc": "2026-09-15T01:16:46.505Z",
+      "raw_line": 26702,
+      "raw_line_sha256": "e0905c06def41e04fff6f2de1f5d4769fe74bb6a279ff2d956c70ddf91dd522b",
+      "error": {
+        "message": "{\"error\":{\"message\":\"Upstream request failed\",\"type\":\"upstream_error\"}}",
+        "codex_error_info": "other"
+      }
+    },
+    {
+      "turn_id": "01a0a2a3-e7da-75e3-8aa9-385a1dd1a084",
+      "start_utc": "2026-09-15T01:17:25.946Z",
+      "tool_calls": [],
+      "end_utc": "2026-09-15T01:17:31.458Z",
+      "raw_line": 26709,
+      "raw_line_sha256": "c03c6b930b46706fb0906b5a1f12a6a9e6391f968a892b56bed46c897fd92e90",
+      "error": {
+        "message": "{\"error\":{\"message\":\"Upstream request failed\",\"type\":\"upstream_error\"}}",
+        "codex_error_info": "other"
+      }
+    }
+  ],
+  "logs_sqlite_ids": [
+    17900606,
+    17900848,
+    17903119
+  ],
+  "failure_layer": "Codex model sampling upstream; before any tool call in each of the three failed turns",
+  "underlying_provider_cause": "NotEstablished: local error contains no HTTP status or provider-side detail",
+  "actual_recovery": "Fresh task is responding and current MCP snapshot/status calls succeed; no retry of original failed turn or provider/config change",
+  "business_state": "r142, G0-G3 passed, G4 open; no active Runtime task",
+  "ownership_evidence": {
+    "old_28a9_thread": "01a084ee-d69d-7192-bc1b-0f7a1e64bfa9 notLoaded/interrupted",
+    "actual_executor": "01a09953-ce03-7ab2-8da2-6dbf6e8012c2 idle; last turn interrupted 2026-09-15T01:29:20.727Z",
+    "delegator": "explicit stopped Runtime writes message at 2026-09-15T01:55:31.383Z; subsequent turns dispatch/watch recovery only",
+    "process_check": "2026-09-15 10:03 Asia/Shanghai ps snapshot: no Python/C2 renderer writer process observed; long-lived Codex/Node processes present",
+    "limit": "Point-in-time evidence; no exclusive Runtime lock acquired because no business write is required"
+  },
+  "no_runtime_writes": true
+}

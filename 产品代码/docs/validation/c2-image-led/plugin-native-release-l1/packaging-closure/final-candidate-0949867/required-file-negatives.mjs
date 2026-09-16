@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';import path from 'node:path';import {pathToFileURL} from 'node:url';
+const [source,plugin,base]=process.argv.slice(2);
+const {refreshPluginReleaseManifest}=await import(pathToFileURL(path.join(source,'scripts/build-plugin-release.mjs')).href);
+const {verifyPluginRelease}=await import(pathToFileURL(path.join(source,'scripts/verify-plugin-release.mjs')).href);
+const missing=path.join(base,'required-file-negative');await fs.cp(plugin,missing,{recursive:true});await fs.rm(path.join(missing,'scripts/image-led-native.mjs'));await refreshPluginReleaseManifest(missing);
+await assert.rejects(verifyPluginRelease(missing,{validator:false,probe:false}),/Release is missing required file: scripts\/image-led-native\.mjs/);
+const altered=path.join(base,'tampered-negative');await fs.cp(plugin,altered,{recursive:true});await fs.appendFile(path.join(altered,'scripts/image-led-native.mjs'),'\n// test mutation\n');
+await assert.rejects(verifyPluginRelease(altered,{validator:false,probe:false}),/Release manifest does not exactly match shipped files/);
+const injectedCases=[];
+for (const [index,relative] of ['mcp/test/injected-different.test.mjs','mcp/test/nested/injected-nested.test.mjs'].entries()) {
+ const tainted=path.join(base,'injected-test-negative-'+index);await fs.cp(plugin,tainted,{recursive:true});
+ const location=path.join(tainted,relative);await fs.mkdir(path.dirname(location),{recursive:true});await fs.writeFile(location,'// synthetic injection fixture\n');await refreshPluginReleaseManifest(tainted);
+ await assert.rejects(verifyPluginRelease(tainted,{validator:false,probe:false}),/Release contains forbidden source content: mcp\/test\//);
+ injectedCases.push({path:relative,result:'PASS'});
+}
+await fs.writeFile(path.join(base,'required-file-negative-result.json'),JSON.stringify({missing_native_with_fresh_manifest:'PASS',tampered_native:'PASS',first_party_test_injections:injectedCases}),{flag:'wx'});

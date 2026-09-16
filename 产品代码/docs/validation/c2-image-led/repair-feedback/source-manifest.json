@@ -1,0 +1,45 @@
+{
+  "base_commit": "6df9251f2fb8a50ac8a0591a1e87ae1e579d7e8a",
+  "production": [
+    "src/ai_ppt_studio/adapters/image2_command.py",
+    "src/ai_ppt_studio/adapters/image2_crs.py",
+    "src/ai_ppt_studio/application/image_led_repair.py",
+    "src/ai_ppt_studio/application/image_led_selection.py",
+    "src/ai_ppt_studio/application/image_led_service.py",
+    "src/ai_ppt_studio/application/project_service.py",
+    "src/ai_ppt_studio/context_compiler.py",
+    "src/ai_ppt_studio/domains/visual/image_repair.py",
+    "src/ai_ppt_studio/domains/visual/image_output.py"
+  ],
+  "references": [
+    "skills/ai-ppt-studio/references/runtime-workflow.md",
+    "skills/ai-ppt-studio/references/visual-workflow.md"
+  ],
+  "tests": [
+    "tests/test_image_led_repair_runtime.py",
+    "tests/test_image_led_repair_contracts.py",
+    "tests/test_image2_repair_transport.py",
+    "tests/test_image_led_v2_runtime.py"
+  ],
+  "spec": [
+    "docs/superpowers/specs/2026-09-11-c2-image-led-repair-feedback.md"
+  ],
+  "files": {
+    "src/ai_ppt_studio/adapters/image2_command.py": "854652e444b3bf388aaecac06b00aa7c0c618d4e743ac291e77b3ef42f18186c",
+    "src/ai_ppt_studio/adapters/image2_crs.py": "4933c32d3f083ceb8cf78585213a638e555d51eb7e64b656adf9a141d1724b7e",
+    "src/ai_ppt_studio/application/image_led_repair.py": "c5dad25b8f2d5a588f68b5f584666448f306faf42baea5858154296fb6a8006c",
+    "src/ai_ppt_studio/application/image_led_selection.py": "df71638db5328eb8135f3be17d2ed80318f9a021c4ae44f4cd23fc7edc8be37a",
+    "src/ai_ppt_studio/application/image_led_service.py": "6bd83b706116614d80f0a6a6d93a50ed6ae04f37d9a138a6a662046e081a5278",
+    "src/ai_ppt_studio/application/project_service.py": "6bd6cd033c00ef0d22ca0057f9c6ac545e26e2959bf03bd5afaa7654be0f3e19",
+    "src/ai_ppt_studio/context_compiler.py": "210c72498072bdad99d1406e8dc0b2ab7bb05e58808f32d17ad6e6cccb7d52b6",
+    "src/ai_ppt_studio/domains/visual/image_repair.py": "4f52ba8ebca3a817b1d36000f470df2c7623c34cb8859083d81f152c9812a1dc",
+    "src/ai_ppt_studio/domains/visual/image_output.py": "bc9edfa4e0773f52e389c4f1d9fad102e25fc2ad095aae707916b2a369ca718a",
+    "skills/ai-ppt-studio/references/runtime-workflow.md": "f27c95d5d2b7839db6fe06d35be8235daf95f4cd07759389bc9554a00a26896d",
+    "skills/ai-ppt-studio/references/visual-workflow.md": "524123560c99495d81f3020e964188d491037a228d5657d4217844502ca8775a",
+    "tests/test_image_led_repair_runtime.py": "4f0372a1e58bf2669849d2cbe322d66ecf05d9c8b7bb05515c58a3a7c95b555a",
+    "tests/test_image_led_repair_contracts.py": "ff669b89581a3c37ec08d36dc9c827110e3699bdee3dec7b207f1bf2855701af",
+    "tests/test_image2_repair_transport.py": "4edeb703102563d84b0f4092e68d2ab0a19d74a68e49dc9db728c1bfc7518022",
+    "tests/test_image_led_v2_runtime.py": "65289ea4b852c598d47280f5e4b8cb5c43022a3164d87703ec436672a0fca459",
+    "docs/superpowers/specs/2026-09-11-c2-image-led-repair-feedback.md": "1c9d05bd0593fc49e19369d934bb33287b2dfbdf3cfdfae3288b35c4a1db42b7"
+  }
+}

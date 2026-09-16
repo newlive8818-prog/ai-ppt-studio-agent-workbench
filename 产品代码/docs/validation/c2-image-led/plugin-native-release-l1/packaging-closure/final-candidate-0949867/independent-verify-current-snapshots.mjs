@@ -1,0 +1,15 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
+const c='/private/tmp/c2-l1-validation-b4pbxmd2/candidate-0949867-closure';
+const candidate=JSON.parse(await fs.readFile(path.join(c,'candidate.json'),'utf8'));
+const renderRoot=path.join(c,'native-check/render-project');
+const taskId=(await fs.readdir(renderRoot))[0];
+const result=JSON.parse(await fs.readFile(path.join(renderRoot,taskId,'result.json'),'utf8'));
+const encode=async p=>(await fs.readFile(p)).toString('base64');
+const handoff=JSON.parse(await fs.readFile(result.files['handoff.json'].path,'utf8'));
+const input={pptx_base64:await encode(result.pptx_path),handoff,renders:await Promise.all(result.renders.map(r=>encode(r.path))),comparisons:await Promise.all(result.comparisons.map(async r=>({side_by_side:await encode(r.side_by_side.path),overlay:await encode(r.overlay.path),region_differences:JSON.parse(await fs.readFile(r.region_differences.path,'utf8'))})))};
+const {verifyOutputSnapshots}=await import(pathToFileURL(path.join(candidate.plugin_root,'scripts/image-led-native.mjs')).href);
+const checked=await verifyOutputSnapshots(input,{nodeModulesRoot:'/Users/defei/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules'});
+if(checked.pptx_sha256!==candidate.native_result.pptx_sha256 || checked.verified_pages!==3) throw new Error('Current candidate snapshot verification mismatch');
+process.stdout.write(JSON.stringify({status:'PASS',...checked,mode:'Existing PPTX imported; current rendering and target/comparison pixels verified in memory; no output files rewritten'})+'\n');

@@ -1,0 +1,8 @@
+{
+  "schema": "c2-log-raw-receipt/v1",
+  "source_path": "/private/tmp/c2-l1-validation-b4pbxmd2/candidate-e01b98b-r2/refresh-manifest.log",
+  "raw_sha256": "defd6d8175d1269c066da0efc193787130d810cba1fa19ba60933d2cf38d3faa",
+  "view_sha256": "defd6d8175d1269c066da0efc193787130d810cba1fa19ba60933d2cf38d3faa",
+  "raw_base64": "eyJvayI6dHJ1ZSwibWFuaWZlc3RQYXRoIjoiL3ByaXZhdGUvdG1wL2MyLWwxLXZhbGlkYXRpb24tYjRwYnhtZDIvY2FuZGlkYXRlLWUwMWI5OGItcjIvcGx1Z2luLXJlbGVhc2UvYWktcHB0LXN0dWRpby9yZWxlYXNlLW1hbmlmZXN0Lmpzb24ifQo=",
+  "transform": "UTF-8 readable view removes trailing line and EOF whitespace only; no rerun implied"
+}

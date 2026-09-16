@@ -1,0 +1,16 @@
+{
+  "schema": "c2-l1-controller-acceptance-supplement/v1",
+  "source_commit": "094986754df67384536117c0d3693cd8a18271c3",
+  "package_evidence_commit": "7f598eba9d0bd0f2f6bd4cacb9a0fe48398603a5",
+  "scope": "Controller acceptance receipt and unique-ledger supplement only; manifest excludes itself",
+  "files": [
+    {
+      "path": "产品代码/docs/validation/c2-image-led/verification-report.md",
+      "sha256": "b42ddfab94b27f67af1fc5375906f21aa701a42c503056aa5be7722371aa918e"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-image-led/plugin-native-release-l1/packaging-closure/final-candidate-0949867/controller-package-check.json",
+      "sha256": "3e238b1f166ad56cf6fe62bf290091dadd22bfda423d49d2bfea0ce21485cd93"
+    }
+  ]
+}

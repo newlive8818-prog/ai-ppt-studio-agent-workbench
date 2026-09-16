@@ -1,0 +1,27 @@
+{
+  "base_commit": "4cab684fee73e394075a3800742f9f706cb5e190",
+  "production": [
+    "src/ai_ppt_studio/domains/visual/image_led.py",
+    "src/ai_ppt_studio/application/image_led_results.py",
+    "scripts/image-led-native.mjs"
+  ],
+  "tests": [
+    "tests/test_image_led_text_fragments.py",
+    "tests/test_image_led_text_fragments_sdk.py"
+  ],
+  "references": [
+    "skills/ai-ppt-studio/references/presentations-handoff.md"
+  ],
+  "specifications": [
+    "docs/superpowers/specs/2026-09-11-c2-native-source-fragments-and-crops.md"
+  ],
+  "files": {
+    "src/ai_ppt_studio/domains/visual/image_led.py": "7cb3857f3bbc2ce90de49ffdf6c6135f1aafe54be80208a03173cf4b01ad0883",
+    "src/ai_ppt_studio/application/image_led_results.py": "46f4c61bc7ce425541f0b59feb38cf9664660cb0ea07506dfaee22935eed704d",
+    "scripts/image-led-native.mjs": "2e377306f43f55b59a73fd95cfc671eae9d2987c61d3a34207fe1cd8f7a2687a",
+    "tests/test_image_led_text_fragments.py": "3487fc713127bc54a7b6c5182faff8dc5d12aafc9c23d8c32e86ce05e3fc7e55",
+    "tests/test_image_led_text_fragments_sdk.py": "49750af9295a2c17d86de5fc551242355a4cac2b6307cb44d5c2e50fff43861f",
+    "skills/ai-ppt-studio/references/presentations-handoff.md": "e03a9de27581ebfc8cb49eef1938f5ad6e10139dd147d51e65c1d0ca79a3ee41",
+    "docs/superpowers/specs/2026-09-11-c2-native-source-fragments-and-crops.md": "ac41f657d61eb4bdb740a32c8b228058f460c1734b1f71e5ea7caded11086362"
+  }
+}

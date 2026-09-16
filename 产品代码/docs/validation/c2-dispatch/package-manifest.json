@@ -1,0 +1,83 @@
+{
+  "kind": "c2-dispatch-source-manifest/1",
+  "parent_commit": "0b58ca5dfe8913645b55296c32c0bfeb453cf94e",
+  "code_source_tree": "fc993d369bc133ebe4890d0e4c8522b843fd2d92",
+  "c1_commit": "17d57f2c7e393ef970f758c6bbb384b854316c9f",
+  "source_tree_equal_to_c1": true,
+  "members": [
+    {
+      "path": "00-唯一研发基线索引-v1.0.md",
+      "sha256": "14ac6df6acc0ddeb5f329d4c698ffadaec83b6397df17d5735c2c17d39bd048e"
+    },
+    {
+      "path": "01-产品需求基线-v1.0.md",
+      "sha256": "c9481f9517c598ab792fbca397bcf05952e6410c30ee1edb89f7b4f5b1b3d13a"
+    },
+    {
+      "path": "02-系统详细设计-v1.0.md",
+      "sha256": "ffd9a6c0e2f4d364c721f6faba036cc937e2472ff9628f6d150be52a496c0396"
+    },
+    {
+      "path": "03-UI设计与交互规范-v1.0.md",
+      "sha256": "76878d175c0c23c9f6824b379b41e15c27302e27fec7bf3e215aef9a676178fc"
+    },
+    {
+      "path": "04-Image-led-C0-接管入口.md",
+      "sha256": "d9c62802728839822ed8f9f92cf392f524042d60d60e68fbc01a2bf0cd4d2d3d"
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "a595aca2c6540641455cca4c10715a15adc6e8bbdafa7b99a949ec93642ceb7d"
+    },
+    {
+      "path": "产品代码/AGENTS.md",
+      "sha256": "def91be9dcd09b19cecb247620d3b07fdefbf95562b1564f6487f4bdb7fbbda8"
+    },
+    {
+      "path": "产品代码/docs/superpowers/plans/2026-09-07-image-led-visual-upgrade-program-plan.md",
+      "sha256": "a7d62fb61704b96b8679b8b8cf64a1749f1edfd57b851940eb1a951786b07e38"
+    },
+    {
+      "path": "产品代码/docs/superpowers/plans/2026-09-09-image2-material-atom-input-pack-plan.md",
+      "sha256": "ecb9051e4752a7a9c8cf357b7d59c21908d3c6ee6a3e4f3aea69c2092f9d6caa"
+    },
+    {
+      "path": "产品代码/docs/validation/2026-09-09-c1-controller-closeout-evidence.json",
+      "sha256": "81864d31e6fff1f0b5c061ff35c245768624be43224d19acebca9525663e2473"
+    },
+    {
+      "path": "产品代码/docs/validation/2026-09-09-c1-controller-closeout-review.md",
+      "sha256": "5bfc277c89123db2f65553d0b6c0c7e293c97f5b6289e26ad696488d9b6b5171"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-dispatch/README.md",
+      "sha256": "b76c938a756cf2499599ba9f51e61b87b78a26a946340a2f933bc0653160772f"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-material-input-preparation/README.md",
+      "sha256": "2f05e17c10d2fcbd6df1e0333fa0225582e3a4c7ab49a47be77913c62a2507df"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-material-input-preparation/controller-draft.patch",
+      "sha256": "131ccf69ccf154a61154021b9797d6c7bcadb611870719d695c633c79a903275"
+    },
+    {
+      "path": "产品代码/docs/validation/c2-material-input-preparation/manifest.json",
+      "sha256": "fcfbfa390f96cbd3a99517685bf8e1a161cbf78b7c305363b4ad3c980e4feecb"
+    },
+    {
+      "path": "产品代码/skills/ai-ppt-studio/SKILL.md",
+      "sha256": "4e2dbb34824577a21cd5f7dee021d9ccb4bd48d09cbf58baf21c463f3e0d310f"
+    },
+    {
+      "path": "产品代码/skills/ai-ppt-studio/references/presentations-handoff.md",
+      "sha256": "8954be262c12234214916ebc9a081a93b5bc888ce4685a6138d97e5b7c9429de"
+    }
+  ],
+  "checks": {
+    "link_targets_checked": 96,
+    "broken": [],
+    "production_source_diff": false
+  },
+  "scope": "Document and dispatch identity verification; no C2 production test claim"
+}
