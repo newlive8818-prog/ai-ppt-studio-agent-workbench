@@ -59,8 +59,8 @@ def review_candidate(service, candidate_ref, suffix):
     return ref
 
 
-def selection_fixture(root):
-    service, policy, packs = input_fixture(root)
+def selection_fixture(root, slide_count=3):
+    service, policy, packs = input_fixture(root, slide_count=slide_count)
     rows = []
     for i, ref in enumerate(packs):
         candidate, _ = make_candidate(service, ref, str(i))

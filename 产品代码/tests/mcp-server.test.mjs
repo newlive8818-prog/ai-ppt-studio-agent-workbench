@@ -16,7 +16,7 @@ import {
 import { PythonBridgeError } from "../mcp/runtime-bridge/python-runtime.mjs";
 
 const EXPECTED_PUBLIC_INPUT_SCHEMA_SHA256 =
-  "4d774afc8b9569738714c9c57ebf960c35919191c3a7172ca25ddcc1db7516b7";
+  "ec2e53e65a74b953d17666842fd69c723e956307e4901c04b2d29d78570bfbee";
 
 const snapshot = {
   schema_version: "3.0",
@@ -279,8 +279,8 @@ test("MCP exposes data contracts without rendering a Widget in chat", async () =
       left.name.localeCompare(right.name));
     const catalogByName = [...PUBLIC_TOOL_CATALOG].sort((left, right) =>
       left.name.localeCompare(right.name));
-    assert.equal(listedByName.length, 43);
-    assert.equal(PUBLIC_TOOL_CATALOG.length, 43);
+    assert.equal(listedByName.length, 61);
+    assert.equal(PUBLIC_TOOL_CATALOG.length, 61);
     assert.equal(
       PUBLIC_TOOL_CATALOG.filter((tool) => tool.group === "project").length,
       15,

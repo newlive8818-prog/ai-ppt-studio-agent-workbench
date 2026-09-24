@@ -54,10 +54,28 @@ const EXPECTED_TOOL_NAMES = [
   "recommend_experience",
   "record_experience_application",
   "summarize_project_experience",
+  "begin_existing_deck_optimization",
+  "set_existing_deck_external_scope",
+  "register_existing_deck_image_request",
+  "register_existing_deck_historical_design",
+  "execute_existing_deck_image_request",
+  "recover_existing_deck_image_request",
+  "withdraw_existing_deck_unsent_request",
+  "supersede_existing_deck_response",
+  "register_existing_deck_local_media_composition",
+  "review_existing_deck_image_response",
+  "select_existing_deck_images_internal",
+  "register_existing_deck_native_plan",
+  "compile_existing_deck_native_handoff",
+  "register_existing_deck_native_result",
+  "register_existing_deck_target_evidence",
+  "register_existing_deck_full_deck_qa",
+  "get_existing_deck_optimization_status",
+  "preview_existing_deck_design_image",
 ];
 
 const EXPECTED_CATALOG_SHA256 =
-  "fc5fd70727aa8a793d9a4a63fe1007bbf3d4c5f0dacd3082e9153ce4303a7d88";
+  "158951ecad9b1c5e761264c3e6b92f286c61d0aa966b34ebc6fe2fe1afb5420a";
 
 const OUTER_BRIDGE_OPERATIONS = new Set(["create-project"]);
 const PRIVATE_PYTHON_OPERATIONS = new Set([
@@ -90,13 +108,13 @@ function pythonOperations() {
   return new Set(JSON.parse(result.stdout));
 }
 
-test("catalog freezes one exact 43-tool public contract", () => {
+test("catalog freezes one exact 61-tool public contract", () => {
   assert.deepEqual(
     PUBLIC_TOOL_GROUP_COUNTS,
-    { project: 15, content: 15, review: 4, visual: 3, "delivery-experience": 6 },
+    { project: 15, content: 15, review: 4, visual: 3, "delivery-experience": 6, optimization: 18 },
   );
   assert.deepEqual(PUBLIC_TOOL_CATALOG.map((tool) => tool.name), EXPECTED_TOOL_NAMES);
-  assert.equal(PUBLIC_TOOL_CATALOG.length, 43);
+  assert.equal(PUBLIC_TOOL_CATALOG.length, 61);
   assert.equal(PUBLIC_TOOL_CATALOG_SHA256, EXPECTED_CATALOG_SHA256);
   assert.equal(Object.isFrozen(PUBLIC_TOOL_GROUP_COUNTS), true);
   assert.equal(Object.isFrozen(PUBLIC_TOOL_CATALOG), true);
@@ -105,7 +123,7 @@ test("catalog freezes one exact 43-tool public contract", () => {
   assert.deepEqual(
     PUBLIC_TOOL_CATALOG.map((tool) => Object.keys(tool)),
     Array.from(
-      { length: 43 },
+      { length: 61 },
       () => ["name", "group", "handler", "operation", "schema"],
     ),
   );

@@ -50,8 +50,8 @@ def heterogeneous_three_page_inventory(selection, selection_ref):
     return inventory
 
 
-def reviewed_result_fixture(root):
-    kernel, producer, handoff, output = render_runtime_fixture(root)
+def reviewed_result_fixture(root, slide_count=3):
+    kernel, producer, handoff, output = render_runtime_fixture(root, slide_count=slide_count)
     commands = ProjectCommandService(kernel)
     result_ref, _ = commands.commit_noncontent_agent_result(command_id='build-result', expected_revision=kernel.load().revision,
         task_id=producer['task_id'], request_kind='visual-contract', raw_request_payload={

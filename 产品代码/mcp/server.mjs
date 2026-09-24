@@ -21,6 +21,7 @@ import { registerDeliveryExperienceTools } from "./tools/delivery-experience-too
 import { registerProjectTools } from "./tools/project-tools.mjs";
 import { registerReviewTools } from "./tools/review-tools.mjs";
 import { registerVisualTools } from "./tools/visual-tools.mjs";
+import { registerOptimizationTools } from "./tools/optimization-tools.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BROWSER_REVIEW_HTML = path.join(ROOT, "widget", "dist", "index.html");
@@ -1086,6 +1087,51 @@ export function createAiPptMcpServer(options = {}) {
     recommendExperience: genericHandler(invokeBridge),
     recordExperienceApplication: genericHandler(invokeBridge),
     summarizeProjectExperience: genericHandler(invokeBridge),
+    beginExistingDeck: genericHandler(invokeBridge, '现有 PPT 原稿已绑定。'),
+    setExistingDeckExternalScope: genericHandler(invokeBridge, '原稿外发范围已登记。'),
+    registerExistingDeckRequest: genericHandler(invokeBridge, '逐页设计请求已登记。'),
+    registerExistingDeckHistoricalDesign: async (input, operation) => genericHandler(
+      invokeBridge, '历史设计图已按原始身份登记。')({
+        projectRoot: input.projectRoot, expectedRevision: input.expectedRevision,
+        requestId: input.requestId, slideId: input.slideId, titleItemId: input.titleItemId,
+        commonRules: input.commonRules, imageBase64: input.imageDataBase64,
+        imageSha256: input.imageSha256,
+        provenance: {
+          source_pptx_sha256: input.sourcePptxSha256,
+          page_order: input.pageOrder,
+          historical_request_id: input.historicalRequestId,
+          historical_request_sha256: input.historicalRequestSha256,
+          historical_response_sha256: input.historicalResponseSha256,
+          historical_receiver: input.historicalReceiver,
+          historical_model: input.historicalModel,
+          historical_quality: input.historicalQuality,
+        },
+      }, operation),
+    executeExistingDeckRequest: genericHandler(invokeBridge, '已读取本次 CRS 设计结果。'),
+    recoverExistingDeckRequest: genericHandler(invokeBridge, '已只读恢复原请求的持久化状态。'),
+    withdrawExistingDeckRequest: genericHandler(invokeBridge),
+    supersedeExistingDeckResponse: genericHandler(invokeBridge),
+    composeExistingDeckMedia: genericHandler(invokeBridge, '原稿媒体已本地合成到设计图。'),
+    reviewExistingDeckResponse: genericHandler(invokeBridge, '逐页来源审核已登记。'),
+    selectExistingDeckImages: genericHandler(invokeBridge, '整套设计图已内部选定。'),
+    registerExistingDeckPlan: genericHandler(invokeBridge, '区域与原生对象计划已登记。'),
+    compileExistingDeckHandoff: genericHandler(invokeBridge, '已编译原生转换交接。'),
+    registerExistingDeckResult: genericHandler(invokeBridge, '原生 PPTX 结果已登记。'),
+    registerExistingDeckTarget: genericHandler(invokeBridge, '目标 PowerPoint 证据已登记。'),
+    registerExistingDeckQa: genericHandler(invokeBridge, '整套逐页 QA 已登记。'),
+    getExistingDeckStatus: async (input, operation) => {
+      const outcome = await invokeForTool(invokeBridge, genericRequest(operation, input));
+      if (!outcome.ok) return outcome.result;
+      return textResult('已读取现有稿优化状态。', outcome.payload.optimization);
+    },
+    previewExistingDeckImage: async (input, operation) => {
+      const outcome = await invokeForTool(invokeBridge, genericRequest(operation, input));
+      if (!outcome.ok) return outcome.result;
+      const { image_base64: data, ...identity } = outcome.payload.image;
+      const shown = textResult('已读取当前逐页设计图。', identity);
+      shown.content.push({ type: 'image', data, mimeType: identity.image_mime_type });
+      return shown;
+    },
   };
 
   registerProjectTools(server, handlers);
@@ -1093,6 +1139,7 @@ export function createAiPptMcpServer(options = {}) {
   registerReviewTools(server, handlers);
   registerVisualTools(server, handlers);
   registerDeliveryExperienceTools(server, handlers);
+  registerOptimizationTools(server, handlers);
   return server;
 }
 

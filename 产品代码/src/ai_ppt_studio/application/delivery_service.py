@@ -384,6 +384,8 @@ class DeliveryService:
         payload: dict[str, Any],
     ) -> str:
         state = self.kernel.load()
+        if state.artifact_heads.get('project/optimization-workflow'):
+            raise GateBlockedError('G4', ('existing-deck-requires-its-own-full-page-delivery-check',))
         if state.gate_status.get("G4") != "delivery-ready":
             raise GateBlockedError("G4", ("delivery-not-ready",))
         build_ref = str(payload.get("build_ref") or "")
@@ -478,6 +480,8 @@ class DeliveryService:
         payload: dict[str, Any],
     ) -> KernelState:
         state = self.kernel.load()
+        if state.artifact_heads.get('project/optimization-workflow'):
+            raise GateBlockedError('G4', ('existing-deck-requires-its-own-full-page-delivery-check',))
         if state.gate_status.get("G4") != "delivery-ready":
             raise GateBlockedError("G4", ("delivery-package-not-ready",))
         build_ref = state.artifact_heads.get("delivery/build", "")
@@ -768,6 +772,8 @@ class DeliveryService:
         send_status: str,
         retry_of: str,
     ) -> KernelState:
+        if self.kernel.load().artifact_heads.get('project/optimization-workflow'):
+            raise GateBlockedError('G4', ('existing-deck-requires-its-own-full-page-delivery-check',))
         if delivery_type != "pptx":
             raise ContractValidationError(
                 "Schema 3 delivery receipts currently require delivery_type=pptx"

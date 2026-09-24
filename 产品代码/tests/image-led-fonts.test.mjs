@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -122,7 +123,9 @@ test('a Heiti file named YaHei registers its real family, never an invented YaHe
   {skip: !nodeModulesRoot || !existsSync(heiti)}, async t => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'image-led-font-identity-'));
     t.after(() => fs.rm(root, {recursive: true, force: true}));
-    const misleading = path.join(root, 'Microsoft YaHei.ttc'); await fs.copyFile(heiti, misleading);
+    const heitiBytes = await fs.readFile(heiti);
+    const heitiHash = createHash('sha256').update(heitiBytes).digest('hex');
+    const misleading = path.join(root, 'Microsoft YaHei.ttc'); await fs.writeFile(misleading, heitiBytes);
     const script = `
       import assert from 'node:assert/strict';import path from 'node:path';import {createRequire} from 'node:module';
       const {loadNativeFonts}=await import(process.argv[1]), options=JSON.parse(process.argv[2]);
@@ -137,5 +140,5 @@ test('a Heiti file named YaHei registers its real family, never an invented YaHe
     `;
     const {stdout} = await execute(process.execPath, ['--input-type=module', '-e', script, moduleUrl,
       JSON.stringify({nodeModulesRoot, fontFiles: [misleading]})]);
-    assert.equal(JSON.parse(stdout)[0].sha256, 'a57b0316cc0544f682b8fb9855e14ade79ae77340ef6a01ba9210e25b4c5a5b7');
+    assert.equal(JSON.parse(stdout)[0].sha256, heitiHash);
   });

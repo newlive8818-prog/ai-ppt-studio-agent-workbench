@@ -1,18 +1,18 @@
-/** Closed public finding schema and unchanged 43-tool surface. */
+/** Closed public finding schema and expanded 61-tool surface. */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createAiPptMcpServer } from '../mcp/server.mjs';
 
-test('finding is a closed alternative of the existing 43-tool material entry', async () => {
+test('finding is a closed alternative of the existing material entry within the 61-tool catalog', async () => {
   const calls=[];
   const server=createAiPptMcpServer({invokeBridge:async request => {calls.push(request); return {ok:true,result:{artifact_ref:'artifact://material-finding/'+ 'a'.repeat(64)}};}});
   const client=new Client({name:'finding-schema',version:'1'});
   const [left,right]=InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(left),server.connect(right)]);
   try {
-    assert.equal((await client.listTools()).tools.length,43);
+    assert.equal((await client.listTools()).tools.length,61);
     const good={projectRoot:'/synthetic/project',expectedRevision:1,materialType:'finding',
       materialInventoryRef:'artifact://material-inventory/'+ 'b'.repeat(64), sourceId:'source-one',
       sourceSha256:'c'.repeat(64),sourceLocation:{kind:'object',page:1,object_id:'39'},contentKind:'image',exclusionMode:'image-content'};
@@ -70,7 +70,7 @@ test('public MCP finding reaches content gates, synthetic trusted G0, and exact-
     return data;
   };
   try {
-    assert.equal((await client.listTools()).tools.length,43);
+    assert.equal((await client.listTools()).tools.length,61);
     const finding=(await call('add_ai_ppt_material',{materialType:'finding',materialInventoryRef:seed.inventory,
       sourceId:seed.sourceId,sourceSha256:seed.sourceSha256,sourceLocation:{kind:'whole-source'},contentKind:'text',exclusionMode:'scope'})).artifact_ref;
     const bind=value=>JSON.parse(JSON.stringify(value).replaceAll('artifact://material-finding/'+ 'a'.repeat(64),finding));

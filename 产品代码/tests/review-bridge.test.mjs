@@ -2713,6 +2713,69 @@ test("Review Bridge keeps an unactivated Agent handoff alive until the hard TTL"
   }
 });
 
+test("Review Bridge default connections have no time deadline", async () => {
+  const { bridge, session } = await startedBridge({ ttlMs: undefined, leaseMs: undefined });
+  try {
+    assert.equal(Object.hasOwn(session, "expiresAt"), false);
+    const result = await fetch(`${session.origin}/api/review`, { headers: bearer(session) });
+    assert.equal(result.status, 200);
+    assert.equal(Object.hasOwn(await result.json(), "sessionExpiresAt"), false);
+    const heartbeat = await fetch(`${session.origin}/api/heartbeat`, {
+      method: "POST", headers: { ...bearer(session), Origin: session.origin },
+    });
+    assert.equal(heartbeat.status, 200);
+    const payload = await heartbeat.json();
+    assert.equal(Object.hasOwn(payload, "leaseExpiresAt"), false);
+    assert.equal(Object.hasOwn(payload, "sessionExpiresAt"), false);
+  } finally { await bridge.stop(); }
+});
+
+for (const suppliedReview of [review, visualReview]) {
+  test(`Review Bridge default ${suppliedReview.review_type} survives long idle reading`, async () => {
+    let now = 1_000;
+    const { bridge, session, calls } = await startedBridge({
+      review: suppliedReview, ttlMs: undefined, leaseMs: undefined, now: () => now,
+    });
+    try {
+      const initial = await fetch(`${session.origin}/api/review`, { headers: bearer(session) });
+      assert.equal(initial.status, 200);
+      now += 7 * 24 * 60 * 60_000;
+      bridge.sweep();
+      assert.equal(bridge.isActive(), true);
+      assert.equal(bridge.isStopped(), false);
+      const reread = await fetch(`${session.origin}/api/review`, { headers: bearer(session) });
+      assert.equal(reread.status, 200);
+      assert.equal((await reread.json()).sourceVersion, suppliedReview.source_version);
+      const unauthorized = await fetch(`${session.origin}/api/review`, {
+        headers: { Authorization: "Bearer wrong-token" },
+      });
+      assert.equal(unauthorized.status, 401);
+      if (suppliedReview.review_type === "content-full-deck") {
+        const save = await fetch(`${session.origin}/api/content/decision`, {
+          method: "POST",
+          headers: { ...bearer(session), Origin: session.origin, "Content-Type": "application/json" },
+          body: JSON.stringify({ expectedRevision: 7, sourceVersion: review.source_version,
+            reviewSessionId: review.review_session_id, slideId: "S01", decision: "modify",
+            comment: "长时间阅读后的意见仍可保存" }),
+        });
+        assert.equal(save.status, 200);
+        assert.equal(calls.at(-1).operation, "save-content-page-decision");
+        assert.equal(calls.at(-1).comment, "长时间阅读后的意见仍可保存");
+        const stale = await fetch(`${session.origin}/api/content/decision`, {
+          method: "POST",
+          headers: { ...bearer(session), Origin: session.origin, "Content-Type": "application/json" },
+          body: JSON.stringify({ expectedRevision: 7, sourceVersion: "obsolete-version",
+            reviewSessionId: review.review_session_id, slideId: "S01", decision: "approved", comment: "" }),
+        });
+        assert.equal(stale.status, 409);
+      }
+      await bridge.stop();
+      assert.equal(bridge.isStopped(), true);
+      assert.equal(bridge.isActive(), false);
+    } finally { await bridge.stop(); }
+  });
+}
+
 test("Review Bridge rejects the deprecated content evidence Browser scope", () => {
   assert.throws(
     () => createReviewBridge({

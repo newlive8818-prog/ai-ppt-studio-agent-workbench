@@ -32,7 +32,7 @@ test("existing image generation action displays returned exact image and keeps r
     });
     assert.match(result.structuredContent.generation_response_ref, /^artifact:\/\//);
     assert.equal(result.structuredContent.generation_response.image_base64, undefined);
-    assert.equal((await client.listTools()).tools.length, 43);
+    assert.equal((await client.listTools()).tools.length, 61);
   } finally { await client.close(); }
 });
 

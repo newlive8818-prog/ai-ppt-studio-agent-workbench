@@ -309,13 +309,25 @@ class ImageLedNativeService(ImageLedSelectionService):
             fail('REVIEW', 'formal visual review has no completed independent task provenance')
         return value
 
-    def _anchor_projection(self, result_ref, review_ref):
+    def _anchor_projection(self, result_ref, review_ref, *, anchor_slide_ids=None):
         from pathlib import Path
         from ai_ppt_studio.application.image_led_results import ImageLedResultService
         from ai_ppt_studio.domains.visual.contracts import validate_anchor_slide_set
         contracts, plan = self.current_contract_plan()
         value = ImageLedResultService(self.kernel).current_result(result_ref, review_ref=review_ref)
         output = value['output']
+        rendered = output['renders']
+        all_slide_ids = [row['slide_id'] for row in rendered]
+        if anchor_slide_ids is None:
+            if len(rendered) != 3:
+                fail('ANCHORS', 'a build with more than three pages requires three explicit anchor slide IDs')
+            anchor_slide_ids = all_slide_ids
+        if (not isinstance(anchor_slide_ids, list) or len(anchor_slide_ids) != 3
+                or any(not isinstance(slide_id, str) for slide_id in anchor_slide_ids)
+                or len(set(anchor_slide_ids)) != 3
+                or [slide_id for slide_id in all_slide_ids if slide_id in anchor_slide_ids] != anchor_slide_ids):
+            fail('ANCHORS', 'three anchor slide IDs must occur once in the reviewed build order')
+        anchor_renders = [row for row in rendered if row['slide_id'] in anchor_slide_ids]
         identity = {'build_result_ref': result_ref, 'four_dimension_review_ref': review_ref,
             'selection_ref': output['selection_ref'], 'region_inventory_ref': output['region_inventory_ref'],
             'plan_ref': output['plan_ref'], 'pptx_sha256': output['pptx_sha256']}
@@ -333,14 +345,15 @@ class ImageLedNativeService(ImageLedSelectionService):
             'visual_compilation_plan_ref': output['plan_ref'],
             'native_first_pptx_ref': refs['visual/image-led/native-pptx'],
             'pptx_sha256': output['pptx_sha256'], 'native_first_frozen': True,
-            'slide_ids': [row['slide_id'] for row in output['renders']],
-            'selection_reason': '当前三页定版设计的忠实原生转换',
+            'slide_ids': anchor_slide_ids,
+            'selection_reason': ('当前三页定版设计的忠实原生转换' if len(rendered) == 3 else
+                                 '从当前完整构建中选取三页代表性定版成果'),
             'source_version': plan['source_version'],
             'editability_evidence_refs': [refs['visual/image-led/editability']],
             'preflight_render_refs': [refs['visual/image-led/preflight']],
             'render_assets': [{'slide_id': row['slide_id'],
                 'current_asset_ref': Path(row['path']).relative_to(self.kernel.project_root).as_posix(),
-                'previous_asset_ref': ''} for row in output['renders']],
+                'previous_asset_ref': ''} for row in anchor_renders],
             'image_led': identity}
         return validate_anchor_slide_set(anchors, contracts), records
 
@@ -350,10 +363,14 @@ class ImageLedNativeService(ImageLedSelectionService):
         self.require_g0()
         if self.kernel.load().gate_status.get('G1') != 'passed':
             raise GateBlockedError('image-led-anchors', ('G1-not-passed',))
-        exact(payload, {'artifact_type', 'build_result_ref', 'four_dimension_review_ref'}, 'Image-led anchor promotion')
+        fields = {'artifact_type', 'build_result_ref', 'four_dimension_review_ref'}
+        if isinstance(payload, dict) and 'slide_ids' in payload:
+            fields.add('slide_ids')
+        exact(payload, fields, 'Image-led anchor promotion')
         if payload['artifact_type'] != 'image-led-anchor-set':
             fail('RESULT', 'anchors require governed Image-led promotion')
-        normalized, records = self._anchor_projection(payload['build_result_ref'], payload['four_dimension_review_ref'])
+        normalized, records = self._anchor_projection(payload['build_result_ref'], payload['four_dimension_review_ref'],
+                                                      anchor_slide_ids=payload.get('slide_ids'))
         keep = {slot for slot in self.kernel.load().artifact_heads if slot.startswith('visual/')
             and not slot.startswith(('visual/anchors', 'visual/target-evidence/', 'visual/review/G2/', 'visual/contract/'))
             and slot != 'visual/contract'} | set(records) | {'visual/anchors'}
@@ -366,7 +383,8 @@ class ImageLedNativeService(ImageLedSelectionService):
         ref = self.kernel.load().artifact_heads.get('visual/anchors', '')
         value = self._current(ref, 'visual/anchors', 'anchor-slide-set')
         binding = value.get('image_led') or {}
-        expected, records = self._anchor_projection(binding.get('build_result_ref'), binding.get('four_dimension_review_ref'))
+        expected, records = self._anchor_projection(binding.get('build_result_ref'), binding.get('four_dimension_review_ref'),
+                                                    anchor_slide_ids=value.get('slide_ids'))
         if value != expected:
             fail('RESULT', 'anchor set differs from the actual current reviewed build result')
         for slot, (kind, payload) in records.items():
@@ -374,3 +392,91 @@ class ImageLedNativeService(ImageLedSelectionService):
             if self._current(wanted, slot, kind) != payload:
                 fail('RESULT', 'native support evidence differs from the checked result')
         return value
+
+
+class ExistingDeckNativeService:
+    """Preflight a complete source-sized, exact-image region/object plan."""
+
+    PLAN_SLOT = 'optimization/native-plan'
+    REGIONS_SLOT = 'optimization/regions'
+
+    def __init__(self, kernel):
+        self.kernel = kernel
+
+    def _validate(self, inventory, objects, *, selection_ref=None):
+        from ai_ppt_studio.application.image_led_selection import ExistingDeckSelectionService
+        from ai_ppt_studio.domains.visual.image_led import validate_faithful_objects
+        service = ExistingDeckSelectionService(self.kernel)
+        selection_ref = selection_ref or self.kernel.load().artifact_heads.get(service.SELECTION, '')
+        selection = service.current_selection(selection_ref)
+        region_inventory = validate_region_inventory(inventory, selection, selection_ref=selection_ref)
+        if (not isinstance(objects, list) or len(objects) != len(region_inventory['slides'])
+                or region_inventory.get('region_version') is not None):
+            fail('REGIONS', 'existing-deck v1 plan needs every page with supported native regions')
+        from PIL import Image
+        for index, (page, mapped) in enumerate(zip(region_inventory['slides'], objects)):
+            target = page['target_binding']
+            image = resolve_kind(self.kernel, target['target_image_ref'], 'image-led-image')['payload']
+            raw = base64.b64decode(image['data_base64'], validate=True)
+            if (hashlib.sha256(raw).hexdigest() != target['target_image_sha256']
+                    or image.get('sha256') != target['target_image_sha256']):
+                fail('HASH', 'native plan target differs from actual selected image bytes')
+            with Image.open(BytesIO(raw)) as decoded:
+                decoded.load()
+                actual = {'width': decoded.width, 'height': decoded.height}
+            if actual != page['source_image_size']:
+                fail('REGIONS', 'page canvas differs from selected image dimensions')
+            validate_faithful_objects(page['regions'], mapped)
+            # Every source page must have native semantic text carriers. A source
+            # slide proto, whole-slide bitmap or missing page never fills a gap.
+            if (target['page_order'] != index + 1 or
+                    not any(obj['kind'] == 'text' and obj['render_mode'] == 'native' for obj in mapped)):
+                fail('NATIVE', 'source page lacks exact native text carriers')
+        return region_inventory
+
+    def register_plan(self, command_id, revision, *, inventory, objects):
+        require_revision(self.kernel, revision)
+        if self.PLAN_SLOT in self.kernel.load().artifact_heads:
+            fail('PLAN', 'a current native plan cannot be replaced without explicit revision')
+        checked = self._validate(inventory, objects)
+        selection_ref = checked['selection_ref']
+        region_ref = str(self.kernel.artifacts.reference_for('image-led-region-inventory', checked))
+        slides = []
+        for page, mapped, selected in zip(checked['slides'], objects,
+                resolve_kind(self.kernel, selection_ref, 'image-led-selection')['payload']['slides']):
+            slides.append({**deepcopy(page), 'selected_copy': deepcopy(selected['selected_copy']),
+                'objects': deepcopy(mapped)})
+        from ai_ppt_studio.application.existing_deck_optimization import SOURCE_SLOT
+        from ai_ppt_studio.domains.visual.compilation import image_led_versions
+        version, handoff = image_led_versions({'slides': resolve_kind(self.kernel, selection_ref,
+            'image-led-selection')['payload']['slides']}, checked)
+        plan = {'project_id': self.kernel.project_id, 'source_ref': self.kernel.load().artifact_heads[SOURCE_SLOT],
+            'selection_ref': selection_ref, 'region_inventory_ref': region_ref,
+            'compiler_version': version, 'handoff_version': handoff, 'slides': slides}
+        committed = self.kernel.commit(command_id=command_id, expected_revision=revision,
+            event_type='optimization.native-plan-registered', artifact_updates={
+                self.REGIONS_SLOT: ('image-led-region-inventory', checked),
+                self.PLAN_SLOT: ('visual-compilation-plan', plan)})
+        return committed.artifact_heads[self.PLAN_SLOT]
+
+    def current_plan(self, ref=None):
+        from ai_ppt_studio.application.artifact_guards import require_exact_ref
+        from ai_ppt_studio.application.image_led_selection import ExistingDeckSelectionService
+        state = self.kernel.load()
+        ref = ref or state.artifact_heads.get(self.PLAN_SLOT, '')
+        plan = require_exact_ref(self.kernel, ref, self.PLAN_SLOT, 'visual-compilation-plan')['payload']
+        if (plan.get('project_id') != self.kernel.project_id
+                or plan.get('source_ref') != state.artifact_heads.get('optimization/source')
+                or plan.get('selection_ref') != state.artifact_heads.get(ExistingDeckSelectionService.SELECTION)
+                or plan.get('region_inventory_ref') != state.artifact_heads.get(self.REGIONS_SLOT)):
+            fail('PLAN', 'native plan refers to an outdated source, image, or region inventory')
+        selected = ExistingDeckSelectionService(self.kernel).current_selection(plan['selection_ref'])
+        regions = require_exact_ref(self.kernel, plan['region_inventory_ref'], self.REGIONS_SLOT,
+            'image-led-region-inventory')['payload']
+        self._validate(regions, [page['objects'] for page in plan['slides']], selection_ref=plan['selection_ref'])
+        if (len(plan['slides']) != len(selected['slides'])
+                or any({key: page[key] for key in ('target_binding', 'canvas', 'source_image_size', 'regions')}
+                    != region or page['selected_copy'] != chosen['selected_copy']
+                    for page, region, chosen in zip(plan['slides'], regions['slides'], selected['slides']))):
+            fail('PLAN', 'stored native plan differs from current reviewed region/object mapping')
+        return plan

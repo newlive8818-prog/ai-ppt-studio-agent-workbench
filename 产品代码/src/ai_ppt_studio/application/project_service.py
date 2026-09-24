@@ -352,6 +352,18 @@ class ProjectCommandService:
     def __init__(self, kernel: ProjectKernel) -> None:
         self.kernel = kernel
 
+    def begin_existing_deck_optimization(
+        self, command_id: str, expected_revision: int, *, source_id: str,
+        source_pptx_sha256: str, user_message_ref: str,
+    ) -> str:
+        """Explicitly choose the source-bound route; never mutate legacy Gates."""
+        from ai_ppt_studio.application.existing_deck_optimization import ExistingDeckOptimizationService
+
+        return ExistingDeckOptimizationService(self.kernel).begin(
+            command_id, expected_revision, source_id=source_id,
+            source_pptx_sha256=source_pptx_sha256, user_message_ref=user_message_ref,
+        )
+
     def close_project(
         self,
         *,

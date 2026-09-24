@@ -114,6 +114,51 @@ class ContextCompiler:
     def __init__(self, kernel: ProjectKernel) -> None:
         self.kernel = kernel
 
+    def compile_existing_deck_handoff(self, *, task_id: str, plan_ref: str,
+                                      require_output_paths_absent: bool = True) -> dict[str, Any]:
+        """Compile only the selected design and mapped native objects, with no source-page fallback."""
+        import base64
+        import hashlib
+        from io import BytesIO
+        from PIL import Image
+        from ai_ppt_studio.application.image_led_native import ExistingDeckNativeService
+        from ai_ppt_studio.errors import ContractValidationError
+
+        if not TASK_ID_PATTERN.fullmatch(task_id):
+            raise ContractValidationError('Native task requires an exact 64-digit hex identity')
+        plan = ExistingDeckNativeService(self.kernel).current_plan(plan_ref)
+        root = self.kernel.project_root.resolve()
+        directory = root / task_id
+        if directory.is_symlink() or (require_output_paths_absent and directory.exists()):
+            raise ContractValidationError('Native output directory already exists')
+        assets = {}
+        for page in plan['slides']:
+            target = page['target_binding']
+            needs = [(target['target_image_ref'], target['target_image_sha256'])]
+            for obj in page['objects']:
+                if obj['kind'] in {'image', 'decoration'}:
+                    needs.append((obj['appearance']['asset_ref'], obj['appearance']['asset_sha256']))
+            for ref, expected in needs:
+                if ref in assets:
+                    if assets[ref]['sha256'] != expected:
+                        raise ContractValidationError('One selected asset has two incompatible identities')
+                    continue
+                image = self.kernel.artifacts.resolve(ArtifactReference.parse(ref))['payload']
+                raw = base64.b64decode(image['data_base64'], validate=True)
+                with Image.open(BytesIO(raw)) as decoded:
+                    decoded.load()
+                    mime = {'PNG': 'image/png', 'JPEG': 'image/jpeg'}.get(decoded.format)
+                if hashlib.sha256(raw).hexdigest() != expected or image['sha256'] != expected or image['mime_type'] != mime:
+                    raise ContractValidationError('Handoff asset differs from selected original bytes')
+                assets[ref] = {'sha256': expected, 'data_base64': image['data_base64'], 'mime_type': mime}
+        return {'handoff_version': plan['handoff_version'], 'compiler_version': plan['compiler_version'],
+            'project_id': self.kernel.project_id, 'selection_ref': plan['selection_ref'],
+            'region_inventory_ref': plan['region_inventory_ref'], 'plan_ref': plan_ref,
+            'task_id': task_id, 'slides': [
+                {key: deepcopy(page[key]) for key in ('target_binding','canvas','source_image_size','regions','objects')}
+                for page in plan['slides']], 'assets': assets,
+            'output_paths': {'directory': str(directory), 'pptx': str(directory / 'native-anchors.pptx')}}
+
     def compile_role_task(
         self,
         *,

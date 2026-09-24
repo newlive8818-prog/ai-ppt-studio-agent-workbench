@@ -47,8 +47,9 @@ def region_review(kernel, inventory_ref, suffix='one'):
         request_kind='visual-contract', raw_request_payload=payload)[0]
 
 
-def regions_fixture(root):
-    svc, selection_ref = selection_fixture(root)
+def regions_fixture(root, slide_count=3):
+    svc, selection_ref = (selection_fixture(root) if slide_count == 3
+                          else selection_fixture(root, slide_count=slide_count))
     selection = svc.current_selection(selection_ref)
     inventory = inventory_for(selection, selection_ref)
     ref = register_regions(svc.kernel, inventory)
@@ -56,9 +57,9 @@ def regions_fixture(root):
     return svc.kernel, selection, inventory, ref, review
 
 
-def contract_fixture(root):
+def contract_fixture(root, slide_count=3):
     from tests.test_image_led_compilation import fixture_for
-    kernel, selection, inventory, inventory_ref, _ = regions_fixture(root)
+    kernel, selection, inventory, inventory_ref, _ = regions_fixture(root, slide_count=slide_count)
     heads = kernel.load().artifact_heads
     blueprint_ref = heads['content/reading-blueprint']
     blueprint = kernel.artifacts.resolve(ArtifactReference.parse(blueprint_ref))['payload']
@@ -92,8 +93,8 @@ def formal_review(kernel, target_ref, *, stage='G1', kind='aesthetic'):
         request_kind='visual-contract', raw_request_payload=payload)[0]
 
 
-def g1_fixture(root):
-    kernel, contract_ref = contract_fixture(root)
+def g1_fixture(root, slide_count=3):
+    kernel, contract_ref = contract_fixture(root, slide_count=slide_count)
     visual = VisualService(kernel)
     visual.register_convergence('converged', kernel.load().revision, {
         'production_route': 'strict-B', 'visual_contract_set_ref': contract_ref,

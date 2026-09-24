@@ -23,10 +23,10 @@ MODULES = Path(os.environ.get('C2_RUNTIME_NODE_MODULES', str(BUNDLE / 'node/node
 PYTHON = Path(os.environ.get('C2_RUNTIME_PYTHON', str(BUNDLE / 'python/bin/python3')))
 
 
-def render_runtime_fixture(root):
+def render_runtime_fixture(root, slide_count=3):
     from tests.test_image_led_runtime import g1_fixture
     from ai_ppt_studio.application.project_service import ProjectCommandService
-    kernel, _ = g1_fixture(root)
+    kernel, _ = g1_fixture(root, slide_count=slide_count)
     _, task, _ = ProjectCommandService(kernel).request_agent_action('native-result-producer', kernel.load().revision,
         action_type='build-native-first', target_refs=[kernel.load().artifact_heads['visual/compilation-plan']],
         instructions='Synthetic native-result integration, never a real visual or user approval')

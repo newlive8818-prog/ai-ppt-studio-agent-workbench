@@ -56,6 +56,7 @@ class DecodeReasonTests(unittest.TestCase):
             (event() + event(), 'sse-duplicate-final'),
             (event() + event('image_generation.partial_image'), 'sse-partial-after-final'),
             (event('heartbeat', b64_json=provider.SECRET), 'sse-heartbeat-image'),
+            (event('keepalive', b64_json=provider.SECRET), 'sse-heartbeat-image'),
             (b'event: image_generation.completed\n\n', 'sse-empty-event-invalid'),
             (b'unknown: private\n', 'sse-field-invalid'),
             (b'retry: -1\n', 'sse-retry-invalid'),

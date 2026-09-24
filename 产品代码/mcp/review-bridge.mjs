@@ -259,13 +259,15 @@ export function createReviewBridge(options) {
   const now = options.now || Date.now;
   const notificationTimeoutMs = Math.max(1, Number(options.notificationTimeoutMs || 5_000));
   const projectionTimeoutMs = Math.max(1, Number(options.projectionTimeoutMs || 8_000));
-  const ttlMs = Math.max(1, Number(options.ttlMs || 5 * 60_000));
-  const leaseMs = Math.max(1, Number(options.leaseMs || 30_000));
+  // Human review has no wall-clock or idle deadline by default. Explicit
+  // finite limits remain available for legacy transports and boundary tests.
+  const ttlMs = options.ttlMs == null ? null : Math.max(1, Number(options.ttlMs));
+  const leaseMs = options.leaseMs == null ? null : Math.max(1, Number(options.leaseMs));
   const token = randomBytes(32).toString("base64url");
   const bridgeSessionId = randomBytes(24).toString("base64url");
   const createdAt = now();
-  const expiresAt = createdAt + ttlMs;
-  let leaseUntil = createdAt + leaseMs;
+  const expiresAt = ttlMs === null ? null : createdAt + ttlMs;
+  let leaseUntil = leaseMs === null ? null : createdAt + leaseMs;
   let server = null;
   let port = 0;
   let origin = "";
@@ -719,7 +721,7 @@ export function createReviewBridge(options) {
   }
 
   function isExpired() {
-    return now() > expiresAt;
+    return expiresAt !== null && now() > expiresAt;
   }
 
   function hasBearer(request) {
@@ -738,7 +740,9 @@ export function createReviewBridge(options) {
 
   function renewLease() {
     activated = true;
-    leaseUntil = Math.min(expiresAt, now() + leaseMs);
+    if (leaseMs !== null) {
+      leaseUntil = Math.min(expiresAt ?? Infinity, now() + leaseMs);
+    }
   }
 
   function authorize(request, response, { write = false } = {}) {
@@ -928,7 +932,7 @@ export function createReviewBridge(options) {
           sourceVersion,
           expectedRevision: scopedRevision,
           bridgeSessionId,
-          sessionExpiresAt: expiresAt,
+          ...(expiresAt === null ? {} : { sessionExpiresAt: expiresAt }),
           review: scopedReview,
         });
         return;
@@ -937,8 +941,8 @@ export function createReviewBridge(options) {
       if (url.pathname === "/api/heartbeat") {
         jsonResponse(response, 200, {
           ok: true,
-          leaseExpiresAt: leaseUntil,
-          sessionExpiresAt: expiresAt,
+          ...(leaseUntil === null ? {} : { leaseExpiresAt: leaseUntil }),
+          ...(expiresAt === null ? {} : { sessionExpiresAt: expiresAt }),
         });
         return;
       }
@@ -1537,7 +1541,7 @@ export function createReviewBridge(options) {
 
   function sweep() {
     if (stopped) return;
-    if (isExpired() || (activated && now() > leaseUntil)) {
+    if (isExpired() || (activated && leaseUntil !== null && now() > leaseUntil)) {
       stopped = true;
       const current = server;
       server = null;
@@ -1563,15 +1567,17 @@ export function createReviewBridge(options) {
       port = address.port;
       origin = `http://${LOOPBACK_HOST}:${port}`;
       server.unref();
-      sweepTimer = setInterval(sweep, Math.min(leaseMs, 1_000));
-      sweepTimer.unref();
+      if (ttlMs !== null || leaseMs !== null) {
+        sweepTimer = setInterval(sweep, Math.min(leaseMs ?? 1_000, 1_000));
+        sweepTimer.unref();
+      }
       return {
         host: LOOPBACK_HOST,
         port,
         origin,
         token,
         url: `${origin}/#token=${encodeURIComponent(token)}`,
-        expiresAt,
+        ...(expiresAt === null ? {} : { expiresAt }),
         projectRoot,
         reviewType,
         sourceVersion,
@@ -1583,7 +1589,7 @@ export function createReviewBridge(options) {
     stop,
     sweep,
     isActive() {
-      return !stopped && !isExpired() && (!activated || now() <= leaseUntil);
+      return !stopped && !isExpired() && (!activated || leaseUntil === null || now() <= leaseUntil);
     },
     isStopped() {
       return stopped;

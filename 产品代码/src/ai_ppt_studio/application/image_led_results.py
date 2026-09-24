@@ -253,50 +253,91 @@ def _carrier_check(node, obj):
             _xml_fields(stretch.find('a:fillRect', NS), [])
 
 
+def _text_props_style_check(props, run):
+    _check(props is not None, 'native run styling is missing')
+    font_attrs = ['sz', 'b', 'i', 'lang', 'dirty'] + (['spc'] if 'characterSpacing' in run else [])
+    _check(not set(props.attrib) - set(font_attrs), 'unsupported native font transformation')
+    _xml_fields(props, ['a:solidFill', 'a:gradFill', 'a:ln', 'a:latin', 'a:ea', 'a:cs'],
+                required=['a:latin', 'a:ea', 'a:cs'], attrs=font_attrs)
+    if 'characterSpacing' in run:
+        _check(props.get('spc') == str(run['characterSpacing']), 'native character spacing changed or missing')
+    outline = run.get('outline')
+    line = props.find('a:ln', NS)
+    if outline is None:
+        _check(line is None, 'native run acquired an unselected outline')
+    else:
+        _check(line is not None and line.get('w') == str(int(outline['width'] * 9525)),
+               'native text outline width changed or missing')
+        _xml_fields(line, ['a:solidFill', 'a:prstDash'], attrs=['w'])
+        _check(line.find('a:prstDash', NS) is not None and line.find('a:prstDash', NS).get('val') == 'solid',
+               'native text outline style changed')
+        _color(line.find('a:solidFill/a:srgbClr', NS), outline['color'])
+    # Artifact SDK 2.8.59 encodes centipoints with this operation order.
+    # px * 75 changes binary half-boundaries (e.g. 26.7); Python round()
+    # uses ties-to-even instead of the SDK's positive Math.round rule.
+    scaled_size = float(run['fontSize']) * 72 / 96 * 100
+    _check(math.isfinite(scaled_size), 'native font size encoding is non-finite')
+    lower_size = math.floor(scaled_size)
+    encoded_size = lower_size + int(scaled_size - lower_size >= 0.5)
+    _check(encoded_size >= 100, 'CapabilityGap: native font size requires SDK minimum clamping')
+    _check(props.get('sz') == str(encoded_size), 'native font size encoding changed or missing')
+    for family in ('latin', 'ea', 'cs'):
+        value = props.find('a:' + family, NS)
+        _check(value is not None and value.get('typeface') == run['fontFamily'], 'native font family changed')
+    for key in ('bold', 'italic'):
+        _check(props.get({'bold': 'b', 'italic': 'i'}[key], '0') in
+               ({'1', 'true'} if run[key] else {'0', 'false'}), 'native font style changed')
+    _fill_check(props, run['fill'] if 'fill' in run else {'type':'solid','color':run['color']})
+
+
+def _text_run_style_check(actual, run):
+    _xml_fields(actual, ['a:rPr', 'a:t'], required=['a:rPr', 'a:t'])
+    _text_props_style_check(actual.find('a:rPr', NS), run)
+
+
 def _text_check(body, expected, *, table_cell=False):
     _xml_fields(body, ['a:bodyPr', 'a:lstStyle', 'a:p'], required=['a:bodyPr', 'a:lstStyle', 'a:p'], repeated=['a:p'])
     _xml_fields(body.find('a:lstStyle', NS), [])
     _check(body is not None and paragraphs(body) == ''.join(r['text'] for r in expected['runs']),
            'native visible text differs from selected text')
-    native_runs = body.findall('a:p/a:r', NS)
-    _check(len(native_runs) == len(expected['runs']), 'native font run coverage changed')
-    for actual, run in zip(native_runs, expected['runs']):
-        _xml_fields(actual, ['a:rPr', 'a:t'], required=['a:rPr', 'a:t'])
-        props = actual.find('a:rPr', NS)
-        _check(props is not None and actual.findtext('a:t', '', NS) == run['text'], 'native run text changed')
-        font_attrs = ['sz', 'b', 'i', 'lang', 'dirty'] + (['spc'] if 'characterSpacing' in run else [])
-        _check(not set(props.attrib) - set(font_attrs), 'unsupported native font transformation')
-        _xml_fields(props, ['a:solidFill', 'a:gradFill', 'a:ln', 'a:latin', 'a:ea', 'a:cs'],
-                    required=['a:latin', 'a:ea', 'a:cs'], attrs=font_attrs)
-        if 'characterSpacing' in run:
-            _check(props.get('spc') == str(run['characterSpacing']), 'native character spacing changed or missing')
-        outline = run.get('outline')
-        line = props.find('a:ln', NS)
-        if outline is None:
-            _check(line is None, 'native run acquired an unselected outline')
-        else:
-            _check(line is not None and line.get('w') == str(int(outline['width'] * 9525)),
-                   'native text outline width changed or missing')
-            _xml_fields(line, ['a:solidFill', 'a:prstDash'], attrs=['w'])
-            _check(line.find('a:prstDash', NS) is not None and line.find('a:prstDash', NS).get('val') == 'solid',
-                   'native text outline style changed')
-            _color(line.find('a:solidFill/a:srgbClr', NS), outline['color'])
-        # Artifact SDK 2.8.59 encodes centipoints with this operation order.
-        # px * 75 changes binary half-boundaries (e.g. 26.7); Python round()
-        # uses ties-to-even instead of the SDK's positive Math.round rule.
-        scaled_size = float(run['fontSize']) * 72 / 96 * 100
-        _check(math.isfinite(scaled_size), 'native font size encoding is non-finite')
-        lower_size = math.floor(scaled_size)
-        encoded_size = lower_size + int(scaled_size - lower_size >= 0.5)
-        _check(encoded_size >= 100, 'CapabilityGap: native font size requires SDK minimum clamping')
-        _check(props.get('sz') == str(encoded_size), 'native font size encoding changed or missing')
-        for family in ('latin', 'ea', 'cs'):
-            value = props.find('a:' + family, NS)
-            _check(value is not None and value.get('typeface') == run['fontFamily'], 'native font family changed')
-        for key in ('bold', 'italic'):
-            _check(props.get({'bold': 'b', 'italic': 'i'}[key], '0') in
-                   ({'1', 'true'} if run[key] else {'0', 'false'}), 'native font style changed')
-        _fill_check(props, run['fill'] if 'fill' in run else {'type':'solid','color':run['color']})
+    expected_text = ''.join(run['text'] for run in expected['runs'])
+    expected_styles = [run for run in expected['runs'] for _ in run['text']]
+    offset = 0
+    # Artifact Tool can express selected newlines as paragraph boundaries or
+    # explicit a:br nodes. Walk the exact visible sequence so every real text or
+    # break carrier remains bound to the selected run style and position.
+    for paragraph_index, paragraph in enumerate(body.findall('a:p', NS)):
+        if paragraph_index:
+            _check(offset < len(expected_text) and expected_text[offset] == '\n',
+                   'native paragraph break changed')
+            offset += 1
+        for carrier in paragraph:
+            kind = carrier.tag.rsplit('}', 1)[-1]
+            if kind == 'pPr':
+                continue
+            if kind == 'r':
+                actual_text = carrier.findtext('a:t', '', NS)
+                end = offset + len(actual_text)
+                _check(actual_text and expected_text[offset:end] == actual_text
+                       and end <= len(expected_styles)
+                       and all(style is expected_styles[offset] for style in expected_styles[offset:end]),
+                       'native run text changed')
+                _text_run_style_check(carrier, expected_styles[offset])
+                offset = end
+            elif kind == 'br':
+                _check(offset < len(expected_text) and expected_text[offset] == '\n',
+                       'native line break changed')
+                _xml_fields(carrier, ['a:rPr'], required=['a:rPr'])
+                _text_props_style_check(carrier.find('a:rPr', NS), expected_styles[offset])
+                offset += 1
+            elif kind == 'tab':
+                _check(offset < len(expected_text) and expected_text[offset] == '\t',
+                       'native tab changed')
+                _xml_fields(carrier, [])
+                offset += 1
+            else:
+                fail('RESULT', 'unsupported native text carrier')
+    _check(offset == len(expected_text), 'native font run coverage changed')
     body_props = body.find('a:bodyPr', NS)
     _xml_fields(body_props, ['a:noAutofit'], required=['a:noAutofit'], attrs=['wrap', 'tIns', 'rIns', 'bIns', 'lIns', 'anchor'])
     _check(body_props is not None and body_props.find('a:noAutofit', NS) is not None,
@@ -308,7 +349,8 @@ def _text_check(body, expected, *, table_cell=False):
            {'top': 't', 'middle': 'ctr', 'bottom': 'b'}[expected['verticalAlignment']]),
            'native vertical alignment changed')
     for paragraph in body.findall('a:p', NS):
-        _xml_fields(paragraph, ['a:pPr', 'a:r'], required=['a:pPr', 'a:r'], repeated=['a:r'])
+        _xml_fields(paragraph, ['a:pPr', 'a:r', 'a:br', 'a:tab'], required=['a:pPr'],
+                    repeated=['a:r', 'a:br', 'a:tab'])
         props = paragraph.find('a:pPr', NS)
         _xml_fields(props, ['a:lnSpc', 'a:buNone'], required=['a:lnSpc', 'a:buNone'], attrs=['algn'])
         _xml_fields(props.find('a:lnSpc', NS), ['a:spcPct'], required=['a:spcPct'])
@@ -662,7 +704,13 @@ def preflight_output(payload, handoff, project_root):
         except (ValueError, OSError) as error:
             fail('RESULT', 'invalid render bytes: ' + type(error).__name__)
         layout = _json(files[f'slide-{index}.layout.json'])
-        _check(isinstance(layout, dict) and layout.get('slide', {}).get('slide') == index,
+        slide_layout = layout.get('slide', {}) if isinstance(layout, dict) else {}
+        legacy_page = slide_layout.get('slide')
+        current_index = slide_layout.get('index')
+        _check(isinstance(slide_layout, dict)
+               and (legacy_page is not None or current_index is not None)
+               and (legacy_page is None or type(legacy_page) is int and legacy_page == index)
+               and (current_index is None or type(current_index) is int and current_index == index - 1),
                'layout inspection belongs to another page')
         comparison = payload['comparisons'][index - 1]
         exact(comparison, {'slide_id', 'side_by_side', 'overlay', 'region_differences'}, 'visual comparison')
@@ -893,3 +941,232 @@ class ImageLedResultService(ImageLedService):
                and task['context_pack_ref'] == review['context_pack_ref'], 'result review lacks independent completed task lineage')
         require_exact_ref(self.kernel, task['context_pack_ref'], 'agent/context/' + task_id, 'context-pack')
         return result
+
+
+class ExistingDeckResultService:
+    """Source-sized native output and per-page QA remain separate from legacy G4."""
+
+    RESULT_SLOT = 'optimization/native-result'
+    QA_SLOT = 'optimization/full-deck-qa'
+    FINAL_SLOT = 'optimization/final-pptx'
+    TARGET_SLOT = 'optimization/target-evidence/macos-powerpoint'
+    REQUIRED = frozenset({'content', 'numbers', 'materials', 'visual',
+                          'relationships', 'editability', 'common-rules'})
+    # This is a veto for gross mismatch, not an automatic fidelity pass.
+    # Finer alignment and semantics still require independent region review.
+    OBVIOUS_REGION_MAE_LIMIT = 64.0
+
+    def __init__(self, kernel):
+        self.kernel = kernel
+
+    def register_result(self, command_id, revision, *, task_id, plan_ref, output):
+        from ai_ppt_studio.application.image_led_native import ExistingDeckNativeService
+        from ai_ppt_studio.context_compiler import ContextCompiler
+        require_revision(self.kernel, revision)
+        if self.RESULT_SLOT in self.kernel.load().artifact_heads:
+            fail('RESULT', 'a current result cannot be overwritten by an unreviewed build')
+        plan = ExistingDeckNativeService(self.kernel).current_plan(plan_ref)
+        handoff = ContextCompiler(self.kernel).compile_existing_deck_handoff(
+            task_id=task_id, plan_ref=plan_ref, require_output_paths_absent=False)
+        checked = preflight_output(output, handoff, self.kernel.project_root)
+        if (checked['selection_ref'] != plan['selection_ref']
+                or checked['region_inventory_ref'] != plan['region_inventory_ref']
+                or len(checked['renders']) != len(plan['slides'])):
+            fail('RESULT', 'native output does not cover current selected source-sized plan')
+        value = {'project_id': self.kernel.project_id, 'source_ref': plan['source_ref'],
+            'plan_ref': plan_ref, 'handoff': handoff, 'output': checked,
+            'status': 'engineering-output-unassessed'}
+        committed = self.kernel.commit(command_id=command_id, expected_revision=revision,
+            event_type='optimization.native-output-registered',
+            artifact_updates={self.RESULT_SLOT: ('optimization-native-result', value),
+                self.FINAL_SLOT: ('final-pptx', {'pptx_sha256': checked['pptx_sha256'],
+                    'pptx_path': checked['pptx_path'], 'slide_ids': [
+                        row['target_binding']['slide_id'] for row in plan['slides']],
+                    'source_ref': plan['source_ref'], 'selection_ref': plan['selection_ref'],
+                    'production_route': 'existing-deck-faithful',
+                    'tool_name': 'Codex Presentations'})})
+        return committed.artifact_heads[self.RESULT_SLOT]
+
+    def current_result(self, ref=None):
+        from ai_ppt_studio.application.artifact_guards import require_exact_ref
+        from ai_ppt_studio.application.image_led_native import ExistingDeckNativeService
+        from ai_ppt_studio.context_compiler import ContextCompiler
+        state = self.kernel.load()
+        ref = ref or state.artifact_heads.get(self.RESULT_SLOT, '')
+        result = require_exact_ref(self.kernel, ref, self.RESULT_SLOT, 'optimization-native-result')['payload']
+        plan = ExistingDeckNativeService(self.kernel).current_plan(result['plan_ref'])
+        handoff = ContextCompiler(self.kernel).compile_existing_deck_handoff(
+            task_id=result['handoff']['task_id'], plan_ref=result['plan_ref'],
+            require_output_paths_absent=False)
+        if (result['project_id'] != self.kernel.project_id
+                or result['source_ref'] != plan['source_ref']
+                or result['status'] != 'engineering-output-unassessed'
+                or result['handoff'] != handoff):
+            fail('STALE', 'native output no longer binds the selected source and build handoff')
+        preflight_output(result['output'], handoff, self.kernel.project_root)
+        pptx_ref, identity = self._current_final()
+        if (identity['pptx_sha256'] != result['output']['pptx_sha256']
+                or identity['pptx_path'] != result['output']['pptx_path']
+                or identity['selection_ref'] != handoff['selection_ref']
+                or identity['source_ref'] != result['source_ref']
+                or identity['tool_name'] != 'Codex Presentations'
+                or identity['slide_ids'] != [row['target_binding']['slide_id'] for row in plan['slides']]):
+            fail('STALE', 'the current final PPTX identity differs from the native build')
+        return result
+
+    def _current_final(self):
+        from ai_ppt_studio.application.artifact_guards import require_exact_ref
+        ref = self.kernel.load().artifact_heads.get(self.FINAL_SLOT, '')
+        return ref, require_exact_ref(self.kernel, ref, self.FINAL_SLOT, 'final-pptx')['payload']
+
+    def register_target_evidence(self, command_id, revision, *, result_ref, payload):
+        """Admit typed desktop evidence for the same native PPTX, never a preflight assertion."""
+        from ai_ppt_studio.domains.presentation.targets import TargetRenderEvidence
+        require_revision(self.kernel, revision)
+        result = self.current_result(result_ref)
+        final_ref, _ = self._current_final()
+        try:
+            evidence = TargetRenderEvidence.from_payload(payload)
+        except ValueError as error:
+            fail('TARGET', 'invalid desktop target evidence: ' + str(error))
+        if (self.TARGET_SLOT in self.kernel.load().artifact_heads
+                or evidence.target_id != 'macos-powerpoint'
+                or evidence.source_pptx_ref != final_ref
+                or evidence.pptx_sha256 != result['output']['pptx_sha256']
+                or evidence.overall_result != 'passed'
+                or [row['slide_id'] for row in evidence.slide_checks] !=
+                   [row['target_binding']['slide_id'] for row in result['handoff']['slides']]):
+            fail('TARGET', 'desktop evidence must cover every page of the current exact PPTX')
+        for ref, kind in ((evidence.font_inventory_ref, 'font-inventory'),
+                          (evidence.font_substitution_plan_ref, 'font-plan'),
+                          (evidence.reviewer_attestation_ref, 'desktop-review-attestation'),
+                          (evidence.evidence_ref, 'target-render-capture')):
+            resolve_kind(self.kernel, ref, kind)
+        for refs, kind in ((evidence.export_refs, 'target-export'),
+                           (evidence.page_image_refs, 'target-page-image'),
+                           (tuple(ref for check in evidence.slide_checks for ref in check['evidence_refs']), 'slide-check')):
+            for ref in refs:
+                resolve_kind(self.kernel, ref, kind)
+        if len(evidence.page_image_refs) != len(result['handoff']['slides']):
+            fail('TARGET', 'desktop target must retain an image of every source slide')
+        committed = self.kernel.commit(command_id=command_id, expected_revision=revision,
+            event_type='optimization.desktop-evidence-registered',
+            artifact_updates={self.TARGET_SLOT: ('target-render-evidence', evidence.as_payload())})
+        return committed.artifact_heads[self.TARGET_SLOT]
+
+    def _reject_obvious_visual_mismatch(self, comparison, selected, render):
+        entry = comparison['region_differences']
+        # preflight_output proved this JSON was derived from the exact target
+        # and re-rendered PPTX; read it again by its pinned digest at QA time.
+        difference = _json(_file(self.kernel.project_root, entry['path'], entry['sha256']))
+        binding = selected['target_binding']
+        if (difference['target_image_sha256'] != binding['target_image_sha256']
+                or difference['render_sha256'] != render['sha256']
+                or [row['region_id'] for row in difference['regions']] !=
+                   [row['region_id'] for row in selected['regions']]):
+            fail('QA', 'visual difference belongs to another target, render, or region set')
+        for row in difference['regions']:
+            score = row['mean_absolute_error']
+            if (type(score) not in {float, int} or not math.isfinite(score)
+                    or score > self.OBVIOUS_REGION_MAE_LIMIT):
+                fail('QA', 'obvious visual mismatch in ' + binding['slide_id'] +
+                     '/' + row['region_id'] + '; mean absolute error exceeds the gross-mismatch veto')
+
+    def register_qa(self, command_id, revision, *, result_ref, reviewer_task_id,
+                    pages, target_environment):
+        require_revision(self.kernel, revision)
+        result = self.current_result(result_ref)
+        from ai_ppt_studio.application.image_led_native import ExistingDeckNativeService
+        plan = ExistingDeckNativeService(self.kernel).current_plan(result['plan_ref'])
+        output = result['output']
+        if (not isinstance(reviewer_task_id, str) or not reviewer_task_id.strip()
+                or reviewer_task_id == output['task_id']
+                or not isinstance(pages, list) or len(pages) != len(plan['slides'])):
+            fail('QA', 'every source page needs separate review of the exact native build')
+        from ai_ppt_studio.application.project_service import ProjectCommandService
+        try:
+            reviewer = ProjectCommandService(self.kernel).require_active_agent_task(reviewer_task_id)
+        except Exception:
+            fail('QA', 'page QA requires a current governed reviewer task')
+        if (reviewer['action_type'] != 'review-visual-engineering'
+                or reviewer['role_id'] != 'visual-engineering-reviewer'
+                or reviewer['target_refs'] != [result_ref]):
+            fail('QA', 'governed reviewer must inspect this exact native result')
+        for index, (page, selected, render, comparison) in enumerate(zip(
+                pages, plan['slides'], output['renders'], output['comparisons'])):
+            exact(page, {'slide_id', 'target_image_sha256', 'render_sha256', 'comparison_sha256',
+                         'checks', 'region_checks'}, 'existing-deck page QA')
+            if (page['slide_id'] != selected['target_binding']['slide_id']
+                    or page['target_image_sha256'] != selected['target_binding']['target_image_sha256']
+                    or page['render_sha256'] != render['sha256']
+                    or page['comparison_sha256'] != comparison['region_differences']['sha256']):
+                fail('QA', 'page QA image, render, or comparison belongs to another page or build')
+            checks = page['checks']
+            if (not isinstance(checks, dict) or set(checks) != self.REQUIRED
+                    or any(result != 'passed' for result in checks.values())):
+                fail('QA', 'all content, visual, material, native, and common-rule checks must pass per page')
+            if (not isinstance(page['region_checks'], list)
+                    or [row.get('region_id') for row in page['region_checks']] !=
+                    [region['region_id'] for region in selected['regions']]
+                    or any(set(row) != {'region_id', 'result', 'detail'}
+                           or row['result'] != 'passed' or not str(row['detail']).strip()
+                           for row in page['region_checks'])):
+                fail('QA', 'each target design region needs an explicit passing comparison')
+            self._reject_obvious_visual_mismatch(comparison, selected, render)
+        if (not isinstance(target_environment, dict)
+                or target_environment.get('status') != 'passed'
+                or target_environment.get('target_id') != 'macos-powerpoint'
+                or target_environment.get('pptx_sha256') != output['pptx_sha256']
+                or not target_environment.get('evidence_ref')):
+            fail('TARGET', 'same-PPTX macOS PowerPoint edit, save, reopen evidence is required')
+        if self.kernel.load().artifact_heads.get(self.TARGET_SLOT) != target_environment['evidence_ref']:
+            fail('TARGET', 'PowerPoint evidence must be current for this optimization route')
+        # A self-described status cannot substitute for the existing typed,
+        # artifact-backed target-render evidence contract.
+        from ai_ppt_studio.domains.presentation.targets import TargetRenderEvidence
+        try:
+            evidence = TargetRenderEvidence.from_payload(resolve_kind(
+                self.kernel, target_environment['evidence_ref'], 'target-render-evidence')['payload'])
+        except (ValueError, KeyError, TypeError) as error:
+            fail('TARGET', 'target-render evidence contract is invalid: ' + str(error))
+        if (evidence.target_id != 'macos-powerpoint' or evidence.pptx_sha256 != output['pptx_sha256']
+                or evidence.overall_result != 'passed'
+                or [row['slide_id'] for row in evidence.slide_checks] !=
+                   [row['target_binding']['slide_id'] for row in plan['slides']]):
+            fail('TARGET', 'target-render evidence is incomplete or for another PPTX')
+        if evidence.source_pptx_ref != self._current_final()[0]:
+            fail('TARGET', 'PowerPoint evidence refers to another final PPTX artifact')
+        if self.QA_SLOT in self.kernel.load().artifact_heads:
+            fail('QA', 'current full-deck QA cannot be overwritten')
+        qa = {'project_id': self.kernel.project_id, 'source_ref': result['source_ref'],
+            'result_ref': result_ref, 'plan_ref': result['plan_ref'],
+            'selection_ref': result['handoff']['selection_ref'],
+            'region_inventory_ref': result['handoff']['region_inventory_ref'],
+            'pptx_sha256': output['pptx_sha256'], 'reviewer_task_id': reviewer_task_id,
+            'pages': deepcopy(pages), 'target_environment': deepcopy(target_environment),
+            'status': 'delivery-candidate'}
+        committed = self.kernel.commit(command_id=command_id, expected_revision=revision,
+            event_type='optimization.full-deck-qa-registered',
+            artifact_updates={self.QA_SLOT: ('optimization-full-deck-qa', qa)})
+        return committed.artifact_heads[self.QA_SLOT]
+
+    def delivery_candidate(self):
+        from ai_ppt_studio.application.artifact_guards import require_exact_ref
+        state = self.kernel.load()
+        ref = state.artifact_heads.get(self.QA_SLOT, '')
+        qa = require_exact_ref(self.kernel, ref, self.QA_SLOT, 'optimization-full-deck-qa')['payload']
+        result = self.current_result(qa['result_ref'])
+        if (qa['source_ref'] != result['source_ref'] or qa['plan_ref'] != result['plan_ref']
+                or qa['pptx_sha256'] != result['output']['pptx_sha256']
+                or qa['selection_ref'] != result['handoff']['selection_ref']
+                or qa['region_inventory_ref'] != result['handoff']['region_inventory_ref']
+                or qa['status'] != 'delivery-candidate'):
+            fail('STALE', 'delivery QA differs from the exact current native file and selection')
+        task_ref = state.artifact_heads.get('agent/task/' + qa['reviewer_task_id'], '')
+        task = resolve_kind(self.kernel, task_ref, 'agent-task')['payload']
+        if (task['status'] != 'completed' or task['action_type'] != 'review-visual-engineering'
+                or task['target_refs'] != [qa['result_ref']] or task['result_refs'] != [ref]):
+            fail('QA', 'full-deck review task has not completed on this exact QA artifact')
+        if state.artifact_heads.get(self.TARGET_SLOT) != qa['target_environment']['evidence_ref']:
+            fail('TARGET', 'current PowerPoint evidence differs from candidate')
+        return qa

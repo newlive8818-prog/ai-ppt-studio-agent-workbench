@@ -18,12 +18,34 @@ from ai_ppt_studio.application.bridge.visual import HANDLERS as VISUAL_HANDLERS
 from ai_ppt_studio.errors import ContractValidationError
 
 
+# Keep the optimization tool identities public without importing image/OOXML
+# dependencies for ordinary project and content operations.
+OPTIMIZATION_OPERATIONS = (
+    "optimization-begin", "optimization-external-scope",
+    "optimization-register-request", "optimization-register-historical-design",
+    "optimization-execute-request", "optimization-recover-request",
+    "optimization-withdraw-unsent-request", "optimization-supersede-unselected-response",
+    "optimization-register-local-media-composition", "optimization-review-response",
+    "optimization-select-internal", "optimization-register-plan",
+    "optimization-compile-handoff", "optimization-register-result",
+    "optimization-register-target-evidence", "optimization-register-qa",
+    "optimization-status",
+    "optimization-preview-image",
+)
+
+
+def _optimization_handler(ctx, request):
+    from ai_ppt_studio.application.optimization_bridge import INTERNAL_HANDLERS
+    return INTERNAL_HANDLERS[ctx.operation](ctx, request)
+
+
 HANDLERS = {
     **PROJECT_HANDLERS,
     **CONTENT_HANDLERS,
     **REVIEW_HANDLERS,
     **VISUAL_HANDLERS,
     **DELIVERY_EXPERIENCE_HANDLERS,
+    **{operation: _optimization_handler for operation in OPTIMIZATION_OPERATIONS},
 }
 INTERNAL_HANDLERS = {**HANDLERS, **PRIVATE_REVIEW_HANDLERS}
 

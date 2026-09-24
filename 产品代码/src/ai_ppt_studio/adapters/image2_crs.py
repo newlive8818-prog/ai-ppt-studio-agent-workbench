@@ -453,7 +453,7 @@ def _read_sse(response, *, url, model, progress):
                 kind = value.get('type', event_name)
                 if event_name is not None and kind != event_name:
                     raise ProviderDecodeFailure('sse-event-name-mismatch')
-                if kind not in (complete, partial, 'ping', 'heartbeat'):
+                if kind not in (complete, partial, 'ping', 'heartbeat', 'keepalive'):
                     raise ProviderDecodeFailure('sse-event-type-unsupported')
                 # Validate each explicit provider label, including partials and
                 # heartbeats. Only the final's actual labels enter the receipt.
@@ -469,7 +469,7 @@ def _read_sse(response, *, url, model, progress):
                         raise ProviderDecodeFailure('sse-partial-after-final')
                 elif 'b64_json' in value:
                     raise ProviderDecodeFailure('sse-heartbeat-image')
-            elif event_name is not None and event_name not in ('ping', 'heartbeat'):
+            elif event_name is not None and event_name not in ('ping', 'heartbeat', 'keepalive'):
                 raise ProviderDecodeFailure('sse-empty-event-invalid')
             data, event_name, event_bytes = [], None, 0
         elif decoded.startswith(':'):

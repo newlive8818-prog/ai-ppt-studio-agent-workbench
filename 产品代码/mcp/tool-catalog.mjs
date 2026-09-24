@@ -6,6 +6,7 @@ export const PUBLIC_TOOL_GROUP_COUNTS = Object.freeze({
   review: 4,
   visual: 3,
   "delivery-experience": 6,
+  optimization: 18,
 });
 
 const DESCRIPTOR_FIELDS = Object.freeze([
@@ -61,6 +62,24 @@ const rows = [
   ["recommend_experience", "delivery-experience", "recommendExperience", "recommend-experience"],
   ["record_experience_application", "delivery-experience", "recordExperienceApplication", "record-experience-application"],
   ["summarize_project_experience", "delivery-experience", "summarizeProjectExperience", "summarize-project-experience"],
+  ["begin_existing_deck_optimization", "optimization", "beginExistingDeck", "optimization-begin"],
+  ["set_existing_deck_external_scope", "optimization", "setExistingDeckExternalScope", "optimization-external-scope"],
+  ["register_existing_deck_image_request", "optimization", "registerExistingDeckRequest", "optimization-register-request"],
+  ["register_existing_deck_historical_design", "optimization", "registerExistingDeckHistoricalDesign", "optimization-register-historical-design"],
+  ["execute_existing_deck_image_request", "optimization", "executeExistingDeckRequest", "optimization-execute-request"],
+  ["recover_existing_deck_image_request", "optimization", "recoverExistingDeckRequest", "optimization-recover-request"],
+  ["withdraw_existing_deck_unsent_request", "optimization", "withdrawExistingDeckRequest", "optimization-withdraw-unsent-request"],
+  ["supersede_existing_deck_response", "optimization", "supersedeExistingDeckResponse", "optimization-supersede-unselected-response"],
+  ["register_existing_deck_local_media_composition", "optimization", "composeExistingDeckMedia", "optimization-register-local-media-composition"],
+  ["review_existing_deck_image_response", "optimization", "reviewExistingDeckResponse", "optimization-review-response"],
+  ["select_existing_deck_images_internal", "optimization", "selectExistingDeckImages", "optimization-select-internal"],
+  ["register_existing_deck_native_plan", "optimization", "registerExistingDeckPlan", "optimization-register-plan"],
+  ["compile_existing_deck_native_handoff", "optimization", "compileExistingDeckHandoff", "optimization-compile-handoff"],
+  ["register_existing_deck_native_result", "optimization", "registerExistingDeckResult", "optimization-register-result"],
+  ["register_existing_deck_target_evidence", "optimization", "registerExistingDeckTarget", "optimization-register-target-evidence"],
+  ["register_existing_deck_full_deck_qa", "optimization", "registerExistingDeckQa", "optimization-register-qa"],
+  ["get_existing_deck_optimization_status", "optimization", "getExistingDeckStatus", "optimization-status"],
+  ["preview_existing_deck_design_image", "optimization", "previewExistingDeckImage", "optimization-preview-image"],
 ];
 
 export const PUBLIC_TOOL_CATALOG = Object.freeze(

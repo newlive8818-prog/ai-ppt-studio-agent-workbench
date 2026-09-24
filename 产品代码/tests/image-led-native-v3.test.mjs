@@ -100,11 +100,24 @@ test('v3 actual renderer exports native paths, true hole and natural wrapped Uni
     assert.equal(checked.stdout.trim(),'verified');
     const layout=JSON.parse(await fs.readFile(path.join(h.output_paths.directory,'slide-1.layout.json'),'utf8'));
     const body=layout.elements.find(e=>e.name==='o-body-0');
-    assert.ok(body.textLayout.lineCount>1);
     assert.equal(body.text,h.slides[0].regions.find(r=>r.region_id==='body-0').content.items[0].text);
     const require=createRequire(path.join(nodeModulesRoot,'__v3_test__.cjs')),sharp=require('sharp');
     const {data,info}=await sharp(result.renders[0].path).removeAlpha().raw().toBuffer({resolveWithObject:true});
     const pixel=(x,y)=>[...data.subarray((y*info.width+x)*info.channels,(y*info.width+x)*info.channels+3)];
+    const inkRows=[];
+    for(let y=Math.floor(body.position.top);y<Math.ceil(body.position.top+body.position.height);y++) {
+      let ink=0;
+      for(let x=Math.floor(body.position.left);x<Math.ceil(body.position.left+body.position.width);x++) {
+        if(pixel(x,y).some(channel=>channel<245)) ink++;
+      }
+      if(ink>=4) inkRows.push(y);
+    }
+    const lineBands=[];
+    for(const y of inkRows) {
+      if(!lineBands.length||y>lineBands.at(-1).end+1) lineBands.push({start:y,end:y});
+      else lineBands.at(-1).end=y;
+    }
+    assert.ok(lineBands.length>1,`expected naturally wrapped raster text, got ${lineBands.length} ink band(s)`);
     assert.deepEqual(pixel(615,360),[255,255,255]);
     assert.notDeepEqual(pixel(550,360),[255,255,255]);
   } finally {await fs.rm(root,{recursive:true,force:true});}

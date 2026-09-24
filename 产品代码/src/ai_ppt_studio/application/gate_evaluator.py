@@ -1199,6 +1199,8 @@ class GateEvaluator:
 
     def delivery_ready(self) -> GateMutation:
         state = self.kernel.load()
+        if state.artifact_heads.get('project/optimization-workflow'):
+            raise GateBlockedError('G4', ('existing-deck-requires-its-own-full-page-delivery-check',))
         policy_ref, policy = ReleaseTargetPolicyService(self.kernel).current()
         blockers: list[str] = []
         if state.gate_status.get("G3") != "passed":

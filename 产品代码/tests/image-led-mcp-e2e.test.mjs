@@ -11,14 +11,14 @@ import { resolvePythonExecutable } from "../mcp/runtime-bridge/python-runtime.mj
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("the 43-tool catalog accurately marks the externally executing Agent action", async () => {
+test("the 61-tool catalog accurately marks the externally executing Agent action", async () => {
   const server = createAiPptMcpServer();
   const client = new Client({ name: "image-led-world-boundary", version: "0.1.0" });
   const [left, right] = InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(left), server.connect(right)]);
   try {
     const tools = (await client.listTools()).tools;
-    assert.equal(tools.length, 43);
+    assert.equal(tools.length, 61);
     const action = tools.find((tool) => tool.name === "request_ai_ppt_agent_action");
     assert.equal(action.annotations.openWorldHint, true);
     assert.equal(tools.find((tool) => tool.name === "get_ai_ppt_project_status").annotations.openWorldHint, false);
@@ -82,6 +82,6 @@ finally:
   });
   assert.equal(result.error, undefined);
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), { tools: 43, exact_image_bytes: true, adapter_calls: 1,
+  assert.deepEqual(JSON.parse(result.stdout), { tools: 61, exact_image_bytes: true, adapter_calls: 1,
     mime: "image/png", candidate_created: false, selection_created: false, G3: "locked" });
 });

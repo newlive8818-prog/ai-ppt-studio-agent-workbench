@@ -91,6 +91,16 @@ class Image2StreamTests(unittest.TestCase):
         self.assertEqual(self.opener.open.call_args.kwargs['timeout'], 300)
         self.assertEqual(self.opener.open.call_args.args[0].get_header('Accept'), 'text/event-stream')
 
+    def test_crs_keepalive_before_completed_image_preserves_final_and_stream_digest(self):
+        raw = event('keepalive') + event('image_generation.completed')
+        self.stream(raw)
+        code, out, err = self.invoke()
+        self.assertEqual((code, err), (0, ''))
+        reply = json.loads(out)
+        self.assertEqual(base64.b64decode(reply['image_base64']), PNG)
+        self.assertEqual(reply['provider_observation']['response_sha256'], hashlib.sha256(raw).hexdigest())
+        self.opener.open.assert_called_once()
+
     def test_observed_endpoint_event_families_are_bound_to_the_requested_endpoint(self):
         for count, family in ((0, 'image_generation'), (2, 'image_edit')):
             with self.subTest(count=count):

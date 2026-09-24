@@ -238,8 +238,10 @@ test(
       ].join("\n"),
       "utf8",
     );
+    const hostEnv = { ...process.env, PATH: "" };
+    delete hostEnv.AI_PPT_PYTHON;
     const workingPython = resolvePythonExecutable({
-      env: { ...process.env, PATH: "" },
+      env: hostEnv,
       nodeExecutable: "/not-a-bundled-node/bin/node",
     });
 
@@ -247,6 +249,7 @@ test(
       invokePythonBridge(
         { operation: "list-projects" },
         {
+          env: hostEnv,
           pythonCandidates: [nonExecutablePython, workingPython],
           bridgeArgs: [bridge],
         },

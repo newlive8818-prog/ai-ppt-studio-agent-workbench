@@ -133,7 +133,7 @@ ProjectKernel.initialize(runtime/'projects/p1',project_id='p1')
   for (const key of manifest.mcpServers.ai_ppt_studio.env_vars) if (key in configured) env[key]=configured[key];
   const before=await tree(runtime);
   const initial=callMcp(plugin,env,{projectRoot:project});
-  assert.equal(initial.count,43);
+  assert.equal(initial.count,61);
   assert.equal(initial.schema.properties.includeImage2Preflight?.type,'boolean');
   assert.ok(!initial.schema.required?.includes('includeImage2Preflight'));
   assert.equal(initial.result.isError,undefined);
