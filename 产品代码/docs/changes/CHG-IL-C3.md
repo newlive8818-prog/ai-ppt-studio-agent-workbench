@@ -3,7 +3,7 @@
 ## 1. 身份与状态
 
 - Change 标识：`CHG-IL-C3`
-- 状态：`收尾修正候选，待总控复核`；2026-09-24 四页代表性方法验证保留为历史事实，当前未合并、未发布、未安装最终 C3；43 页完整原生还原、整套 PowerPoint 证据与最终交付仍为 `NotEstablished`
+- 状态：`最终 C3 本地发布候选已构建、验证并安装登记，待当前宿主重启验证`；当前未合并、未 push、未建立宿主加载回执；43 页完整原生还原、整套 PowerPoint 证据与最终交付仍为 `NotEstablished`
 - 基线：`3fd07c1ac9931d062efaddec7ae822cdf94e1746`（tree `6f4dd3ff782bb23f408736b03994dc2bdb362a38`，687 文件）
 - 基线来源：官方仓库分支 `codex/c2-baseline-20260917`；防灾副本 `/Users/defei/Documents/Codex-Recovery/ai-ppt-studio/c2-c3-line-20260917/PPT-codex-app`；bundle `/Users/defei/Documents/Codex-Recovery/ai-ppt-studio/c2-20260915/c2-controlled-integration-3fd07c1.bundle`
 - 开发线：分支 `codex/c3-whole-deck-20260917`，Worktree `/Users/defei/.config/superpowers/worktrees/PPT-codex-app/c3-whole-deck-20260917`
@@ -86,3 +86,14 @@
 6. 当前已启用插件仍是 `0.4.0+codex.c3.historical-import-20260921`，目录合同为 60 工具；当前 C3 源码为 61 工具。最终 C3 包的构建、安装、重启和 61 工具宿主回读必须等总控复核后完成，当前不得写成已发布、已安装或已加载。
 7. 客户验证画面仍在本地 C3 Git 历史中。当前不 push；进入远程仓库前必须确认保留授权，若不允许则需在本分支上先完成历史级证据外置。
 8. 当前结论只能是“C3 收尾修正候选已准备，待总控复核”。官方 C2 分支未移动，未合并、未 push，G4 仍为 `open`，43 页完整交付仍为 `NotEstablished`。
+
+## 11. 2026-09-28 总控复核通过后的本地正式发布候选
+
+1. 总控独立复核 `30e879c8d2783dbe098d03d1943f522b9f276363` / tree `2bcf219f240077930561eb1d85172e46333d1ab6`，确认 Artifact Tool 活动继承链修正、`16/16` 定向回归和四页 PPTX hash，并授权进入本机正式发布候选构建与受控安装。本地 `codex/c3-integration-20260924` 已快进到该提交，旧 `df7e0d88` 仍作为祖先保留；官方 C2 分支未移动。
+2. 从该精确源码身份构建独立本地 release，只在发布副本将 `plugin.json.version` 标记为 `0.4.0+codex.c3.release-20260928`，然后重算封闭 manifest。包内源码、Skill、MCP 和启动文件与 `30e879c8` 对应源文件字节相同，没有反向修改产品源码。
+3. 最终包路径为 `/Users/defei/Library/Application Support/Codex API Client/codex-home/visualizations/2026/09/17/01a0b036-c2db-7781-9598-9a5fe1f47673/奥哲PPT优化/内部验证/c3-final-release-20260928/ai-ppt-studio`；manifest 覆盖 `3776` 个文件，SHA-256 为 `3a2d0875f34c6bdc92a0a8848ae76c92c37de63b2c87d0dcec83b806c6846967`。独立 verifier 和 stdio probe 通过，实际暴露 `61` 工具，工具目录 hash 为 `158951ecad9b1c5e761264c3e6b92f286c61d0aa966b34ebc6fe2fe1afb5420a`。
+4. `mcp/review-bridge.mjs` 的源码、release 和安装 cache hash 均为 `cc1617a716cf589d08fc7436e984dc3fe97378fc8af3e17dd859ce273ec8c742`。“默认连接无时限”、`content-full-deck` 空闲 7 天和 `visual-professional` 空闲 7 天三项服务测试 `3/3` 通过；默认 `ttlMs/leaseMs` 仍为 `null`。
+5. 受控安装入口在任何插件配置写入前备份权威 `config.toml`，备份目录为 `/Users/defei/Library/Application Support/AI PPT Studio Development/c3/install-backups/20260928-170501`。随后只通过 Codex 官方插件 CLI 更新本地 marketplace 和安装登记，没有手工覆盖 cache。
+6. 安装后只有一个启用的 AI PPT Studio，版本为 `0.4.0+codex.c3.release-20260928`。安装 cache 的 manifest、Review Bridge、tool catalog、Artifact Tool 结果校验器、selection、Skill、CRS wrapper 和 MCP 启动文件均与受审 release/源码字节相同；cache 目录合同为 `61` 工具。
+7. 安装登记和 cache 身份不代表当前已运行桌面进程已加载新包。当前会话仍是安装前启动的进程；必须 Command+Q 完整退出后，从 `启动-C3当前宿主.command` 重开，再由新宿主回执验证最终版本、manifest/hash、61 tools 及 Review Bridge 两种审核默认无时间限制。
+8. 本轮没有读写客户 Runtime/PPTX/Gate，没有生成 43 页结果，没有合并或 push。G4 仍为 `open`，43 页完整交付仍为 `NotEstablished`；约 36 MB 客户验证图的远程授权仍未决定，所以继续禁止 push。
