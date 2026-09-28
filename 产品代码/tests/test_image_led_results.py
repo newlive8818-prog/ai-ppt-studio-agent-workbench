@@ -96,6 +96,77 @@ class ImageLedByteResultTests(unittest.TestCase):
         self.assertEqual(generated_json.call_count, 2)
         self.assertEqual(self.output['status'], 'engineering-output-unassessed')
 
+    def test_unused_default_layouts_do_not_count_as_inherited_visual_objects(self):
+        from ai_ppt_studio.application.image_led_ooxml import NS, Package, R
+
+        package = Package(Path(self.output['pptx_path']).read_bytes())
+        slide, _ = package.slide(1)
+        active_layouts = {
+            target
+            for kind, target in package.rels.get(slide, {}).values()
+            if kind == R + '/slideLayout'
+        }
+        unused_layouts = {
+            target
+            for records in package.rels.values()
+            for kind, target in records.values()
+            if kind == R + '/slideLayout' and target not in active_layouts
+        }
+        self.assertTrue(active_layouts)
+        self.assertTrue(any(
+            any(node.tag.rsplit('}', 1)[-1] not in {'nvGrpSpPr', 'grpSpPr'} for node in
+                package.read_xml(part).find('p:cSld/p:spTree', NS))
+            for part in unused_layouts
+        ), 'fixture must contain an unused default layout with placeholder shapes')
+
+        self.assertEqual(preflight_output(self.output, self.handoff, self.root), self.output)
+
+    def test_active_layout_or_master_with_unselected_visual_objects_is_rejected(self):
+        from xml.etree import ElementTree as ET
+        from ai_ppt_studio.application.image_led_ooxml import NS, Package, R
+
+        path = Path(self.output['pptx_path'])
+        original = path.read_bytes()
+        with ZipFile(BytesIO(original)) as package_file:
+            members = {name: package_file.read(name) for name in package_file.namelist()}
+        package = Package(original)
+        slide, _ = package.slide(1)
+        layouts = [target for kind, target in package.rels.get(slide, {}).values()
+                   if kind == R + '/slideLayout']
+        self.assertEqual(len(layouts), 1)
+        active_layout = layouts[0]
+        masters = [target for kind, target in package.rels.get(active_layout, {}).values()
+                   if kind == R + '/slideMaster']
+        self.assertEqual(len(masters), 1)
+        unused_shapes = []
+        for records in package.rels.values():
+            for kind, target in records.values():
+                if kind == R + '/slideLayout' and target != active_layout:
+                    unused_shapes.extend(package.read_xml(target).findall('p:cSld/p:spTree/p:sp', NS))
+        self.assertTrue(unused_shapes, 'fixture must contain a default placeholder shape')
+        for active_part in (active_layout, masters[0]):
+            with self.subTest(active_part=active_part):
+                changed_members = dict(members)
+                inherited = ET.fromstring(changed_members[active_part])
+                inherited.find('p:cSld/p:spTree', NS).append(deepcopy(unused_shapes[0]))
+                changed_members[active_part] = ET.tostring(inherited)
+                buffer = BytesIO()
+                with ZipFile(buffer, 'w') as rewritten:
+                    for name, raw in changed_members.items():
+                        rewritten.writestr(name, raw)
+                changed = buffer.getvalue()
+                try:
+                    path.write_bytes(changed)
+                    output = deepcopy(self.output)
+                    output['pptx_sha256'] = hashlib.sha256(changed).hexdigest()
+                    with self.assertRaisesRegex(
+                        ContractValidationError,
+                        'native slide inherited unselected visual objects',
+                    ):
+                        preflight_output(output, self.handoff, self.root)
+                finally:
+                    path.write_bytes(original)
+
     def test_each_generated_proto_file_rejects_duplicate_properties(self):
         for filename in ('authoring.proto.json', 'reimport.proto.json'):
             with self.subTest(filename=filename):

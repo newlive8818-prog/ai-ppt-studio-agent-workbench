@@ -3,7 +3,7 @@
 ## 1. 身份与状态
 
 - Change 标识：`CHG-IL-C3`
-- 状态：`已结项（用户确认的四页代表性方法验证边界）`；43 页完整原生还原、整套 PowerPoint 证据与最终交付仍为 `NotEstablished`
+- 状态：`收尾修正候选，待总控复核`；2026-09-24 四页代表性方法验证保留为历史事实，当前未合并、未发布、未安装最终 C3；43 页完整原生还原、整套 PowerPoint 证据与最终交付仍为 `NotEstablished`
 - 基线：`3fd07c1ac9931d062efaddec7ae822cdf94e1746`（tree `6f4dd3ff782bb23f408736b03994dc2bdb362a38`，687 文件）
 - 基线来源：官方仓库分支 `codex/c2-baseline-20260917`；防灾副本 `/Users/defei/Documents/Codex-Recovery/ai-ppt-studio/c2-c3-line-20260917/PPT-codex-app`；bundle `/Users/defei/Documents/Codex-Recovery/ai-ppt-studio/c2-20260915/c2-controlled-integration-3fd07c1.bundle`
 - 开发线：分支 `codex/c3-whole-deck-20260917`，Worktree `/Users/defei/.config/superpowers/worktrees/PPT-codex-app/c3-whole-deck-20260917`
@@ -68,10 +68,21 @@
 4. 仍未建立且不得冒称完成：奥哲 43/43 selection、43/43 原生还原、43/43 QA、同一最终 PPTX 的 PowerPoint/LibreOffice 人工编辑保存重开、正式 delivery、G4 和 43 页完整文件用户验收。
 5. 原 §4 的 IL03-AC01–AC10 保留为完整产品/整套交付验收合同；用户本次仅收缩 C3 Change 的实物结项范围，不修改正式现有稿优化能力的全页覆盖和完整交付门。
 
-## 9. 2026-09-24 源码结项验证
+## 9. 2026-09-24 历史源码结项验证
 
-- bundled Python 全量回归：`1327/1327` 通过；无失败、无错误。
+- 历史 bundled Python 全量回归：`1327/1327` 通过；无失败、无错误。该结果绑定 2026-09-24 当时的 bundled 依赖，不再作为当前集成 Gate。
 - 完整 `npm run quality`：TypeScript typecheck、Widget build 通过；Node `265/265`，Widget `774/774`，均无失败或跳过。
 - 61 个公开 MCP 工具的目录、handler 和 Python operation 一致性通过；现有稿专用完整交付门继续拒绝部分页结果冒充 delivery。
 - 四基线 80 个相对链接中保留 14 个既有历史缺口，6 个原型引用全部存在；`git diff --check` 通过。
 - 本 Change 可在用户确认的四页代表性方法验证边界内提交并建立本地集成分支；不 push、不关闭 G4，不宣称奥哲 43 页完整交付完成。
+
+## 10. 2026-09-28 Artifact Tool 2.8.77 收尾修正
+
+1. 总控在当前 bundled Artifact Tool `2.8.77` 上复现了 `df7e0d88` 的全量失败。独立归档副本再现确认：测试发现数仍为 `1327`；执行时 `test_image_led_g2.ImageLedG2Tests.setUpClass` 在其唯一测试开始前失败，因此 unittest 报告 `Ran 1326 tests`，另记一个类级错误。完整结果为 `18 errors / 3 failures`，均由 `native slide inherited unselected visual objects` 引起。`1327 → 1326` 不是测试被删除。
+2. 根因是结果校验器遍历 PPTX 包内所有 layout/master，而 `2.8.77` 会同时打包未使用的默认 layout，其中包含标题、页脚等占位形状。修正后从每张实际 slide 出发，只沿其唯一 `slideLayout` 及该 layout 的唯一 `slideMaster` 检查活动继承闭包；缺失、多重关系继续失败关闭，活动 layout 或 master 出现未选定可见对象仍会拒绝。
+3. 测试先行回归已记录旧实现 RED；修正后证明“未使用默认 layout 含占位形状”可通过，并对活动 layout 和 master 分别注入形状证明仍会拒绝。相关 Python 回归 `249/249`；当前完整发现和执行均为 `1329/1329`，`OK`。
+4. 当前同一工作树的 `npm run quality` 通过：TypeScript typecheck 和 Widget build 成功，Node `265/265`，Widget `16 files / 774/774`，无失败或跳过。
+5. 四页代表样本原始 PPTX 已找回，字节 SHA-256 精确等于历史摘要中的 `59782e2a4892314400f509ed4d479cc9a5e62d6e9be53777883ef36ffc695150`，并持久保存在 `/Users/defei/Documents/Codex-Recovery/ai-ppt-studio/c3-20260924/奥哲方案-4页原生可编辑还原验证-20260923-v3.pptx`。PPTX 不进入产品 Git。
+6. 当前已启用插件仍是 `0.4.0+codex.c3.historical-import-20260921`，目录合同为 60 工具；当前 C3 源码为 61 工具。最终 C3 包的构建、安装、重启和 61 工具宿主回读必须等总控复核后完成，当前不得写成已发布、已安装或已加载。
+7. 客户验证画面仍在本地 C3 Git 历史中。当前不 push；进入远程仓库前必须确认保留授权，若不允许则需在本分支上先完成历史级证据外置。
+8. 当前结论只能是“C3 收尾修正候选已准备，待总控复核”。官方 C2 分支未移动，未合并、未 push，G4 仍为 `open`，43 页完整交付仍为 `NotEstablished`。

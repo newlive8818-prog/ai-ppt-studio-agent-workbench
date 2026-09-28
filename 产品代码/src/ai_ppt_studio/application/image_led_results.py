@@ -473,20 +473,34 @@ def _shape_check(props, appearance, bbox):
                'native corner radius changed')
 
 
+def _active_inheritance_parts(package, slide_count):
+    """Return the exact layout/master closure reached by actual slides."""
+    inherited = set()
+    for page in range(1, slide_count + 1):
+        slide, _ = package.slide(page)
+        layouts = [target for kind, target in package.rels.get(slide, {}).values()
+                   if kind == R + '/slideLayout']
+        _check(len(layouts) == 1, 'native slide layout inheritance is missing or ambiguous')
+        masters = [target for kind, target in package.rels.get(layouts[0], {}).values()
+                   if kind == R + '/slideMaster']
+        _check(len(masters) == 1, 'native slide master inheritance is missing or ambiguous')
+        inherited.update((layouts[0], masters[0]))
+    return inherited
+
+
 def inspect_native_pptx(raw, handoff):
     """Re-read standard OOXML bytes. Names bind exact objects, never similarity."""
     try:
         package = Package(raw)
-        inherited = {target for records in package.rels.values() for kind, target in records.values()
-                     if kind in {R + '/slideLayout', R + '/slideMaster'}}
-        for part in inherited:
-            tree = package.read_xml(part).find('p:cSld/p:spTree', NS)
-            _check(tree is not None and all(e.tag.rsplit('}', 1)[-1] in {'nvGrpSpPr', 'grpSpPr'} for e in tree),
-                   'native slide inherited unselected visual objects')
         main = [target for kind, target in package.rels.get('', {}).values() if kind == R + '/officeDocument']
         _check(len(main) == 1, 'ambiguous presentation package')
         presentation = package.read_xml(main[0])
-        _check(len(presentation.findall('p:sldIdLst/p:sldId', NS)) == len(handoff['slides']), 'native slide count changed')
+        slide_count = len(handoff['slides'])
+        _check(len(presentation.findall('p:sldIdLst/p:sldId', NS)) == slide_count, 'native slide count changed')
+        for part in _active_inheritance_parts(package, slide_count):
+            tree = package.read_xml(part).find('p:cSld/p:spTree', NS)
+            _check(tree is not None and all(e.tag.rsplit('}', 1)[-1] in {'nvGrpSpPr', 'grpSpPr'} for e in tree),
+                   'native slide inherited unselected visual objects')
         _numbers(presentation.find('p:sldSz', NS), ['cx', 'cy'],
                  [handoff['slides'][0]['canvas'][k] for k in ('width', 'height')], 9525)
         evidence = []
