@@ -42,7 +42,7 @@
 2. 当前真实材料可由 Runtime 重放、逐页证据与完整内容蓝图经正式审核并通过 G0；
 3. 用户对试点和后续整套交付范围的授权。
 
-第 1 项成立。奥哲 43 页原件、六页试点和整套扩展是历史执行范围；2026-09-23 至 2026-09-24 用户明确改为以 P01/P19/P28/P41 四页代表样本验证方法，并以此作为 C3 结项边界。该决定不把 43 页完整交付、G4 或正式产品的全稿能力降为四页。
+第 1 项成立。代表性客户 43 页原件、六页试点和整套扩展是历史执行范围；2026-09-23 至 2026-09-24 用户明确改为以 P01/P19/P28/P41 四页代表样本验证方法，并以此作为 C3 结项边界。该决定不把 43 页完整交付、G4 或正式产品的全稿能力降为四页。
 
 ## 6. 明确不做
 
@@ -65,7 +65,7 @@
    - 现有稿路线必须覆盖全部当前来源页后，才能建立 selection、native plan、native result、逐页 QA 和 delivery candidate；四页样本不能绕过整套交付门；
    - 内部选图明确记录 `human_image_approval=NotEstablished`，不冒充用户逐页定版。
 3. 代表样本 PPTX SHA-256 为 `59782e2a4892314400f509ed4d479cc9a5e62d6e9be53777883ef36ffc695150`，共 4 页：P01、P19、P28、P41。验证统计和对照图保存在 `docs/validation/c3-whole-deck/representative-native-sample-20260923/`。
-4. 仍未建立且不得冒称完成：奥哲 43/43 selection、43/43 原生还原、43/43 QA、同一最终 PPTX 的 PowerPoint/LibreOffice 人工编辑保存重开、正式 delivery、G4 和 43 页完整文件用户验收。
+4. 仍未建立且不得冒称完成：代表性客户 43/43 selection、43/43 原生还原、43/43 QA、同一最终 PPTX 的 PowerPoint/LibreOffice 人工编辑保存重开、正式 delivery、G4 和 43 页完整文件用户验收。
 5. 原 §4 的 IL03-AC01–AC10 保留为完整产品/整套交付验收合同；用户本次仅收缩 C3 Change 的实物结项范围，不修改正式现有稿优化能力的全页覆盖和完整交付门。
 
 ## 9. 2026-09-24 历史源码结项验证
@@ -74,7 +74,7 @@
 - 完整 `npm run quality`：TypeScript typecheck、Widget build 通过；Node `265/265`，Widget `774/774`，均无失败或跳过。
 - 61 个公开 MCP 工具的目录、handler 和 Python operation 一致性通过；现有稿专用完整交付门继续拒绝部分页结果冒充 delivery。
 - 四基线 80 个相对链接中保留 14 个既有历史缺口，6 个原型引用全部存在；`git diff --check` 通过。
-- 本 Change 可在用户确认的四页代表性方法验证边界内提交并建立本地集成分支；不 push、不关闭 G4，不宣称奥哲 43 页完整交付完成。
+- 本 Change 可在用户确认的四页代表性方法验证边界内提交并建立本地集成分支；不 push、不关闭 G4，不宣称代表性客户 43 页完整交付完成。
 
 ## 10. 2026-09-28 Artifact Tool 2.8.77 收尾修正
 
@@ -82,7 +82,7 @@
 2. 根因是结果校验器遍历 PPTX 包内所有 layout/master，而 `2.8.77` 会同时打包未使用的默认 layout，其中包含标题、页脚等占位形状。修正后从每张实际 slide 出发，只沿其唯一 `slideLayout` 及该 layout 的唯一 `slideMaster` 检查活动继承闭包；缺失、多重关系继续失败关闭，活动 layout 或 master 出现未选定可见对象仍会拒绝。
 3. 测试先行回归已记录旧实现 RED；修正后证明“未使用默认 layout 含占位形状”可通过，并对活动 layout 和 master 分别注入形状证明仍会拒绝。相关 Python 回归 `249/249`；当前完整发现和执行均为 `1329/1329`，`OK`。
 4. 当前同一工作树的 `npm run quality` 通过：TypeScript typecheck 和 Widget build 成功，Node `265/265`，Widget `16 files / 774/774`，无失败或跳过。
-5. 四页代表样本原始 PPTX 已找回，字节 SHA-256 精确等于历史摘要中的 `59782e2a4892314400f509ed4d479cc9a5e62d6e9be53777883ef36ffc695150`，并持久保存在 `/Users/defei/Documents/Codex-Recovery/ai-ppt-studio/c3-20260924/奥哲方案-4页原生可编辑还原验证-20260923-v3.pptx`。PPTX 不进入产品 Git。
+5. 四页代表样本原始 PPTX 已找回，字节 SHA-256 精确等于历史摘要中的 `59782e2a4892314400f509ed4d479cc9a5e62d6e9be53777883ef36ffc695150`，并持久保存在 `/Users/defei/Documents/Codex-Recovery/ai-ppt-studio/c3-20260924/代表性客户方案-4页原生可编辑还原验证-20260923-v3.pptx`。PPTX 不进入产品 Git。
 6. 当前已启用插件仍是 `0.4.0+codex.c3.historical-import-20260921`，目录合同为 60 工具；当前 C3 源码为 61 工具。最终 C3 包的构建、安装、重启和 61 工具宿主回读必须等总控复核后完成，当前不得写成已发布、已安装或已加载。
 7. 客户验证画面仍在本地 C3 Git 历史中。当前不 push；进入远程仓库前必须确认保留授权，若不允许则需在本分支上先完成历史级证据外置。
 8. 当前结论只能是“C3 收尾修正候选已准备，待总控复核”。官方 C2 分支未移动，未合并、未 push，G4 仍为 `open`，43 页完整交付仍为 `NotEstablished`。
@@ -91,7 +91,7 @@
 
 1. 总控独立复核 `30e879c8d2783dbe098d03d1943f522b9f276363` / tree `2bcf219f240077930561eb1d85172e46333d1ab6`，确认 Artifact Tool 活动继承链修正、`16/16` 定向回归和四页 PPTX hash，并授权进入本机正式发布候选构建与受控安装。本地 `codex/c3-integration-20260924` 已快进到该提交，旧 `df7e0d88` 仍作为祖先保留；官方 C2 分支未移动。
 2. 从该精确源码身份构建独立本地 release，只在发布副本将 `plugin.json.version` 标记为 `0.4.0+codex.c3.release-20260928`，然后重算封闭 manifest。包内源码、Skill、MCP 和启动文件与 `30e879c8` 对应源文件字节相同，没有反向修改产品源码。
-3. 最终包路径为 `/Users/defei/Library/Application Support/Codex API Client/codex-home/visualizations/2026/09/17/01a0b036-c2db-7781-9598-9a5fe1f47673/奥哲PPT优化/内部验证/c3-final-release-20260928/ai-ppt-studio`；manifest 覆盖 `3776` 个文件，SHA-256 为 `3a2d0875f34c6bdc92a0a8848ae76c92c37de63b2c87d0dcec83b806c6846967`。独立 verifier 和 stdio probe 通过，实际暴露 `61` 工具，工具目录 hash 为 `158951ecad9b1c5e761264c3e6b92f286c61d0aa966b34ebc6fe2fe1afb5420a`。
+3. 最终包路径为 `/Users/defei/Library/Application Support/Codex API Client/codex-home/visualizations/2026/09/17/01a0b036-c2db-7781-9598-9a5fe1f47673/代表性客户PPT优化/内部验证/c3-final-release-20260928/ai-ppt-studio`；manifest 覆盖 `3776` 个文件，SHA-256 为 `3a2d0875f34c6bdc92a0a8848ae76c92c37de63b2c87d0dcec83b806c6846967`。独立 verifier 和 stdio probe 通过，实际暴露 `61` 工具，工具目录 hash 为 `158951ecad9b1c5e761264c3e6b92f286c61d0aa966b34ebc6fe2fe1afb5420a`。
 4. `mcp/review-bridge.mjs` 的源码、release 和安装 cache hash 均为 `cc1617a716cf589d08fc7436e984dc3fe97378fc8af3e17dd859ce273ec8c742`。“默认连接无时限”、`content-full-deck` 空闲 7 天和 `visual-professional` 空闲 7 天三项服务测试 `3/3` 通过；默认 `ttlMs/leaseMs` 仍为 `null`。
 5. 受控安装入口在任何插件配置写入前备份权威 `config.toml`，备份目录为 `/Users/defei/Library/Application Support/AI PPT Studio Development/c3/install-backups/20260928-170501`。随后只通过 Codex 官方插件 CLI 更新本地 marketplace 和安装登记，没有手工覆盖 cache。
 6. 安装后只有一个启用的 AI PPT Studio，版本为 `0.4.0+codex.c3.release-20260928`。安装 cache 的 manifest、Review Bridge、tool catalog、Artifact Tool 结果校验器、selection、Skill、CRS wrapper 和 MCP 启动文件均与受审 release/源码字节相同；cache 目录合同为 `61` 工具。

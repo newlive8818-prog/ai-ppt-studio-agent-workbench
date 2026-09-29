@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python Runtime、不可变 artifact/CAS、Codex Presentations、现有 Image-led validators、unittest。
 
-**Spec:** `../../../../00-唯一研发基线索引-v1.0.md` §1.2–1.3、§1.8；`../../../../01-产品需求基线-v1.0.md` §1.7；`../../../../02-系统详细设计-v1.0.md` §1.2–1.3、§1.7；`../../../../03-UI设计与交互规范-v1.0.md` §1.7。当前 C3 变更边界见 `../../changes/CHG-IL-C3.md`。本计划是待实现设计，不提升当前 Runtime、奥哲 43 页或 G4 的状态。
+**Spec:** `../../../../00-唯一研发基线索引-v1.0.md` §1.2–1.3、§1.8；`../../../../01-产品需求基线-v1.0.md` §1.7；`../../../../02-系统详细设计-v1.0.md` §1.2–1.3、§1.7；`../../../../03-UI设计与交互规范-v1.0.md` §1.7。当前 C3 变更边界见 `../../changes/CHG-IL-C3.md`。本计划是待实现设计，不提升当前 Runtime、代表性客户 43 页或 G4 的状态。
 
 ## Global Constraints
 
@@ -88,7 +88,7 @@
 - [ ] **Step 3: 交付入口仅接受与当前 selection、区域和最终 PPTX hash 相同的全页报告，检查每页双向映射、逐字内容、局部视觉差异及可编辑性均通过；无结果或 `not-established` 一律拒绝。** 显式记录被接受的差异，不能用全页平均分抵消关键区域失败。
 - [ ] **Step 4: 运行新测试、交付/G4 回归及全量 Python 回归。** 真实 43 页和 macOS PowerPoint 检查分别保存，不用单测代替实物与用户结果。
 
-## 真实奥哲项目退出条件
+## 真实代表性客户项目退出条件
 
 - 43 页各自拥有当前源页、CRS 请求/响应、内部选中图、区域映射、原生页、逐页对照和编辑性回执；43/43 均通过才允许登记完整交付候选。
 - 完整 PPTX 当前 hash 在 macOS PowerPoint 中完成显示、编辑、保存、重开检查，然后交付用户做最终验收。
@@ -96,10 +96,10 @@
 
 ## 2026-09-20 Worktree 实施状态
 
-Task 1–4 的专用入口、内选图、原生双向映射及交付拒绝门已在本 C3 Worktree 增量编写，并以两页合成数据验证；详细回执见 [C3 验证台账](../../validation/c3-whole-deck/verification-report.md) §4.16。以上 checkbox 保留未勾选，表示完整任务仍有正式桥接/宿主、真实奥哲 43 页、macOS PowerPoint 与最终交付的退出条件未满足。代码单测或合成的桌面证据不提升真实项目状态。
+Task 1–4 的专用入口、内选图、原生双向映射及交付拒绝门已在本 C3 Worktree 增量编写，并以两页合成数据验证；详细回执见 [C3 验证台账](../../validation/c3-whole-deck/verification-report.md) §4.16。以上 checkbox 保留未勾选，表示完整任务仍有正式桥接/宿主、真实代表性客户 43 页、macOS PowerPoint 与最终交付的退出条件未满足。代码单测或合成的桌面证据不提升真实项目状态。
 ## 2026-09-21 历史设计复用增量
 
 - 新增受治理的历史设计导入入口：精确绑定当前原稿、页号、可见文案、共同规则、图片字节及历史请求/响应 provenance；只接受历史 `CRS / gpt-image-2` 身份。
 - 导入不调用 transport；同页已有 `unknown/started` 请求时保留其原 identity。导入候选仍须来源审核、候选登记和内部选图。
-- 43 页逐页比较记录位于 [奥哲 43 页历史设计与当前候选比较](../../validation/c3-whole-deck/aozhe-43-design-comparison-20260921.md)。当前比较建议不提升 Runtime selection、native plan、native result、QA 或 delivery 状态。
+- 43 页逐页比较记录位于 [代表性客户 43 页历史设计与当前候选比较](../../validation/c3-whole-deck/representative-customer-43-design-comparison-20260921.md)。当前比较建议不提升 Runtime selection、native plan、native result、QA 或 delivery 状态。
 - 当前执行顺序：完成源码回归与插件安装验证，再将确定复用的历史图通过公共 MCP 导入；随后逐页来源审核，仅为 P23、P24 及深审后确需重生的页面创建新的 Sunburst 请求。
