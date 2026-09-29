@@ -1,0 +1,104 @@
+{
+  "schema_version": "c3-marketplace-privacy-scan/v1",
+  "scan_scope": [
+    ".agents/plugins/marketplace.json",
+    "plugins/ai-ppt-studio",
+    "README.md",
+    "docs"
+  ],
+  "scanned_file_count": 3786,
+  "scanned_path_list_sha256": "9746ac9a6b43f88ebddc1468214ad707778019bf50b8b2008e2dfdbf7ca008e2",
+  "blocking_findings": [],
+  "reviewed_non_blocking_matches": [
+    {
+      "path": "plugins/ai-ppt-studio/node_modules/eventsource/README.md",
+      "line": 129,
+      "classification": "third-party documentation placeholder; not a credential"
+    },
+    {
+      "path": "plugins/ai-ppt-studio/node_modules/jose/dist/webapi/key/import.js",
+      "line": 20,
+      "classification": "third-party parser marker; no key material"
+    },
+    {
+      "path": "plugins/ai-ppt-studio/node_modules/zod-to-json-schema/.github/CR_logotype-full-color.png",
+      "classification": "third-party package asset; not customer material"
+    }
+  ],
+  "generic_runtime_mentions": [
+    {
+      "path": "plugins/ai-ppt-studio/src/ai_ppt_studio/cli.py",
+      "line": 153,
+      "classification": "generic-runtime-location-name; no runtime data"
+    },
+    {
+      "path": "plugins/ai-ppt-studio/src/ai_ppt_studio/workbench_bridge.py",
+      "line": 49,
+      "classification": "generic-runtime-location-name; no runtime data"
+    },
+    {
+      "path": "docs/CONFIGURATION.md",
+      "line": 22,
+      "classification": "generic-runtime-location-name; no runtime data"
+    }
+  ],
+  "pptx_text_mentions": [
+    {
+      "path": "plugins/ai-ppt-studio/node_modules/mime-db/db.json",
+      "line": 5611,
+      "classification": "capability or documentation reference; no shipped PPT/PPTX file"
+    },
+    {
+      "path": "plugins/ai-ppt-studio/scripts/image-led-native.mjs",
+      "line": 36,
+      "classification": "capability or documentation reference; no shipped PPT/PPTX file"
+    },
+    {
+      "path": "plugins/ai-ppt-studio/scripts/image-led-native.mjs",
+      "line": 400,
+      "classification": "capability or documentation reference; no shipped PPT/PPTX file"
+    },
+    {
+      "path": "plugins/ai-ppt-studio/scripts/image-led-native.mjs",
+      "line": 401,
+      "classification": "capability or documentation reference; no shipped PPT/PPTX file"
+    },
+    {
+      "path": "plugins/ai-ppt-studio/scripts/image-led-native.mjs",
+      "line": 427,
+      "classification": "capability or documentation reference; no shipped PPT/PPTX file"
+    },
+    {
+      "path": "plugins/ai-ppt-studio/scripts/image-led-native.mjs",
+      "line": 429,
+      "classification": "capability or documentation reference; no shipped PPT/PPTX file"
+    },
+    {
+      "path": "plugins/ai-ppt-studio/src/ai_ppt_studio/application/image_led_diagnostic.py",
+      "line": 69,
+      "classification": "capability or documentation reference; no shipped PPT/PPTX file"
+    },
+    {
+      "path": "plugins/ai-ppt-studio/src/ai_ppt_studio/context_compiler.py",
+      "line": 160,
+      "classification": "capability or documentation reference; no shipped PPT/PPTX file"
+    },
+    {
+      "path": "plugins/ai-ppt-studio/src/ai_ppt_studio/context_compiler.py",
+      "line": 572,
+      "classification": "capability or documentation reference; no shipped PPT/PPTX file"
+    },
+    {
+      "path": "plugins/ai-ppt-studio/src/ai_ppt_studio/context_compiler.py",
+      "line": 722,
+      "classification": "capability or documentation reference; no shipped PPT/PPTX file"
+    }
+  ],
+  "checks": {
+    "customer_names": "passed",
+    "local_absolute_user_paths": "passed",
+    "customer_ppt_or_images": "passed",
+    "high_confidence_credentials": "passed"
+  },
+  "status": "passed"
+}

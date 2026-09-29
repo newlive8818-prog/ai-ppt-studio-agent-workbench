@@ -1,0 +1,3 @@
+# Preserve byte-exact vendored dependencies and compiled widget assets.
+plugins/ai-ppt-studio/node_modules/** whitespace=-trailing-space
+plugins/ai-ppt-studio/widget/dist/** whitespace=-trailing-space

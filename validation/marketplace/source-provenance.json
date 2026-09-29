@@ -1,0 +1,34 @@
+{
+  "schema_version": "c3-marketplace-source-provenance/v1",
+  "git_base": {
+    "repository": "https://github.com/newlive8818-prog/ai-ppt-studio-agent-workbench.git",
+    "approved_ref": "codex/c3-code-release-20260929",
+    "commit": "3e0bd88983d9eea141b8c97ce55c27a78b671b48",
+    "tree": "198dca27e0a087df4061d29411706458e136710b",
+    "tree_entry_count": 702,
+    "missing_objects": 0
+  },
+  "distribution_branch": "codex/plugin-marketplace-0.4.0",
+  "release_source": {
+    "role": "validated-c3-final-release-20260928",
+    "plugin_name": "ai-ppt-studio",
+    "plugin_version": "0.4.0+codex.c3.release-20260928",
+    "source_release_manifest_sha256": "3a2d0875f34c6bdc92a0a8848ae76c92c37de63b2c87d0dcec83b806c6846967",
+    "tool_count": 61,
+    "tool_catalog_sha256": "158951ecad9b1c5e761264c3e6b92f286c61d0aa966b34ebc6fe2fe1afb5420a"
+  },
+  "marketplace_release": {
+    "path": "plugins/ai-ppt-studio",
+    "release_file_count": 3776,
+    "release_manifest_sha256": "7cf293b685fa3776241c579e886054380c21dfeeb71578999970ac85e0f0f218",
+    "public_metadata_changes_only": [
+      "author and developer display names",
+      "repository and homepage URLs",
+      "privacy policy URL",
+      "terms of service URL"
+    ],
+    "core_business_capability_changed": false
+  },
+  "customer_evidence_source_used": false,
+  "status": "passed"
+}

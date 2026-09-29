@@ -1,0 +1,20 @@
+{
+  "name": "newlive8818-ai-ppt-studio",
+  "interface": {
+    "displayName": "AI PPT Studio Agent Workbench"
+  },
+  "plugins": [
+    {
+      "name": "ai-ppt-studio",
+      "source": {
+        "source": "local",
+        "path": "./plugins/ai-ppt-studio"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

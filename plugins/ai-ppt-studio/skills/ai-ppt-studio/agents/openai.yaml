@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI PPT Studio"
+  short_description: "Create editable sales-solution PowerPoint projects"
+  default_prompt: "Use AI PPT Studio to create or resume an isolated editable PowerPoint project."

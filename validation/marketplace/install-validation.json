@@ -1,0 +1,49 @@
+{
+  "schema_version": "c3-marketplace-install-validation/v1",
+  "configuration_isolation": {
+    "home": "isolated temporary profile",
+    "codex_home": "isolated temporary profile",
+    "preexisting_installed_plugins": 0,
+    "preexisting_marketplaces": 0
+  },
+  "marketplace_add": {
+    "status": "passed",
+    "marketplace_name": "newlive8818-ai-ppt-studio",
+    "source_kind": "local worktree",
+    "configured_marketplace_count": 1
+  },
+  "plugin_before_install": {
+    "installed_count": 0,
+    "available_plugin_id": "ai-ppt-studio@newlive8818-ai-ppt-studio",
+    "version": "0.4.0+codex.c3.release-20260928"
+  },
+  "plugin_add": {
+    "status": "passed",
+    "plugin_id": "ai-ppt-studio@newlive8818-ai-ppt-studio",
+    "version": "0.4.0+codex.c3.release-20260928",
+    "enabled": true,
+    "auth_policy": "ON_INSTALL"
+  },
+  "installed_cache_validation": {
+    "plugin_manifest": "passed",
+    "release_manifest": "passed",
+    "source_and_cache_manifest_match": true,
+    "release_manifest_sha256": "7cf293b685fa3776241c579e886054380c21dfeeb71578999970ac85e0f0f218",
+    "release_file_count": 3776,
+    "stdio_mcp_probe": "passed",
+    "tool_count": 61,
+    "tool_catalog_sha256": "158951ecad9b1c5e761264c3e6b92f286c61d0aa966b34ebc6fe2fe1afb5420a"
+  },
+  "formal_launcher_check": {
+    "status": "passed",
+    "scope": "existing C3 production-host launcher bound to the validated release identity",
+    "route": "CRS / gpt-image-2.5-sunburst",
+    "desktop_started": false,
+    "credential_helper_called": false,
+    "external_connection": "not-tested"
+  },
+  "current_desktop_host_loaded_marketplace_build": "NotEstablished",
+  "another_real_codex_user_installed": "NotEstablished",
+  "another_real_desktop_host_loaded": "NotEstablished",
+  "status": "passed"
+}

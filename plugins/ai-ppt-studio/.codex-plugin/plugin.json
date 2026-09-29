@@ -1,0 +1,47 @@
+{
+  "name": "ai-ppt-studio",
+  "version": "0.4.0+codex.c3.release-20260928",
+  "description": "A Codex-native governed workspace for planning, designing, producing, and validating editable business presentations.",
+  "author": {
+    "name": "AI PPT Studio",
+    "url": "https://github.com/newlive8818-prog/ai-ppt-studio-agent-workbench"
+  },
+  "keywords": [
+    "powerpoint",
+    "presentation",
+    "codex-sidebar",
+    "browser-review",
+    "presales",
+    "agent-workbench"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "AI PPT Studio",
+    "shortDescription": "Plan and deliver high-design editable PPTs in a native Codex workbench.",
+    "longDescription": "AI PPT Studio turns Codex into a governed presentation delivery workspace. It externalizes the Agent's project cognition, keeps human decisions and evidence versioned, and coordinates content, visual direction, editable PPT production, rendering, and acceptance without a separate web app.",
+    "developerName": "AI PPT Studio",
+    "category": "Productivity",
+    "brandColor": "#5B3DF5",
+    "logo": "./assets/app-icon.svg",
+    "composerIcon": "./assets/app-icon.svg",
+    "capabilities": [
+      "Real Codex sidebar workbench",
+      "Codex built-in Browser review",
+      "Project-backed cognitive map",
+      "Revision-safe human decisions",
+      "Editable PowerPoint delivery",
+      "G0-G4 quality governance"
+    ],
+    "defaultPrompt": [
+      "在 Codex 侧边栏打开 AI PPT Studio，继续我最近的项目。",
+      "创建一个售前解决方案 PPT 项目，并先澄清汇报对象与目标。",
+      "查看当前项目的 AI 认知地图和最需要我判断的问题。"
+    ],
+    "websiteURL": "https://github.com/newlive8818-prog/ai-ppt-studio-agent-workbench",
+    "privacyPolicyURL": "https://github.com/newlive8818-prog/ai-ppt-studio-agent-workbench/blob/codex/plugin-marketplace-0.4.0/docs/PRIVACY.md",
+    "termsOfServiceURL": "https://github.com/newlive8818-prog/ai-ppt-studio-agent-workbench/blob/codex/plugin-marketplace-0.4.0/docs/TERMS.md"
+  },
+  "homepage": "https://github.com/newlive8818-prog/ai-ppt-studio-agent-workbench",
+  "repository": "https://github.com/newlive8818-prog/ai-ppt-studio-agent-workbench"
+}

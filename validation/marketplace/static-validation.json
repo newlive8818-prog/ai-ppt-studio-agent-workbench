@@ -1,0 +1,16 @@
+{
+  "schema_version": "c3-marketplace-validation/v1",
+  "marketplace_name": "newlive8818-ai-ppt-studio",
+  "plugin_name": "ai-ppt-studio",
+  "plugin_version": "0.4.0+codex.c3.release-20260928",
+  "release_file_count": 3776,
+  "release_manifest_sha256": "7cf293b685fa3776241c579e886054380c21dfeeb71578999970ac85e0f0f218",
+  "checks": {
+    "marketplace_catalog": "passed",
+    "plugin_identity": "passed",
+    "release_manifest": "passed",
+    "install_commands": "passed"
+  },
+  "errors": [],
+  "status": "passed"
+}

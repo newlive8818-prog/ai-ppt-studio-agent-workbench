@@ -1,0 +1,40 @@
+{
+  "name": "ai-ppt-studio-codex-plugin",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p widget/tsconfig.json --noEmit",
+    "test:node": "node --test tests/*.test.mjs",
+    "test:python": "PYTHONDONTWRITEBYTECODE=1 TMPDIR=/private/tmp python3 -m unittest discover -s tests",
+    "test:widget": "vitest run",
+    "test": "npm run build && npm run test:node && npm run test:widget",
+    "build": "node scripts/build-widget.mjs",
+    "accept:v22-ui": "npm run build --silent && node scripts/run-v22-ui-acceptance.mjs",
+    "probe:mcp": "node scripts/probe-mcp.mjs",
+    "release": "node scripts/build-plugin-release.mjs",
+    "verify:release": "node scripts/verify-plugin-release.mjs",
+    "install:plugin": "node scripts/install-plugin.mjs",
+    "quality": "npm run typecheck && npm run build && npm run test:node && npm run test:widget"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.4",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/node": "^22.20.1",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "jsdom": "^25.0.1",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^7.0.0",
+    "vitest": "^3.0.5"
+  }
+}

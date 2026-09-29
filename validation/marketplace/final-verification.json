@@ -1,0 +1,65 @@
+{
+  "schema_version": "c3-marketplace-final-verification/v1",
+  "marketplace_name": "newlive8818-ai-ppt-studio",
+  "plugin_name": "ai-ppt-studio",
+  "plugin_version": "0.4.0+codex.c3.release-20260928",
+  "release_manifest_sha256": "7cf293b685fa3776241c579e886054380c21dfeeb71578999970ac85e0f0f218",
+  "checks": {
+    "approved_git_base": "passed",
+    "marketplace_catalog": "passed",
+    "plugin_manifest": "passed",
+    "release_manifest_exact_match": "passed",
+    "privacy_scan": "passed",
+    "privacy_blocking_findings": 0,
+    "stdio_mcp_probe": "passed",
+    "public_tool_count": 61,
+    "tool_catalog_sha256": "158951ecad9b1c5e761264c3e6b92f286c61d0aa966b34ebc6fe2fe1afb5420a",
+    "formal_launcher_check": "passed",
+    "isolated_marketplace_add": "passed",
+    "isolated_plugin_add": "passed",
+    "isolated_installed_cache_validation": "passed",
+    "install_and_upgrade_command_contract": "passed",
+    "tracked_release_file_set_exact": "passed",
+    "tracked_plugin_file_count": 3777,
+    "git_diff_check": "passed with byte-exact vendored and compiled paths governed by .gitattributes"
+  },
+  "reviewed_non_blocking_privacy_matches": [
+    {
+      "path": "plugins/ai-ppt-studio/node_modules/eventsource/README.md",
+      "line": 129,
+      "classification": "third-party documentation placeholder; not a credential"
+    },
+    {
+      "path": "plugins/ai-ppt-studio/node_modules/jose/dist/webapi/key/import.js",
+      "line": 20,
+      "classification": "third-party parser marker; no key material"
+    },
+    {
+      "path": "plugins/ai-ppt-studio/node_modules/zod-to-json-schema/.github/CR_logotype-full-color.png",
+      "classification": "third-party package asset; not customer material"
+    }
+  ],
+  "established": [
+    "GitHub Marketplace repository layout",
+    "validated local stdio plugin package",
+    "61-tool MCP catalog",
+    "isolated clean-profile marketplace installation"
+  ],
+  "not_established": [
+    "GitHub remote distribution branch push",
+    "current desktop host loaded the Marketplace build",
+    "another real Codex user installed the plugin",
+    "another real desktop host loaded the plugin",
+    "OpenAI public Plugins Directory approval"
+  ],
+  "status": "passed",
+  "baseline_boundary_check": {
+    "baseline_files_modified": false,
+    "relative_link_references_checked": 80,
+    "missing_reference_occurrences": 15,
+    "unique_missing_targets": 6,
+    "classification": "pre-existing omissions in the approved sanitized base; no new missing target introduced",
+    "prototype_references_checked": 6,
+    "prototype_missing": 0
+  }
+}
